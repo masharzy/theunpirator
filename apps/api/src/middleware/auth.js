@@ -15,6 +15,8 @@ export function dashboardAuth({ db, config }) {
           email: accounts.email,
           platformRole: accounts.platformRole,
           emailVerifiedAt: accounts.emailVerifiedAt,
+          mfaConfirmedAt: accounts.mfaConfirmedAt,
+          mfaVerifiedAt: accountSessions.mfaVerifiedAt,
           status: accounts.status,
           csrfToken: accountSessions.csrfToken,
         })
@@ -58,6 +60,15 @@ export function csrfGuard(req, _res, next) {
 
 export function requireSuperAdmin(req, _res, next) {
   if (req.auth?.platformRole !== "super_admin") return next(forbidden("Super admin required"));
+  if (!req.auth.mfaConfirmedAt) return next(forbidden("Authenticator setup required"));
+  if (!req.auth.mfaVerifiedAt || Date.now() - req.auth.mfaVerifiedAt.getTime() > 12 * 3600_000)
+    return next(forbidden("MFA verification required"));
+  next();
+}
+
+export function requireRecentMfa(req, _res, next) {
+  if (!req.auth?.mfaVerifiedAt || Date.now() - req.auth.mfaVerifiedAt.getTime() > 15 * 60_000)
+    return next(forbidden("Recent MFA verification required"));
   next();
 }
 

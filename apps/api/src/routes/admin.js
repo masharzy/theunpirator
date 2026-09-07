@@ -11,18 +11,180 @@ import {
   subscriptions,
   auditLogs,
   securityEvents,
+  accounts,
+  accountTokens,
+  oauthIdentities,
 } from "@unpirator/db/schema";
 import { z } from "zod";
-import { parseOrThrow } from "@unpirator/contracts";
+import { emailSchema, parseOrThrow } from "@unpirator/contracts";
+import { randomToken, sha256 } from "@unpirator/crypto";
 import { writeAudit } from "../services/audit.js";
+import { sendEmail } from "../services/email.js";
 import { notFound } from "../errors.js";
 
 const allowedStatuses = new Set(["active", "disabled", "suspended"]);
 const providerStatuses = new Set(["healthy", "degraded", "down", "disabled"]);
 
-export function adminRouter({ db, dashboardAuth, csrfGuard, requireSuperAdmin, gatewayControl }) {
+export function adminRouter({
+  db,
+  config,
+  dashboardAuth,
+  csrfGuard,
+  requireSuperAdmin,
+  requireRecentMfa,
+  gatewayControl,
+}) {
   const router = Router();
   router.use(dashboardAuth, csrfGuard, requireSuperAdmin);
+  router.use((req, res, next) =>
+    ["GET", "HEAD", "OPTIONS"].includes(req.method) ? next() : requireRecentMfa(req, res, next),
+  );
+  router.get("/accounts", async (_req, res, next) => {
+    try {
+      res.json({
+        items: await db
+          .select({
+            id: accounts.id,
+            email: accounts.email,
+            platformRole: accounts.platformRole,
+            status: accounts.status,
+            emailVerifiedAt: accounts.emailVerifiedAt,
+            mfaConfirmedAt: accounts.mfaConfirmedAt,
+            createdAt: accounts.createdAt,
+          })
+          .from(accounts)
+          .orderBy(desc(accounts.createdAt))
+          .limit(200),
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.post("/accounts", async (req, res, next) => {
+    try {
+      const { email, reason } = parseOrThrow(
+        z.object({ email: emailSchema, reason: z.string().min(8).max(500) }).strict(),
+        req.body,
+      );
+      if (
+        (
+          await db
+            .select({ id: accounts.id })
+            .from(accounts)
+            .where(eq(accounts.email, email))
+            .limit(1)
+        )[0]
+      )
+        throw Object.assign(new Error("Account already exists"), {
+          status: 409,
+          code: "ACCOUNT_EXISTS",
+        });
+      const raw = randomToken(32);
+      const [account] = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(accounts).values({ email }).returning();
+        await tx.insert(accountTokens).values({
+          accountId: created.id,
+          kind: "password_reset",
+          tokenHash: sha256(raw),
+          expiresAt: new Date(Date.now() + 24 * 3600_000),
+        });
+        await writeAudit(tx, {
+          actorAccountId: req.auth.accountId,
+          action: "PLATFORM_ACCOUNT_CREATED",
+          targetType: "account",
+          targetId: created.id,
+          metadata: { reason },
+          ip: req.ip,
+        });
+        return [created];
+      });
+      await sendEmail(config, {
+        to: email,
+        subject: "Set up your The Unpirator account",
+        html: `<p>You were invited to The Unpirator.</p><p><a href="${config.DASHBOARD_URL}/reset-password?token=${encodeURIComponent(raw)}">Set your password</a></p>`,
+      }).catch((error) => req.log?.error({ err: error }, "platform invitation email failed"));
+      res.status(201).json({ account });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.patch("/accounts/:accountId", async (req, res, next) => {
+    try {
+      const input = parseOrThrow(
+        z
+          .object({
+            platformRole: z.enum(["super_admin"]).nullable().optional(),
+            status: z.enum(["active", "disabled"]).optional(),
+            reason: z.string().min(8).max(500),
+          })
+          .strict(),
+        req.body,
+      );
+      const [target] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, req.params.accountId))
+        .limit(1);
+      if (!target) throw notFound();
+      const nextRole = input.platformRole === undefined ? target.platformRole : input.platformRole,
+        nextStatus = input.status || target.status;
+      if (nextRole === "super_admin" && target.platformRole !== "super_admin") {
+        const [identity] = await db
+          .select({ id: oauthIdentities.id })
+          .from(oauthIdentities)
+          .where(eq(oauthIdentities.accountId, target.id))
+          .limit(1);
+        if (!target.emailVerifiedAt || (!target.passwordHash && !identity))
+          throw Object.assign(
+            new Error("Account must verify email and configure a login method first"),
+            { status: 409, code: "ACCOUNT_NOT_READY" },
+          );
+      }
+      const activeAdmins = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(eq(accounts.platformRole, "super_admin"), eq(accounts.status, "active")));
+      const removesActiveAdmin =
+        target.platformRole === "super_admin" &&
+        target.status === "active" &&
+        (nextRole !== "super_admin" || nextStatus !== "active");
+      if (removesActiveAdmin && activeAdmins.length <= 2)
+        throw Object.assign(new Error("At least two active super admins are required"), {
+          status: 409,
+          code: "LAST_ADMINS_PROTECTED",
+        });
+      const [updated] = await db
+        .update(accounts)
+        .set({ platformRole: nextRole, status: nextStatus, updatedAt: new Date() })
+        .where(eq(accounts.id, target.id))
+        .returning();
+      await writeAudit(db, {
+        actorAccountId: req.auth.accountId,
+        action:
+          target.platformRole !== nextRole
+            ? "PLATFORM_ROLE_CHANGED"
+            : "PLATFORM_ACCOUNT_STATUS_CHANGED",
+        targetType: "account",
+        targetId: target.id,
+        metadata: {
+          fromRole: target.platformRole,
+          toRole: nextRole,
+          fromStatus: target.status,
+          toStatus: nextStatus,
+          reason: input.reason,
+        },
+        ip: req.ip,
+      });
+      await sendEmail(config, {
+        to: target.email,
+        subject: "Your The Unpirator platform access changed",
+        html: `<p>Your platform access was changed.</p><p>Role: ${nextRole || "customer"}<br>Status: ${nextStatus}</p><p>Reason: ${input.reason}</p>`,
+      }).catch((error) => req.log?.error({ err: error }, "admin change email failed"));
+      res.json({ account: updated });
+    } catch (e) {
+      next(e);
+    }
+  });
   router.get("/tenants", async (_req, res, next) => {
     try {
       res.json({ items: await db.select().from(tenants).orderBy(desc(tenants.createdAt)) });

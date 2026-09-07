@@ -1,6 +1,6 @@
 import { Router } from "express";
 import argon2 from "argon2";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import {
   accountSessions,
   accountTokens,
@@ -9,6 +9,7 @@ import {
   tenantMembers,
   tenants,
   subscriptions,
+  platformBootstrapState,
 } from "@unpirator/db/schema";
 import {
   emailSchema,
@@ -17,11 +18,12 @@ import {
   registerSchema,
   parseOrThrow,
 } from "@unpirator/contracts";
-import { randomToken, sha256 } from "@unpirator/crypto";
+import { decryptJson, encryptJson, randomToken, sha256 } from "@unpirator/crypto";
 import { forbidden, unauthorized } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
 import { sendEmail } from "../services/email.js";
 import { createHash } from "node:crypto";
+import { generateTotpSecret, verifyTotp } from "../services/totp.js";
 
 const hour = 3600_000;
 const cookieBase = (config) => ({
@@ -30,7 +32,7 @@ const cookieBase = (config) => ({
   domain: config.COOKIE_DOMAIN || undefined,
   path: "/",
 });
-async function issueSession(db, config, req, res, account) {
+async function issueSession(db, config, req, res, account, mfaVerified = false) {
   const raw = randomToken(32),
     csrf = randomToken(24),
     expiresAt = new Date(Date.now() + config.SESSION_TTL_HOURS * hour);
@@ -38,6 +40,7 @@ async function issueSession(db, config, req, res, account) {
     accountId: account.id,
     tokenHash: sha256(raw),
     csrfToken: csrf,
+    mfaVerifiedAt: mfaVerified ? new Date() : null,
     ip: req.ip,
     userAgent: req.get("user-agent"),
     expiresAt,
@@ -150,10 +153,63 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
         !(await argon2.verify(account.passwordHash, input.password))
       )
         throw unauthorized("Invalid email or password");
+      if (account.platformRole === "super_admin" && account.mfaConfirmedAt) {
+        const challenge = await makeToken(db, account.id, "mfa_login", 10 * 60_000);
+        return res.json({ mfaRequired: true, challenge });
+      }
       await issueSession(db, config, req, res, account);
       await writeAudit(db, {
         actorAccountId: account.id,
         action: "ACCOUNT_LOGIN",
+        targetType: "account",
+        targetId: account.id,
+        ip: req.ip,
+      });
+      res.json({
+        account: {
+          id: account.id,
+          email: account.email,
+          platformRole: account.platformRole,
+          emailVerified: Boolean(account.emailVerifiedAt),
+          mfaSetupRequired: account.platformRole === "super_admin" && !account.mfaConfirmedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.post("/mfa/challenge", async (req, res, next) => {
+    try {
+      const [challenge] = await db
+        .select()
+        .from(accountTokens)
+        .where(
+          and(
+            eq(accountTokens.tokenHash, sha256(String(req.body?.challenge || ""))),
+            eq(accountTokens.kind, "mfa_login"),
+            isNull(accountTokens.usedAt),
+            gt(accountTokens.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (!challenge?.accountId) throw unauthorized("MFA challenge is invalid or expired");
+      const [account] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, challenge.accountId))
+        .limit(1);
+      if (!account?.mfaConfirmedAt || !account.mfaSecretEncrypted || account.status !== "active")
+        throw unauthorized("MFA is unavailable");
+      const { secret } = decryptJson(account.mfaSecretEncrypted, config.APP_ENCRYPTION_KEY_BASE64);
+      if (!verifyTotp(secret, req.body?.code)) throw unauthorized("Invalid authenticator code");
+      await db
+        .update(accountTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(accountTokens.id, challenge.id));
+      await issueSession(db, config, req, res, account, true);
+      await writeAudit(db, {
+        actorAccountId: account.id,
+        action: "ADMIN_MFA_LOGIN",
         targetType: "account",
         targetId: account.id,
         ip: req.ip,
@@ -214,6 +270,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           .update(accounts)
           .set({
             passwordHash: await argon2.hash(password, { type: argon2.argon2id }),
+            emailVerifiedAt: new Date(),
             updatedAt: new Date(),
           })
           .where(eq(accounts.id, row.accountId));
@@ -472,8 +529,16 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
         .update(accountTokens)
         .set({ usedAt: new Date() })
         .where(eq(accountTokens.id, state.id));
+      if (account.platformRole === "super_admin" && account.mfaConfirmedAt) {
+        const challenge = await makeToken(db, account.id, "mfa_login", 10 * 60_000);
+        return res.redirect(
+          `${config.DASHBOARD_URL}/login?mfa_challenge=${encodeURIComponent(challenge)}`,
+        );
+      }
       await issueSession(db, config, req, res, account);
-      res.redirect(`${config.DASHBOARD_URL}/dashboard${isNew ? "/onboarding" : ""}`);
+      res.redirect(
+        `${config.DASHBOARD_URL}${account.platformRole === "super_admin" ? "/dashboard/account?setup=mfa" : `/dashboard${isNew ? "/onboarding" : ""}`}`,
+      );
     } catch (error) {
       next(error);
     }
@@ -520,12 +585,127 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           emailVerified: Boolean(account.emailVerifiedAt),
           googleLinked: Boolean(google),
           canUnlinkGoogle: Boolean(google && account.passwordHash),
+          mfaConfirmed: Boolean(account.mfaConfirmedAt),
+          mfaVerified: Boolean(req.auth.mfaVerifiedAt),
         },
         memberships,
         activeTenantId: memberships.some((m) => m.tenantId === account.lastTenantId)
           ? account.lastTenantId
           : memberships[0]?.tenantId || null,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.post("/mfa/setup", dashboardAuth, csrfGuard, async (req, res, next) => {
+    try {
+      if (req.auth.platformRole !== "super_admin") throw forbidden("Super admin required");
+      const secret = generateTotpSecret();
+      await db
+        .update(accounts)
+        .set({
+          mfaSecretEncrypted: encryptJson({ secret }, config.APP_ENCRYPTION_KEY_BASE64),
+          mfaConfirmedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(accounts.id, req.auth.accountId));
+      const issuer = "The Unpirator";
+      res.json({
+        secret,
+        otpauthUri: `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(req.auth.email)}?${new URLSearchParams({ secret, issuer, algorithm: "SHA1", digits: "6", period: "30" })}`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.post("/mfa/confirm", dashboardAuth, csrfGuard, async (req, res, next) => {
+    try {
+      const [account] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, req.auth.accountId))
+        .limit(1);
+      if (!account?.mfaSecretEncrypted)
+        throw Object.assign(new Error("Start MFA setup first"), {
+          status: 409,
+          code: "MFA_SETUP_REQUIRED",
+        });
+      const { secret } = decryptJson(account.mfaSecretEncrypted, config.APP_ENCRYPTION_KEY_BASE64);
+      if (!verifyTotp(secret, req.body?.code)) throw unauthorized("Invalid authenticator code");
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx
+          .update(accounts)
+          .set({
+            mfaConfirmedAt: now,
+            emailVerifiedAt: account.emailVerifiedAt || now,
+            updatedAt: now,
+          })
+          .where(eq(accounts.id, account.id));
+        await tx
+          .update(accountSessions)
+          .set({ mfaVerifiedAt: now })
+          .where(eq(accountSessions.id, req.auth.sessionId));
+      });
+      const permanentAdmins = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.platformRole, "super_admin"),
+            eq(accounts.status, "active"),
+            isNotNull(accounts.mfaConfirmedAt),
+          ),
+        );
+      if (permanentAdmins.length >= 2)
+        await db
+          .insert(platformBootstrapState)
+          .values({
+            id: "platform",
+            completedAt: now,
+            completedBy: account.id,
+            bootstrapVersion: 1,
+          })
+          .onConflictDoUpdate({
+            target: platformBootstrapState.id,
+            set: { completedAt: now, completedBy: account.id, bootstrapVersion: 1 },
+          });
+      await writeAudit(db, {
+        actorAccountId: account.id,
+        action: "ADMIN_MFA_ENABLED",
+        targetType: "account",
+        targetId: account.id,
+        ip: req.ip,
+      });
+      res.json({ confirmed: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.post("/mfa/reauth", dashboardAuth, csrfGuard, async (req, res, next) => {
+    try {
+      const [account] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, req.auth.accountId))
+        .limit(1);
+      if (!account?.mfaConfirmedAt || !account.mfaSecretEncrypted)
+        throw forbidden("MFA setup required");
+      const { secret } = decryptJson(account.mfaSecretEncrypted, config.APP_ENCRYPTION_KEY_BASE64);
+      if (!verifyTotp(secret, req.body?.code)) throw unauthorized("Invalid authenticator code");
+      const now = new Date();
+      await db
+        .update(accountSessions)
+        .set({ mfaVerifiedAt: now })
+        .where(eq(accountSessions.id, req.auth.sessionId));
+      await writeAudit(db, {
+        actorAccountId: account.id,
+        action: "ADMIN_MFA_REAUTHENTICATED",
+        targetType: "account",
+        targetId: account.id,
+        ip: req.ip,
+      });
+      res.json({ verifiedAt: now });
     } catch (error) {
       next(error);
     }

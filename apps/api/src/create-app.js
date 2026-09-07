@@ -13,6 +13,7 @@ import {
   dashboardAuth,
   csrfGuard,
   requireSuperAdmin,
+  requireRecentMfa,
   requireTenantRole,
   requireVerifiedEmail,
 } from "./middleware/auth.js";
@@ -123,7 +124,15 @@ export function createApp(overrides = {}) {
   );
   app.use(
     "/v1/admin",
-    adminRouter({ db, dashboardAuth: auth, csrfGuard, requireSuperAdmin, gatewayControl }),
+    adminRouter({
+      db,
+      config,
+      dashboardAuth: auth,
+      csrfGuard,
+      requireSuperAdmin,
+      requireRecentMfa,
+      gatewayControl,
+    }),
   );
   app.use("/internal", internalRouter({ db, config, signingRing }));
   app.use(notFoundHandler);
