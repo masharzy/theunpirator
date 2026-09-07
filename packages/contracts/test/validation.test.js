@@ -22,7 +22,7 @@ describe("public input validation", () => {
       registerSchema.parse({
         tenantName: "Studio",
         email: "Alex@Example.com",
-        password: "twelve-characters",
+        password: "Twelve-characters1",
       }).email,
     ).toBe("alex@example.com");
     expect(
@@ -30,6 +30,13 @@ describe("public input validation", () => {
         tenantName: "Studio",
         email: "alex@example.com",
         password: "short",
+      }).success,
+    ).toBe(false);
+    expect(
+      registerSchema.safeParse({
+        tenantName: "Studio",
+        email: "alex@example.com",
+        password: "twelve-characters",
       }).success,
     ).toBe(false);
   });

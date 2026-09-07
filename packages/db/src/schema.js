@@ -28,12 +28,53 @@ export const accounts = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    lastTenantId: uuid("last_tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    lastLoginIp: text("last_login_ip"),
     platformRole: text("platform_role"),
     status: text("status").default("active").notNull(),
     ...timestamps,
   },
   (t) => [uniqueIndex("accounts_email_uq").on(t.email)],
+);
+
+export const accountTokens = pgTable(
+  "account_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    metadata: jsonb("metadata").default({}).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("account_tokens_hash_uq").on(t.tokenHash),
+    index("account_tokens_account_kind_idx").on(t.accountId, t.kind),
+  ],
+);
+
+export const oauthIdentities = pgTable(
+  "oauth_identities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .references(() => accounts.id, { onDelete: "cascade" })
+      .notNull(),
+    provider: text("provider").notNull(),
+    providerSubject: text("provider_subject").notNull(),
+    email: text("email").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("oauth_identities_provider_subject_uq").on(t.provider, t.providerSubject),
+    index("oauth_identities_account_idx").on(t.accountId),
+  ],
 );
 
 export const accountSessions = pgTable(

@@ -10,6 +10,13 @@ export const emailSchema = z
   .email()
   .max(320)
   .transform((v) => v.toLowerCase());
+export const passwordSchema = z
+  .string()
+  .min(12)
+  .max(256)
+  .regex(/[a-z]/, "Password needs a lowercase letter")
+  .regex(/[A-Z]/, "Password needs an uppercase letter")
+  .regex(/[0-9]/, "Password needs a number");
 export const domainSchema = z
   .string()
   .trim()
@@ -25,7 +32,7 @@ export const registerSchema = z
   .object({
     tenantName: z.string().min(2).max(120),
     email: emailSchema,
-    password: z.string().min(12).max(256),
+    password: passwordSchema,
   })
   .strict();
 export const loginSchema = z

@@ -23,7 +23,8 @@ services:
     environment:
       DATABASE_URL: postgresql://unpirator:unpirator@postgres:5432/unpirator
       REDIS_URL: redis://redis:6379
-    ports: ["4000:4000"]
+      API_PORT: 4100
+    ports: ["4100:4100"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -33,10 +34,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
-      args: { NEXT_PUBLIC_API_URL: http://localhost:4000 }
+      args: { NEXT_PUBLIC_API_URL: http://localhost:4100 }
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-    ports: ["3000:3000"]
+      NEXT_PUBLIC_API_URL: http://localhost:4100
+    ports: ["3100:3100"]
     depends_on: [api]
 
 volumes:

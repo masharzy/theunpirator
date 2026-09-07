@@ -37,15 +37,13 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         .values({ tenantId: req.tenantId, name: input.name, domain: input.domain })
         .returning();
       const domains = [...new Set([input.domain, ...input.allowedDomains])];
-      await db
-        .insert(siteDomains)
-        .values(
-          domains.map((domain) => ({
-            siteId: site.id,
-            domain,
-            verificationToken: randomToken(24),
-          })),
-        );
+      await db.insert(siteDomains).values(
+        domains.map((domain) => ({
+          siteId: site.id,
+          domain,
+          verificationToken: randomToken(24),
+        })),
+      );
       await writeAudit(db, {
         tenantId: req.tenantId,
         actorAccountId: req.auth.accountId,

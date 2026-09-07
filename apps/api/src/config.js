@@ -13,6 +13,11 @@ const schema = z
     COOKIE_DOMAIN: z.string().optional(),
     SESSION_COOKIE_NAME: z.string().default("unpirator_session"),
     SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().default("The Unpirator <noreply@example.com>"),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_REDIRECT_URI: z.string().url().optional(),
     DATABASE_URL: z.string().min(1),
     REDIS_URL: z.string().optional(),
     UPSTASH_REDIS_REST_URL: z.preprocess(
