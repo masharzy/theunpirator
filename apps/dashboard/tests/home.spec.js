@@ -28,18 +28,17 @@ test("mobile homepage fits viewport", async ({ page }) => {
   );
   await expect(page.getByRole("link", { name: "Get started" })).toBeVisible();
 });
-test("register, log in, create site and inspect DNS verification", async ({ page }) => {
+test("register, open onboarding, create site and inspect DNS verification", async ({ page }) => {
   const email = `browser-${Date.now()}@example.com`;
   await page.goto("/register");
   await page.getByPlaceholder("Organization").fill("Browser test workspace");
   await page.getByPlaceholder("owner@example.com").fill(email);
-  await page.getByPlaceholder("12+ character password").fill("Browser-test-password-2026");
+  await page
+    .getByPlaceholder("12+ chars, upper/lowercase and number")
+    .fill("Browser-test-password-2026");
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("Password", { exact: true }).fill("Browser-test-password-2026");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard\/onboarding$/, { timeout: 20000 });
+  await expect(page.getByText("Verify your email.", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Sites", exact: true }).click();
   await page.getByLabel("Site name", { exact: true }).fill("Learning portal");
   await page.getByLabel("Domain", { exact: true }).fill("learn.example.com");
