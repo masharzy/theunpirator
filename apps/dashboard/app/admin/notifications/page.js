@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Surface } from "@/components/console-kit";
+import { useAuth } from "@/components/auth-provider";
 
 export default function AdminNotificationsPage() {
+  const auth = useAuth();
+  const canManage = auth?.account?.platformRole !== "auditor";
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState("");
   const load = () => api("/v1/admin/commerce/notifications").then((d) => setItems(d.items || []));
@@ -47,7 +50,7 @@ export default function AdminNotificationsPage() {
                     {new Date(item.createdAt).toLocaleString()}
                   </p>
                 </div>
-                {!item.readAt && (
+                {canManage && !item.readAt && (
                   <Button size="sm" onClick={() => read(item.id)}>
                     Mark read
                   </Button>

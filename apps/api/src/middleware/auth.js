@@ -75,6 +75,9 @@ const platformPermissions = {
     "providers.manage",
     "security.read",
     "security.manage",
+    "system.read",
+    "notifications.read",
+    "notifications.manage",
   ]),
   billing_admin: new Set([
     "tenants.read",
@@ -83,8 +86,18 @@ const platformPermissions = {
     "payments.read",
     "payments.approve",
     "plans.manage",
+    "notifications.read",
+    "notifications.manage",
   ]),
-  support_admin: new Set(["tenants.read", "usage.read", "security.read", "security.manage"]),
+  support_admin: new Set([
+    "tenants.read",
+    "usage.read",
+    "security.read",
+    "sessions.revoke",
+    "tenant.notes.manage",
+    "notifications.read",
+    "notifications.manage",
+  ]),
   security_admin: new Set([
     "tenants.read",
     "providers.read",
@@ -93,6 +106,9 @@ const platformPermissions = {
     "audit.read",
     "usage.read",
     "restricted.manage",
+    "sessions.revoke",
+    "notifications.read",
+    "notifications.manage",
   ]),
   auditor: new Set([
     "platform.accounts.read",
@@ -103,6 +119,7 @@ const platformPermissions = {
     "security.read",
     "audit.read",
     "usage.read",
+    "notifications.read",
   ]),
 };
 export function requirePlatformPermission(permission) {

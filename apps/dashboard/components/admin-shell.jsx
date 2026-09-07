@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Activity,
@@ -125,9 +125,9 @@ function Sidebar({ path, role, query, onNavigate }) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-lg font-semibold tracking-[-.04em]">
-          unpirator<span className="text-[#d7ff75]">.</span>
+          unpirator<span className="text-[#71843f]">.</span>
         </Link>
-        <span className="rounded-full border border-[#d7ff75]/25 bg-[#d7ff75]/10 px-2.5 py-1 text-[9px] font-black tracking-[.18em] text-[#d7ff75]">
+        <span className="rounded-full border border-[#aebb8b] bg-[#e4edca] px-2.5 py-1 text-[9px] font-black tracking-[.18em] text-[#51642b]">
           ADMIN
         </span>
       </div>
@@ -142,7 +142,7 @@ function Sidebar({ path, role, query, onNavigate }) {
           if (!visible.length) return null;
           return (
             <section key={label}>
-              <p className="mb-2 px-2 text-[9px] font-black uppercase tracking-[.2em] text-white/30">
+              <p className="mb-2 px-2 text-[9px] font-black uppercase tracking-[.2em] text-[#8b917f]">
                 {label}
               </p>
               <div className="space-y-1">
@@ -156,7 +156,7 @@ function Sidebar({ path, role, query, onNavigate }) {
                       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
                         active
                           ? "bg-[#d7ff75] font-semibold text-[#162008]"
-                          : "text-white/58 hover:bg-white/6 hover:text-white"
+                          : "text-[#62695a] hover:bg-[#e4e7dc] hover:text-[#172014]"
                       }`}
                     >
                       <Icon size={15} />
@@ -172,7 +172,7 @@ function Sidebar({ path, role, query, onNavigate }) {
 
       <Link
         href="/dashboard"
-        className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs text-white/60 hover:bg-white/5 hover:text-white"
+        className="mt-5 flex items-center gap-2 rounded-xl border border-[#d5d8cc] px-3 py-2.5 text-xs text-[#62695a] hover:bg-[#e4e7dc] hover:text-[#172014]"
       >
         <ArrowLeft size={14} />
         Customer dashboard
@@ -183,11 +183,21 @@ function Sidebar({ path, role, query, onNavigate }) {
 
 export function AdminShell({ children }) {
   const path = usePathname();
+  const router = useRouter();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
   const [health, setHealth] = useState("checking");
   const [query, setQuery] = useState("");
   const [unread, setUnread] = useState(0);
+  const role = auth?.account?.platformRole;
+  const isAdmin = [
+    "super_admin",
+    "operations_admin",
+    "billing_admin",
+    "support_admin",
+    "security_admin",
+    "auditor",
+  ].includes(role);
 
   useEffect(() => {
     api("/health/ready")
@@ -198,9 +208,19 @@ export function AdminShell({ children }) {
       .catch(() => setUnread(0));
   }, []);
 
+  useEffect(() => {
+    if (!auth.loading && !isAdmin) {
+      router.replace(auth?.account ? "/dashboard" : "/login");
+    }
+  }, [auth.loading, auth?.account, isAdmin, router]);
+
+  if (auth.loading || !isAdmin) {
+    return <div className="min-h-screen bg-[#f2f0e8]" aria-busy="true" />;
+  }
+
   return (
-    <div className="min-h-screen bg-[#0c100d] lg:grid lg:grid-cols-[280px_1fr]">
-      <aside className="hidden h-screen border-r border-white/8 bg-[#101511] p-5 lg:sticky lg:top-0 lg:block">
+    <div className="min-h-screen bg-[#f2f0e8] lg:grid lg:grid-cols-[280px_1fr]">
+      <aside className="hidden h-screen border-r border-[#d8d5ca] bg-[#f1eee3] p-5 text-[#172014] lg:sticky lg:top-0 lg:block">
         <Sidebar path={path} role={auth?.account?.platformRole} query={query} />
       </aside>
 
@@ -246,18 +266,31 @@ export function AdminShell({ children }) {
               </span>
             )}
           </Link>
+          <div className="hidden items-center gap-3 border-l border-[#d8ded0] pl-3 md:flex">
+            <span className="grid size-9 place-items-center rounded-full bg-[#25321d] text-xs font-bold text-[#e9f5c8]">
+              {(auth?.account?.email || "A").slice(0, 1).toUpperCase()}
+            </span>
+            <span className="max-w-40">
+              <span className="block truncate text-xs font-semibold">
+                {auth?.account?.email || "Administrator"}
+              </span>
+              <span className="block text-[9px] font-bold uppercase tracking-[.12em] text-[#7d8774]">
+                {(auth?.account?.platformRole || "admin").replaceAll("_", " ")}
+              </span>
+            </span>
+          </div>
         </header>
 
         {open && (
           <div className="fixed inset-0 z-50 bg-black/50 lg:hidden" onClick={() => setOpen(false)}>
             <aside
-              className="h-full w-[86%] max-w-xs bg-[#101511] p-5 text-white"
+              className="h-full w-[86%] max-w-xs bg-[#f1eee3] p-5 text-[#172014]"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="mb-4 flex justify-end">
                 <button
                   onClick={() => setOpen(false)}
-                  className="rounded-xl border border-white/10 p-2"
+                  className="rounded-xl border border-[#d5d8cc] p-2"
                   aria-label="Close admin navigation"
                 >
                   <X size={17} />
