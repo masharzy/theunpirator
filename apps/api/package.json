@@ -1,0 +1,40 @@
+{
+  "name": "@unpirator/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "bootstrap:admin": "node scripts/bootstrap-super-admin.js",
+    "jobs:webhooks": "node src/jobs/webhook-retry.js",
+    "jobs:usage": "node src/jobs/usage-rollup.js"
+  },
+  "dependencies": {
+    "@unpirator/provider-direct": "workspace:*",
+    "@unpirator/provider-hls": "workspace:*",
+    "@unpirator/provider-s3": "workspace:*",
+    "@unpirator/provider-bunny": "workspace:*",
+    "@unpirator/provider-youtube-custom": "workspace:*",
+    "@unpirator/cache": "workspace:*",
+    "@unpirator/contracts": "workspace:*",
+    "@unpirator/crypto": "workspace:*",
+    "@unpirator/db": "workspace:*",
+    "@unpirator/logger": "workspace:*",
+    "@unpirator/security": "workspace:*",
+    "@unpirator/source-manager": "workspace:*",
+    "argon2": "^0.44.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.44.5",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4",
+    "vitest": "^3.2.4"
+  }
+}

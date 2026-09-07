@@ -1,0 +1,9 @@
+[Unit]
+Description=The Unpirator Webhook Retry Job
+After=network-online.target
+[Service]
+Type=oneshot
+User=unpirator
+WorkingDirectory=/opt/the-unpirator
+EnvironmentFile=/etc/the-unpirator/api.env
+ExecStart=/usr/bin/corepack pnpm --filter @unpirator/api exec node src/jobs/webhook-retry.js

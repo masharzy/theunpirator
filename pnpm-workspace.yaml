@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "workers/*"
+  - "providers/*"
+  - "providers/restricted/*"
+  - "integrations/*"
+onlyBuiltDependencies:
+  - argon2
+  - esbuild
+  - sharp
+  - unrs-resolver
+  - workerd

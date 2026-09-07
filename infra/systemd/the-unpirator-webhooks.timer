@@ -1,0 +1,9 @@
+[Unit]
+Description=Run The Unpirator webhook retries every minute
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+[Install]
+WantedBy=timers.target
