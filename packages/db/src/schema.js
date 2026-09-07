@@ -107,6 +107,40 @@ export const platformBootstrapState = pgTable("platform_bootstrap_state", {
   bootstrapVersion: integer("bootstrap_version").default(1).notNull(),
 });
 
+export const accountMfaMethods = pgTable(
+  "account_mfa_methods",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .references(() => accounts.id, { onDelete: "cascade" })
+      .notNull(),
+    type: text("type").default("totp").notNull(),
+    encryptedSecret: text("encrypted_secret").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    enabled: boolean("enabled").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("account_mfa_methods_account_type_uq").on(t.accountId, t.type)],
+);
+
+export const mfaRecoveryCodes = pgTable(
+  "mfa_recovery_codes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .references(() => accounts.id, { onDelete: "cascade" })
+      .notNull(),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("mfa_recovery_codes_hash_uq").on(t.codeHash),
+    index("mfa_recovery_codes_account_idx").on(t.accountId),
+  ],
+);
+
 export const tenantMembers = pgTable(
   "tenant_members",
   {
