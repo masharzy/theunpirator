@@ -519,7 +519,31 @@ export function adminRouter({
       try {
         const section = req.params.section || "overview";
         const sources = {
-          overview: () => db.select().from(providerHealth),
+          overview: async () => {
+            const [database, queues] = await Promise.all([
+              db.execute(sql`select now() checked_at`),
+              db.execute(sql`select
+                count(*) filter (where status='pending')::int pending_webhooks,
+                count(*) filter (where status='failed')::int failed_webhooks,
+                min(next_attempt_at) filter (where status='pending') next_retry_at
+                from webhook_deliveries`),
+            ]);
+            return [
+              { service: "API", status: "healthy", checkedAt: database[0]?.checked_at },
+              { service: "Database", status: "healthy", checkedAt: database[0]?.checked_at },
+              { service: "Cache", status: config.REDIS_URL ? "configured" : "degraded" },
+              {
+                service: "Cloudflare gateway",
+                status: config.GATEWAY_CONTROL_URL ? "configured" : "degraded",
+              },
+              { service: "Email", status: config.RESEND_API_KEY ? "configured" : "degraded" },
+              {
+                service: "Webhook queue",
+                status: queues[0]?.failed_webhooks ? "degraded" : "healthy",
+                ...queues[0],
+              },
+            ];
+          },
           health: () => db.select().from(providerHealth),
           jobs: () =>
             db
