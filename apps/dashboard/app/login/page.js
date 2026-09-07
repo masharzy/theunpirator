@@ -48,7 +48,7 @@ export default function LoginPage() {
       window.location.assign(
         data.account.mfaSetupRequired
           ? "/dashboard/account?setup=mfa"
-          : data.account.platformRole === "super_admin"
+              : data.account.platformRole
             ? "/admin"
             : "/dashboard",
       );

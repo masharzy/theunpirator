@@ -66,6 +66,60 @@ export function requireSuperAdmin(req, _res, next) {
   next();
 }
 
+const platformPermissions = {
+  operations_admin: new Set([
+    "tenants.read",
+    "tenants.manage",
+    "usage.read",
+    "providers.read",
+    "providers.manage",
+    "security.read",
+    "security.manage",
+  ]),
+  billing_admin: new Set([
+    "tenants.read",
+    "subscriptions.read",
+    "subscriptions.manage",
+    "payments.read",
+    "payments.approve",
+    "plans.manage",
+  ]),
+  support_admin: new Set(["tenants.read", "usage.read", "security.read", "security.manage"]),
+  security_admin: new Set([
+    "tenants.read",
+    "providers.read",
+    "security.read",
+    "security.manage",
+    "audit.read",
+    "usage.read",
+    "restricted.manage",
+  ]),
+  auditor: new Set([
+    "platform.accounts.read",
+    "tenants.read",
+    "subscriptions.read",
+    "payments.read",
+    "providers.read",
+    "security.read",
+    "audit.read",
+    "usage.read",
+  ]),
+};
+export function requirePlatformPermission(permission) {
+  return (req, res, next) => {
+    if (req.auth?.platformRole === "super_admin") return requireSuperAdmin(req, res, next);
+    if (!platformPermissions[req.auth?.platformRole]?.has(permission))
+      return next(forbidden(`Platform permission required: ${permission}`));
+    if (
+      !req.auth.mfaConfirmedAt ||
+      !req.auth.mfaVerifiedAt ||
+      Date.now() - req.auth.mfaVerifiedAt.getTime() > 12 * 3600_000
+    )
+      return next(forbidden("MFA verification required"));
+    next();
+  };
+}
+
 export function requireRecentMfa(req, _res, next) {
   if (!req.auth?.mfaVerifiedAt || Date.now() - req.auth.mfaVerifiedAt.getTime() > 15 * 60_000)
     return next(forbidden("Recent MFA verification required"));
