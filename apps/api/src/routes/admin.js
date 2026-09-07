@@ -566,8 +566,15 @@ export function adminRouter({
               .limit(200),
           notes: () =>
             db
-              .select()
+              .select({
+                id: tenantSupportNotes.id,
+                body: tenantSupportNotes.body,
+                author: accounts.email,
+                editedAt: tenantSupportNotes.editedAt,
+                createdAt: tenantSupportNotes.createdAt,
+              })
               .from(tenantSupportNotes)
+              .leftJoin(accounts, eq(accounts.id, tenantSupportNotes.authorAccountId))
               .where(eq(tenantSupportNotes.tenantId, tenantId))
               .orderBy(desc(tenantSupportNotes.createdAt)),
           features: () => db.select().from(featureFlags).where(eq(featureFlags.scopeId, tenantId)),
@@ -1332,9 +1339,11 @@ export function adminRouter({
             .set({ endedAt: new Date() })
             .where(eq(adminImpersonationSessions.tokenHash, sha256(token)));
         await writeAudit(db, {
+          tenantId: req.auth.impersonation?.tenantId,
           actorAccountId: req.auth.accountId,
           action: "IMPERSONATION_ENDED",
           targetType: "impersonation",
+          targetId: req.auth.impersonation?.id,
           ip: req.ip,
         });
         res.clearCookie("unpirator_impersonation", { path: "/" });

@@ -634,6 +634,13 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           and(eq(oauthIdentities.accountId, account.id), eq(oauthIdentities.provider, "google")),
         )
         .limit(1);
+      const [impersonatedTenant] = req.auth.impersonation
+        ? await db
+            .select({ name: tenants.name })
+            .from(tenants)
+            .where(eq(tenants.id, req.auth.impersonation.tenantId))
+            .limit(1)
+        : [];
       res.json({
         account: {
           id: account.id,
@@ -650,7 +657,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
               {
                 tenantId: req.auth.impersonation.tenantId,
                 role: "support",
-                tenantName: "Impersonated workspace",
+                tenantName: impersonatedTenant?.name || "Impersonated workspace",
               },
             ]
           : memberships,
