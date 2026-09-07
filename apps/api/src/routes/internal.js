@@ -16,6 +16,7 @@ import { signPlaybackToken, decodeKeyRing } from "@unpirator/crypto";
 import { resolveAssetSource } from "@unpirator/source-manager";
 import { unauthorized, notFound } from "../errors.js";
 import { restrictedFeatureEnabled, featureEnabled } from "../services/entitlements.js";
+import { notifyPlatform } from "../services/admin-notifications.js";
 import { riskFor } from "@unpirator/security";
 
 export function internalRouter({
@@ -113,6 +114,14 @@ export function internalRouter({
               updatedAt: new Date(),
             },
           });
+        await notifyPlatform(db, {
+          type: "provider_degraded",
+          title: `${asset.provider} provider degraded`,
+          body: error.code || "Origin source failure",
+          tenantId,
+          actionUrl: "/admin/providers",
+          dedupeKey: `provider:${asset.provider}:${new Date().toISOString().slice(0, 13)}`,
+        });
         throw error;
       }
       const domains = await db
@@ -228,18 +237,30 @@ export function internalRouter({
                 eq(playbackSessions.tenantId, event.tenantId),
               ),
             );
-        if (event.kind === "security")
-          await db.insert(securityEvents).values({
-            tenantId: event.tenantId,
-            siteId: event.siteId || null,
-            assetId: event.assetId || null,
-            sessionId: event.sessionId || null,
-            type: event.type,
-            severity: event.severity || "info",
-            riskScore: Number(event.riskScore ?? riskFor(event.type)),
-            metadata: event.metadata || {},
-          });
-        else
+        if (event.kind === "security") {
+          const [securityEvent] = await db
+            .insert(securityEvents)
+            .values({
+              tenantId: event.tenantId,
+              siteId: event.siteId || null,
+              assetId: event.assetId || null,
+              sessionId: event.sessionId || null,
+              type: event.type,
+              severity: event.severity || "info",
+              riskScore: Number(event.riskScore ?? riskFor(event.type)),
+              metadata: event.metadata || {},
+            })
+            .returning();
+          if (["high", "critical"].includes(securityEvent.severity))
+            await notifyPlatform(db, {
+              type: "security_incident",
+              title: `${securityEvent.severity} security event`,
+              body: securityEvent.type,
+              tenantId: event.tenantId,
+              actionUrl: `/admin/workspaces/${event.tenantId}/security`,
+              dedupeKey: `security:${securityEvent.id}`,
+            });
+        } else
           await db.insert(usageEvents).values({
             tenantId: event.tenantId,
             type: event.type,

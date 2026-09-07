@@ -3,6 +3,7 @@ import { createDatabase } from "@unpirator/db";
 import { webhookDeliveries } from "@unpirator/db/schema";
 import { loadConfig } from "../config.js";
 import { deliverWebhook } from "../services/webhooks.js";
+import { notifyPlatform } from "../services/admin-notifications.js";
 
 const config = loadConfig();
 const { db, client } = createDatabase(config.DATABASE_URL);
@@ -26,12 +27,19 @@ try {
         .update(webhookDeliveries)
         .set({ status: "delivered", attempts, lastError: null })
         .where(eq(webhookDeliveries.id, delivery.id));
-    else if (result.permanent || attempts >= 8)
+    else if (result.permanent || attempts >= 8) {
       await db
         .update(webhookDeliveries)
         .set({ status: "failed", attempts, lastError: result.error })
         .where(eq(webhookDeliveries.id, delivery.id));
-    else {
+      await notifyPlatform(db, {
+        type: "webhook_failed",
+        title: "Webhook retries exhausted",
+        body: result.error || "Delivery failed permanently",
+        actionUrl: "/admin/system/jobs",
+        dedupeKey: `webhook:${delivery.id}`,
+      });
+    } else {
       const minutes = Math.min(60, 2 ** attempts);
       await db
         .update(webhookDeliveries)
