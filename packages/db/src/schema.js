@@ -33,6 +33,8 @@ export const accounts = pgTable(
     lastTenantId: uuid("last_tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     lastLoginIp: text("last_login_ip"),
+    mfaSecretEncrypted: text("mfa_secret_encrypted"),
+    mfaConfirmedAt: timestamp("mfa_confirmed_at", { withTimezone: true }),
     platformRole: text("platform_role"),
     status: text("status").default("active").notNull(),
     ...timestamps,
@@ -86,6 +88,7 @@ export const accountSessions = pgTable(
       .notNull(),
     tokenHash: text("token_hash").notNull(),
     csrfToken: text("csrf_token").notNull(),
+    mfaVerifiedAt: timestamp("mfa_verified_at", { withTimezone: true }),
     ip: text("ip"),
     userAgent: text("user_agent"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -96,6 +99,13 @@ export const accountSessions = pgTable(
     index("account_sessions_account_idx").on(t.accountId),
   ],
 );
+
+export const platformBootstrapState = pgTable("platform_bootstrap_state", {
+  id: text("id").primaryKey().default("platform"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  completedBy: uuid("completed_by").references(() => accounts.id),
+  bootstrapVersion: integer("bootstrap_version").default(1).notNull(),
+});
 
 export const tenantMembers = pgTable(
   "tenant_members",

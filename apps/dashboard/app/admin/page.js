@@ -6,15 +6,23 @@ import { DataPage } from "@/components/data-page";
 import Link from "next/link";
 export default function Admin() {
   const [tenants, setTenants] = useState([]),
+    [accounts, setAccounts] = useState([]),
     [providers, setProviders] = useState([]),
     [flags, setFlags] = useState([]),
     [tab, setTab] = useState("customers"),
     [message, setMessage] = useState(""),
+    [inviteEmail, setInviteEmail] = useState(""),
     [busy, setBusy] = useState(false);
   const load = () =>
-    Promise.all([api("/v1/admin/tenants"), api("/v1/admin/providers"), api("/v1/admin/features")])
-      .then(([t, p, f]) => {
+    Promise.all([
+      api("/v1/admin/tenants"),
+      api("/v1/admin/accounts"),
+      api("/v1/admin/providers"),
+      api("/v1/admin/features"),
+    ])
+      .then(([t, a, p, f]) => {
         setTenants(t.items);
+        setAccounts(a.items);
         setProviders(p.items);
         setFlags(f.items);
       })
@@ -35,6 +43,20 @@ export default function Admin() {
       setBusy(false);
     }
   }
+  async function changeAccount(account, values) {
+    const reason = window.prompt("Reason for this access change (minimum 8 characters)");
+    if (!reason) return;
+    await action(`/v1/admin/accounts/${account.id}`, { ...values, reason }, "PATCH");
+  }
+  async function createAccount(event) {
+    event.preventDefault();
+    const reason = window.prompt(
+      "Reason for creating this platform account (minimum 8 characters)",
+    );
+    if (!reason) return;
+    await action("/v1/admin/accounts", { email: inviteEmail, reason }, "POST");
+    setInviteEmail("");
+  }
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
       <div className="flex items-center justify-between">
@@ -49,7 +71,15 @@ export default function Admin() {
         </Link>
       </div>
       <nav className="my-8 flex flex-wrap gap-2" aria-label="Admin sections">
-        {["customers", "providers", "features", "subscriptions", "audit", "security"].map((t) => (
+        {[
+          "customers",
+          "accounts",
+          "providers",
+          "features",
+          "subscriptions",
+          "audit",
+          "security",
+        ].map((t) => (
           <Button key={t} variant={tab === t ? "default" : "outline"} onClick={() => setTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </Button>
@@ -120,6 +150,66 @@ export default function Admin() {
               </section>
             ))
           )}
+        </div>
+      )}
+      {tab === "accounts" && (
+        <div className="space-y-4">
+          <form onSubmit={createAccount} className="flex gap-2 rounded-xl border bg-white p-5">
+            <input
+              className="min-w-0 flex-1 rounded-md border px-3 py-2"
+              type="email"
+              placeholder="new-admin@example.com"
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+              required
+            />
+            <Button disabled={busy}>Create account</Button>
+          </form>
+          {accounts.map((account) => (
+            <section key={account.id} className="rounded-xl border bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">{account.email}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {account.platformRole || "customer"} · {account.status} · Email{" "}
+                    {account.emailVerifiedAt ? "verified" : "unverified"} · MFA{" "}
+                    {account.mfaConfirmedAt ? "ready" : "not configured"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {account.platformRole !== "super_admin" ? (
+                    <Button
+                      disabled={busy || !account.emailVerifiedAt}
+                      onClick={() =>
+                        changeAccount(account, { platformRole: "super_admin", status: "active" })
+                      }
+                    >
+                      Promote
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => changeAccount(account, { platformRole: null })}
+                    >
+                      Demote
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      changeAccount(account, {
+                        status: account.status === "active" ? "disabled" : "active",
+                      })
+                    }
+                  >
+                    {account.status === "active" ? "Disable" : "Enable"}
+                  </Button>
+                </div>
+              </div>
+            </section>
+          ))}
         </div>
       )}
       {tab === "providers" && (
