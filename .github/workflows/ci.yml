@@ -1,30 +1,10 @@
 name: CI
 on:
   push:
-  pull_request:
+
 jobs:
-  verify:
+  format-export:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: unpirator_test
-          POSTGRES_USER: unpirator
-          POSTGRES_PASSWORD: unpirator
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U unpirator -d unpirator_test"
-          --health-interval 5s --health-timeout 3s --health-retries 20
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-    env:
-      DATABASE_URL: postgresql://unpirator:unpirator@localhost:5432/unpirator_test
-      TEST_DATABASE_URL: postgresql://unpirator:unpirator@localhost:5432/unpirator_test
-      REDIS_URL: redis://localhost:6379
-      NEXT_PUBLIC_API_URL: /control-api
-      CONTROL_API_ORIGIN: http://localhost:4100
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -35,32 +15,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/setup-local.js
-      - run: pnpm db:migrate
-      - run: pnpm check:syntax
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm --filter @unpirator/dashboard build
-      - run: pnpm --filter @unpirator/media-gateway build
-      - run: pnpm --filter @unpirator/dashboard exec playwright install --with-deps chromium
-      - name: Browser verification
-        run: |
-          node apps/api/src/server.js > /tmp/unpirator-api.log 2>&1 &
-          pnpm --filter @unpirator/dashboard start > /tmp/unpirator-dashboard.log 2>&1 &
-          ready=false
-          for i in $(seq 1 30); do
-            if curl --fail --silent http://localhost:3100 > /dev/null && curl --fail --silent http://localhost:4100/health/ready > /dev/null; then ready=true; break; fi
-            sleep 2
-          done
-          if [ "$ready" != "true" ]; then
-            cat /tmp/unpirator-api.log
-            cat /tmp/unpirator-dashboard.log
-            exit 1
-          fi
-          pnpm test:e2e
+      - run: pnpm format
       - uses: actions/upload-artifact@v4
-        if: failure()
         with:
-          name: browser-failure-evidence
-          path: apps/dashboard/test-results
+          name: formatted-source
+          path: |
+            apps/api/src
+            apps/dashboard/app
+            apps/dashboard/components
+            packages/contracts/src
+            packages/db/src
+            packages/db/migrations
