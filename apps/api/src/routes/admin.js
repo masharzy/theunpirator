@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import {
   assets,
   featureFlags,
@@ -60,8 +60,13 @@ export function adminRouter({
   router.get(
     "/accounts",
     requirePlatformPermission("platform.accounts.read"),
-    async (_req, res, next) => {
+    async (req, res, next) => {
       try {
+        const conditions = [];
+        if (req.query.search)
+          conditions.push(ilike(accounts.email, `%${String(req.query.search).slice(0, 120)}%`));
+        if (req.query.role) conditions.push(eq(accounts.platformRole, String(req.query.role)));
+        if (req.query.status) conditions.push(eq(accounts.status, String(req.query.status)));
         res.json({
           items: await db
             .select({
@@ -71,9 +76,14 @@ export function adminRouter({
               status: accounts.status,
               emailVerifiedAt: accounts.emailVerifiedAt,
               mfaConfirmedAt: accounts.mfaConfirmedAt,
+              lastLoginAt: accounts.lastLoginAt,
+              lastLoginIp: accounts.lastLoginIp,
+              workspaceCount: sql`(select count(*)::int from tenant_members tm where tm.account_id = ${accounts.id})`,
+              googleLinked: sql`exists(select 1 from oauth_identities oi where oi.account_id = ${accounts.id} and oi.provider='google')`,
               createdAt: accounts.createdAt,
             })
             .from(accounts)
+            .where(conditions.length ? and(...conditions) : undefined)
             .orderBy(desc(accounts.createdAt))
             .limit(200),
         });
@@ -95,6 +105,8 @@ export function adminRouter({
             status: accounts.status,
             emailVerifiedAt: accounts.emailVerifiedAt,
             mfaConfirmedAt: accounts.mfaConfirmedAt,
+            lastLoginAt: accounts.lastLoginAt,
+            lastLoginIp: accounts.lastLoginIp,
             createdAt: accounts.createdAt,
             updatedAt: accounts.updatedAt,
           })
@@ -112,12 +124,31 @@ export function adminRouter({
             createdAt: accountSessions.createdAt,
             expiresAt: accountSessions.expiresAt,
             mfaVerifiedAt: accountSessions.mfaVerifiedAt,
+            ip: accountSessions.ip,
+            userAgent: accountSessions.userAgent,
           })
           .from(accountSessions)
           .where(eq(accountSessions.accountId, account.id))
           .orderBy(desc(accountSessions.createdAt))
           .limit(25);
-        res.json({ account, memberships, sessions });
+        const [identities, audit] = await Promise.all([
+          db
+            .select({
+              id: oauthIdentities.id,
+              provider: oauthIdentities.provider,
+              email: oauthIdentities.email,
+              createdAt: oauthIdentities.createdAt,
+            })
+            .from(oauthIdentities)
+            .where(eq(oauthIdentities.accountId, account.id)),
+          db
+            .select()
+            .from(auditLogs)
+            .where(eq(auditLogs.targetId, account.id))
+            .orderBy(desc(auditLogs.createdAt))
+            .limit(100),
+        ]);
+        res.json({ account, memberships, sessions, identities, audit });
       } catch (e) {
         next(e);
       }
@@ -329,6 +360,71 @@ export function adminRouter({
           html: `<p>Your authenticator was reset by another administrator.</p><p>Reason: ${reason}</p><p>Sign in and configure MFA again.</p>`,
         }).catch((error) => req.log?.error({ err: error }, "MFA reset notification failed"));
         res.json({ reset: true });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.post(
+    "/accounts/:accountId/actions",
+    requirePlatformPermission("platform.admin_roles.manage"),
+    async (req, res, next) => {
+      try {
+        const { action, reason } = parseOrThrow(
+          z
+            .object({
+              action: z.enum([
+                "revoke_sessions",
+                "force_password_reset",
+                "resend_verification",
+                "remove_google",
+              ]),
+              reason: z.string().trim().min(8).max(500),
+            })
+            .strict(),
+          req.body,
+        );
+        const [target] = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.id, req.params.accountId))
+          .limit(1);
+        if (!target) throw notFound();
+        let raw;
+        if (action === "revoke_sessions")
+          await db.delete(accountSessions).where(eq(accountSessions.accountId, target.id));
+        if (["force_password_reset", "resend_verification"].includes(action)) {
+          raw = randomToken(32);
+          await db
+            .insert(accountTokens)
+            .values({
+              accountId: target.id,
+              kind: action === "force_password_reset" ? "password_reset" : "email_verification",
+              tokenHash: sha256(raw),
+              expiresAt: new Date(Date.now() + 3600_000),
+            });
+          await sendEmail(config, {
+            to: target.email,
+            subject:
+              action === "force_password_reset" ? "Reset your password" : "Verify your email",
+            html: `<p>Administrator reason: ${reason}</p><p><a href="${config.DASHBOARD_URL}/${action === "force_password_reset" ? "reset-password" : "verify-email"}?token=${encodeURIComponent(raw)}">Continue securely</a></p>`,
+          });
+        }
+        if (action === "remove_google")
+          await db
+            .delete(oauthIdentities)
+            .where(
+              and(eq(oauthIdentities.accountId, target.id), eq(oauthIdentities.provider, "google")),
+            );
+        await writeAudit(db, {
+          actorAccountId: req.auth.accountId,
+          action: `ACCOUNT_${action.toUpperCase()}`,
+          targetType: "account",
+          targetId: target.id,
+          metadata: { reason },
+          ip: req.ip,
+        });
+        res.json({ completed: true });
       } catch (e) {
         next(e);
       }
