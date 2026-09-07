@@ -1,4 +1,4 @@
-import { createApp } from "./app.js";
+import { createApp } from "./create-app.js";
 import "./startup/providers.js";
 import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
