@@ -1,13 +1,21 @@
 "use client";
 import { Copy, WalletCards } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, StatusPill, Surface, money } from "@/components/console-kit";
 
 export default function PaymentsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[320px]" />}>
+      <PaymentsContent />
+    </Suspense>
+  );
+}
+
+function PaymentsContent() {
   const params = useSearchParams();
   const [plans, setPlans] = useState([]),
     [methods, setMethods] = useState([]),
