@@ -117,6 +117,11 @@ export function DashboardShell({ children }) {
     localStorage.removeItem("unpirator_tenant_id");
     router.replace("/login");
   }
+  async function endImpersonation() {
+    await api("/v1/admin/impersonation", { method: "DELETE" });
+    await auth.refresh();
+    router.replace("/admin/workspaces");
+  }
 
   const unread = notifications.filter((item) => !item.readAt).length;
   const planLabel = billing?.subscription?.planName || "No active plan";
@@ -193,6 +198,17 @@ export function DashboardShell({ children }) {
 
   return (
     <div className="min-h-screen bg-[#f2f4ed] lg:grid lg:grid-cols-[270px_1fr]">
+      {auth?.impersonation && (
+        <div className="fixed inset-x-0 top-0 z-[70] flex items-center justify-center gap-4 bg-[#9f3024] px-4 py-3 text-sm font-semibold text-white shadow-xl">
+          You are viewing this workspace as Platform Support
+          <button
+            className="rounded-lg bg-white px-3 py-1.5 text-xs text-[#8c261d]"
+            onClick={endImpersonation}
+          >
+            End session
+          </button>
+        </div>
+      )}
       <aside className="hidden border-r border-[#dde3d5] bg-white p-5 lg:block">{nav}</aside>
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">

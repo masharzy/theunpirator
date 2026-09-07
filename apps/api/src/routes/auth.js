@@ -645,10 +645,27 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           mfaConfirmed: Boolean(account.mfaConfirmedAt),
           mfaVerified: Boolean(req.auth.mfaVerifiedAt),
         },
-        memberships,
-        activeTenantId: memberships.some((m) => m.tenantId === account.lastTenantId)
-          ? account.lastTenantId
-          : memberships[0]?.tenantId || null,
+        memberships: req.auth.impersonation
+          ? [
+              {
+                tenantId: req.auth.impersonation.tenantId,
+                role: "support",
+                tenantName: "Impersonated workspace",
+              },
+            ]
+          : memberships,
+        impersonation: req.auth.impersonation
+          ? {
+              tenantId: req.auth.impersonation.tenantId,
+              expiresAt: req.auth.impersonation.expiresAt,
+              reason: req.auth.impersonation.reason,
+            }
+          : null,
+        activeTenantId:
+          req.auth.impersonation?.tenantId ||
+          (memberships.some((m) => m.tenantId === account.lastTenantId)
+            ? account.lastTenantId
+            : memberships[0]?.tenantId || null),
       });
     } catch (error) {
       next(error);

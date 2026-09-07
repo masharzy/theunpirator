@@ -1,6 +1,7 @@
 "use client";
 import { useParams } from "next/navigation";
 import { DataPage } from "@/components/data-page";
+import { WorkspaceAdminTools } from "@/components/workspace-admin-tools";
 
 const definitions = {
   workspaces: [
@@ -90,5 +91,12 @@ export default function AdminModule() {
     "Live platform health records.",
     "/v1/admin/system/overview",
   ];
-  return <DataPage title={title} description={description} endpoint={endpoint} />;
+  return (
+    <>
+      {parts[0] === "workspaces" && parts[1] && (
+        <WorkspaceAdminTools tenantId={parts[1]} section={parts[2] || "overview"} />
+      )}
+      <DataPage title={title} description={description} endpoint={endpoint} />
+    </>
+  );
 }
