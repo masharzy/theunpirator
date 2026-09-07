@@ -1,13 +1,22 @@
 "use client";
 import { UserPlus, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader, StatusPill, Surface } from "@/components/console-kit";
 const roles = ["viewer", "developer", "admin", "owner"];
+
 export default function TeamPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[320px]" />}>
+      <TeamContent />
+    </Suspense>
+  );
+}
+
+function TeamContent() {
   const params = useSearchParams();
   const [members, setMembers] = useState([]),
     [invites, setInvites] = useState([]),
