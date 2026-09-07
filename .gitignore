@@ -18,3 +18,7 @@ test-results/
 artifacts/
 .deploy-secrets.txt
 wrangler.production.toml
+
+.vercel/
+.env.local
+.env.*.local
