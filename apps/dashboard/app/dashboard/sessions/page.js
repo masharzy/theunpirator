@@ -4,4 +4,94 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeader, StatusPill, Surface } from "@/components/console-kit";
-export default function SessionsPage(){const[items,setItems]=useState([]),[filter,setFilter]=useState("active"),[message,setMessage]=useState("");const load=()=>api("/v1/playback/sessions").then(d=>setItems(d.items||[]));useEffect(()=>{load().catch(e=>setMessage(e.message))},[]);const visible=useMemo(()=>filter==="all"?items:items.filter(x=>x.status===filter),[items,filter]);async function revoke(id){try{await api(`/v1/playback/sessions/${id}/revoke`,{method:"POST"});await load()}catch(e){setMessage(e.message)}}return <div className="space-y-8"><PageHeader eyebrow="Playback control" title="Sessions" description="Inspect active protected playback sessions and revoke access immediately." action={<select className="rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={filter} onChange={e=>setFilter(e.target.value)}><option value="active">Active</option><option value="revoked">Revoked</option><option value="ended">Ended</option><option value="all">All</option></select>}/>{message&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</div>}{visible.length===0?<EmptyState title="No matching playback sessions" description="Sessions appear when your integration creates a protected playback grant."/>:<Surface className="overflow-hidden"><div className="divide-y divide-[#edf0e9]">{visible.map(s=><div key={s.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_180px_auto] lg:items-center"><div className="flex items-center gap-3"><span className="grid size-8 place-items-center rounded-xl bg-[#edf5d8] text-[#536b31]"><Radio size={15}/></span><div className="min-w-0"><p className="truncate font-mono text-xs">{s.id}</p><p className="mt-1 truncate text-xs text-[#7d8876]">Asset {s.assetId}</p></div></div><div><p className="text-xs text-[#87917f]">Started</p><p className="mt-1 text-sm">{new Date(s.startedAt).toLocaleString()}</p></div><div><p className="text-xs text-[#87917f]">Heartbeat</p><p className="mt-1 text-sm">{new Date(s.lastHeartbeatAt).toLocaleString()}</p></div><div className="flex items-center gap-3"><StatusPill status={s.status}/>{s.status==="active"&&<Button size="sm" variant="outline" onClick={()=>revoke(s.id)}><ShieldOff size={14}/>Revoke</Button>}</div></div>)}</div></Surface>}</div>}
+export default function SessionsPage() {
+  const [items, setItems] = useState([]),
+    [filter, setFilter] = useState("active"),
+    [message, setMessage] = useState("");
+  const load = () => api("/v1/playback/sessions").then((d) => setItems(d.items || []));
+  useEffect(() => {
+    load().catch((e) => setMessage(e.message));
+  }, []);
+  const visible = useMemo(
+    () => (filter === "all" ? items : items.filter((x) => x.status === filter)),
+    [items, filter],
+  );
+  async function revoke(id) {
+    try {
+      await api(`/v1/playback/sessions/${id}/revoke`, { method: "POST" });
+      await load();
+    } catch (e) {
+      setMessage(e.message);
+    }
+  }
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Playback control"
+        title="Sessions"
+        description="Inspect active protected playback sessions and revoke access immediately."
+        action={
+          <select
+            className="rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="active">Active</option>
+            <option value="revoked">Revoked</option>
+            <option value="ended">Ended</option>
+            <option value="all">All</option>
+          </select>
+        }
+      />
+      {message && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {message}
+        </div>
+      )}
+      {visible.length === 0 ? (
+        <EmptyState
+          title="No matching playback sessions"
+          description="Sessions appear when your integration creates a protected playback grant."
+        />
+      ) : (
+        <Surface className="overflow-hidden">
+          <div className="divide-y divide-[#edf0e9]">
+            {visible.map((s) => (
+              <div
+                key={s.id}
+                className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_180px_auto] lg:items-center"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid size-8 place-items-center rounded-xl bg-[#edf5d8] text-[#536b31]">
+                    <Radio size={15} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs">{s.id}</p>
+                    <p className="mt-1 truncate text-xs text-[#7d8876]">Asset {s.assetId}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-[#87917f]">Started</p>
+                  <p className="mt-1 text-sm">{new Date(s.startedAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#87917f]">Heartbeat</p>
+                  <p className="mt-1 text-sm">{new Date(s.lastHeartbeatAt).toLocaleString()}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusPill status={s.status} />
+                  {s.status === "active" && (
+                    <Button size="sm" variant="outline" onClick={() => revoke(s.id)}>
+                      <ShieldOff size={14} />
+                      Revoke
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Surface>
+      )}
+    </div>
+  );
+}

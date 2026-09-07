@@ -4,10 +4,7 @@ import { z } from "zod";
 import { assetCreateSchema, parseOrThrow } from "@unpirator/contracts";
 import { encryptJson } from "@unpirator/crypto";
 import { assets, providerHealth, sites } from "@unpirator/db/schema";
-import {
-  assetConnectionRefs,
-  providerConnections,
-} from "@unpirator/db/commerce-schema";
+import { assetConnectionRefs, providerConnections } from "@unpirator/db/commerce-schema";
 import { restrictedFeatureEnabled } from "../services/entitlements.js";
 import { AppError, forbidden, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
@@ -40,7 +37,12 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
         refs = await db
           .select()
           .from(assetConnectionRefs)
-          .where(inArray(assetConnectionRefs.id, rows.map((row) => row.id)));
+          .where(
+            inArray(
+              assetConnectionRefs.id,
+              rows.map((row) => row.id),
+            ),
+          );
       }
       const refMap = new Map(refs.map((row) => [row.id, row.connectionId]));
       res.json({

@@ -58,7 +58,9 @@ export default function AdminPaymentsPage() {
         body: JSON.stringify({ action, note: note || null }),
       });
       setNote("");
-      setMessage(action === "approve" ? "Payment approved and subscription activated." : "Payment updated.");
+      setMessage(
+        action === "approve" ? "Payment approved and subscription activated." : "Payment updated.",
+      );
       await load();
       const refreshed = await api(`/v1/admin/commerce/payments/${selectedId}`);
       setDetail(refreshed);
@@ -74,7 +76,11 @@ export default function AdminPaymentsPage() {
         title="Payment approval"
         description="Verify manual transactions, request more information, reject invalid claims or atomically activate the requested subscription."
         action={
-          <select className="rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select
+            className="rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
             <option value="pending">Pending ({counters.pending})</option>
             <option value="reviewing">Reviewing ({counters.reviewing})</option>
             <option value="needs_information">Needs information ({counters.needs})</option>
@@ -84,7 +90,9 @@ export default function AdminPaymentsPage() {
           </select>
         }
       />
-      {message && <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm">{message}</div>}
+      {message && (
+        <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm">{message}</div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_.9fr]">
         <Surface className="overflow-hidden">
@@ -119,7 +127,9 @@ export default function AdminPaymentsPage() {
             <>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#71805b]">Review transaction</p>
+                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#71805b]">
+                    Review transaction
+                  </p>
                   <h2 className="mt-2 text-xl font-semibold">{detail.payment.planNameSnapshot}</h2>
                 </div>
                 <StatusPill status={detail.payment.status} />
@@ -127,7 +137,10 @@ export default function AdminPaymentsPage() {
 
               <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
                 {[
-                  ["Amount", money(detail.payment.amountMinorSnapshot, detail.payment.currencySnapshot)],
+                  [
+                    "Amount",
+                    money(detail.payment.amountMinorSnapshot, detail.payment.currencySnapshot),
+                  ],
                   ["Method", detail.method?.displayName || "Unknown"],
                   ["Sender", detail.payment.senderNumber],
                   ["Transaction ID", detail.payment.transactionId],
@@ -160,10 +173,25 @@ export default function AdminPaymentsPage() {
                     />
                   </label>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <Button variant="outline" onClick={() => review("reviewing")}><Eye size={15} /> Mark reviewing</Button>
-                    <Button variant="outline" onClick={() => review("needs_information")}><MessageSquareWarning size={15} /> Need information</Button>
-                    <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => review("approve")}><CheckCircle2 size={15} /> Approve & activate</Button>
-                    <Button variant="outline" className="border-red-200 text-red-700" onClick={() => review("reject")}><XCircle size={15} /> Reject</Button>
+                    <Button variant="outline" onClick={() => review("reviewing")}>
+                      <Eye size={15} /> Mark reviewing
+                    </Button>
+                    <Button variant="outline" onClick={() => review("needs_information")}>
+                      <MessageSquareWarning size={15} /> Need information
+                    </Button>
+                    <Button
+                      className="bg-emerald-700 hover:bg-emerald-800"
+                      onClick={() => review("approve")}
+                    >
+                      <CheckCircle2 size={15} /> Approve & activate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-red-200 text-red-700"
+                      onClick={() => review("reject")}
+                    >
+                      <XCircle size={15} /> Reject
+                    </Button>
                   </div>
                 </>
               )}

@@ -88,26 +88,28 @@ export default function AdminAccounts() {
       <p className="mt-2 text-sm text-[#687260]">
         API-enforced roles, MFA state and administrator handover.
       </p>
-      {canManage && <form
-        onSubmit={create}
-        className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-[1fr_1fr_auto]"
-      >
-        <Input
-          type="email"
-          placeholder="new-admin@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <Input
-          placeholder="Reason for invitation or access change"
-          minLength={8}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          required
-        />
-        <Button disabled={busy}>Create account</Button>
-      </form>}
+      {canManage && (
+        <form
+          onSubmit={create}
+          className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-[1fr_1fr_auto]"
+        >
+          <Input
+            type="email"
+            placeholder="new-admin@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <Input
+            placeholder="Reason for invitation or access change"
+            minLength={8}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+          <Button disabled={busy}>Create account</Button>
+        </form>
+      )}
       {message && (
         <p role="status" className="mt-4 rounded-lg border bg-white p-3 text-sm">
           {message}
@@ -136,10 +138,10 @@ export default function AdminAccounts() {
                   </Link>
                 </td>
                 <td className="p-4">
-                        <select
+                  <select
                     className="rounded-md border p-2"
                     value={account.platformRole || "customer"}
-                          disabled={busy || !canManage}
+                    disabled={busy || !canManage}
                     onChange={(e) =>
                       update(account, {
                         platformRole: e.target.value === "customer" ? null : e.target.value,
@@ -160,30 +162,32 @@ export default function AdminAccounts() {
                 </td>
                 <td className="p-4">{account.status}</td>
                 <td className="p-4">
-                        {canManage && <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        update(account, {
-                          status: account.status === "active" ? "disabled" : "active",
-                        })
-                      }
-                    >
-                      {account.status === "active" ? "Disable" : "Enable"}
-                    </Button>
-                    {account.mfaConfirmedAt && (
+                  {canManage && (
+                    <div className="flex gap-2">
                       <Button
                         size="sm"
-                        variant="destructive"
+                        variant="outline"
                         disabled={busy}
-                        onClick={() => resetMfa(account)}
+                        onClick={() =>
+                          update(account, {
+                            status: account.status === "active" ? "disabled" : "active",
+                          })
+                        }
                       >
-                        Reset MFA
+                        {account.status === "active" ? "Disable" : "Enable"}
                       </Button>
-                    )}
-                        </div>}
+                      {account.mfaConfirmedAt && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => resetMfa(account)}
+                        >
+                          Reset MFA
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
