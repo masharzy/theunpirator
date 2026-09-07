@@ -14,6 +14,7 @@ import {
   Play,
 } from "lucide-react";
 import { ProtectionPreview } from "@/components/protection-preview";
+import { PublicNav } from "@/components/public-nav";
 const features = [
   [
     LockKeyhole,
@@ -68,28 +69,7 @@ export default function Home() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header className="site-header">
-        <Link href="/" className="wordmark" aria-label="The Unpirator home">
-          <span className="brand-symbol">
-            <ShieldCheck size={21} />
-          </span>
-          unpirator<span className="brand-dot">.</span>
-        </Link>
-        <nav aria-label="Main navigation">
-          <a href="#platform">Platform</a>
-          <a href="#how-it-works">How it works</a>
-          <a href="#integrations">Developers</a>
-          <a href="#plans">Plans</a>
-        </nav>
-        <div className="header-actions">
-          <Link href="/login" className="login-link">
-            Log in <ArrowUpRight size={14} />
-          </Link>
-          <Link href="/register" className="small-cta">
-            Get started <ArrowRight size={15} />
-          </Link>
-        </div>
-      </header>
+      <PublicNav />
       <main id="main">
         <section className="hero section-wrap">
           <div className="hero-copy">
@@ -271,7 +251,7 @@ export default function Home() {
             </div>
           </div>
         </section>
-        <section className="use-cases section-wrap">
+        <section id="security" className="use-cases section-wrap">
           <div className="eyebrow">BUILT FOR CONTENT WORTH PROTECTING</div>
           <div className="use-case-grid">
             {[

@@ -229,29 +229,25 @@ export function internalRouter({
               ),
             );
         if (event.kind === "security")
-          await db
-            .insert(securityEvents)
-            .values({
-              tenantId: event.tenantId,
-              siteId: event.siteId || null,
-              assetId: event.assetId || null,
-              sessionId: event.sessionId || null,
-              type: event.type,
-              severity: event.severity || "info",
-              riskScore: Number(event.riskScore ?? riskFor(event.type)),
-              metadata: event.metadata || {},
-            });
+          await db.insert(securityEvents).values({
+            tenantId: event.tenantId,
+            siteId: event.siteId || null,
+            assetId: event.assetId || null,
+            sessionId: event.sessionId || null,
+            type: event.type,
+            severity: event.severity || "info",
+            riskScore: Number(event.riskScore ?? riskFor(event.type)),
+            metadata: event.metadata || {},
+          });
         else
-          await db
-            .insert(usageEvents)
-            .values({
-              tenantId: event.tenantId,
-              type: event.type,
-              quantity: Number(event.quantity || 1),
-              assetId: event.assetId || null,
-              sessionId: event.sessionId || null,
-              metadata: event.metadata || {},
-            });
+          await db.insert(usageEvents).values({
+            tenantId: event.tenantId,
+            type: event.type,
+            quantity: Number(event.quantity || 1),
+            assetId: event.assetId || null,
+            sessionId: event.sessionId || null,
+            metadata: event.metadata || {},
+          });
       }
       res.status(202).json({ accepted: events.length });
     } catch (e) {

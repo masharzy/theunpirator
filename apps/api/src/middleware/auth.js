@@ -14,6 +14,7 @@ export function dashboardAuth({ db, config }) {
           accountId: accounts.id,
           email: accounts.email,
           platformRole: accounts.platformRole,
+          emailVerifiedAt: accounts.emailVerifiedAt,
           status: accounts.status,
           csrfToken: accountSessions.csrfToken,
         })
@@ -33,6 +34,11 @@ export function dashboardAuth({ db, config }) {
       next(error);
     }
   };
+}
+
+export function requireVerifiedEmail(req, _res, next) {
+  if (req.auth?.emailVerifiedAt || req.auth?.platformRole === "super_admin") return next();
+  next(forbidden("Verify your email before changing production credentials"));
 }
 
 export function csrfGuard(req, _res, next) {

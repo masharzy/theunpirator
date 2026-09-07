@@ -1,4 +1,5 @@
 import "./globals.css";
+import { AuthProvider } from "@/components/auth-provider";
 export const metadata = {
   title: "The Unpirator",
   description: "Protected media infrastructure for modern platforms",
@@ -6,7 +7,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

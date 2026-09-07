@@ -1213,3 +1213,113 @@ html {
     transition: none !important;
   }
 }
+
+.nav-toggle {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: #283321;
+}
+.account-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #cbd5bc;
+  border-radius: 999px;
+  background: #edf3e2;
+  color: #344226;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.public-nav a[aria-current="page"] {
+  color: #344226;
+  font-weight: 700;
+}
+.verification-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  border: 1px solid #bfd08f;
+  border-radius: 10px;
+  background: #e8f2d2;
+  color: #344226;
+  font-size: 13px;
+}
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  color: #61704f;
+  font-size: 12px;
+}
+.auth-stage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background: radial-gradient(circle at 80% 15%, #ddecbd 0, transparent 28%), #f4f5ef;
+}
+.auth-panel {
+  width: min(100%, 460px);
+  padding: 38px;
+  border: 1px solid #dce2d2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 70px rgba(42, 53, 31, 0.09);
+}
+.auth-panel h1 {
+  margin: 14px 0 10px;
+  font-size: 36px;
+  letter-spacing: -1.5px;
+  color: #263020;
+}
+.auth-panel > p {
+  color: #6a755e;
+  line-height: 1.7;
+}
+.auth-panel form {
+  display: grid;
+  gap: 14px;
+  margin: 26px 0 18px;
+}
+.auth-panel > a {
+  color: #52663b;
+  font-size: 13px;
+  text-decoration: underline;
+}
+@media (max-width: 760px) {
+  .public-nav .nav-toggle {
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+  }
+  .public-nav nav {
+    display: none;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 18px;
+    background: #f7f8f2;
+    border: 1px solid #dfe3d6;
+    border-radius: 10px;
+    box-shadow: 0 18px 45px rgba(40, 51, 33, 0.12);
+  }
+  .public-nav nav.nav-open {
+    display: grid;
+    gap: 16px;
+  }
+  .public-nav {
+    position: relative;
+  }
+  .verification-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

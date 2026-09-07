@@ -47,8 +47,8 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Dashboard: `http://localhost:3000`  
-API: `http://localhost:4000`  
+Dashboard: `http://localhost:3100`  
+API: `http://localhost:4100`  
 Worker local: `pnpm dev:gateway`
 
 ## Deployment model

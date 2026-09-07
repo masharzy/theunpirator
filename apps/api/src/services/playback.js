@@ -116,18 +116,16 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         entitlements.device_control &&
         existing.length >= Number(entitlements.max_devices_per_user || 2)
       ) {
-        await db
-          .insert(securityEvents)
-          .values({
-            tenantId,
-            siteId: site.id,
-            endUserId: user.id,
-            assetId: asset.id,
-            type: "DEVICE_LIMIT",
-            severity: "warning",
-            riskScore: riskFor("DEVICE_LIMIT"),
-            metadata: { maxDevices: Number(entitlements.max_devices_per_user || 2) },
-          });
+        await db.insert(securityEvents).values({
+          tenantId,
+          siteId: site.id,
+          endUserId: user.id,
+          assetId: asset.id,
+          type: "DEVICE_LIMIT",
+          severity: "warning",
+          riskScore: riskFor("DEVICE_LIMIT"),
+          metadata: { maxDevices: Number(entitlements.max_devices_per_user || 2) },
+        });
         throw new AppError("DEVICE_LIMIT", "Device limit reached", 403);
       }
       [device] = await db
@@ -176,18 +174,16 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           await gatewayControl.syncSession(old.id, "revoked", 8 * 3600);
         }
       } else {
-        await db
-          .insert(securityEvents)
-          .values({
-            tenantId,
-            siteId: site.id,
-            endUserId: user.id,
-            assetId: asset.id,
-            type: "CONCURRENT_PLAYBACK",
-            severity: "warning",
-            riskScore: riskFor("CONCURRENT_PLAYBACK"),
-            metadata: { activeSessions: activeSessions.length, maxStreams },
-          });
+        await db.insert(securityEvents).values({
+          tenantId,
+          siteId: site.id,
+          endUserId: user.id,
+          assetId: asset.id,
+          type: "CONCURRENT_PLAYBACK",
+          severity: "warning",
+          riskScore: riskFor("CONCURRENT_PLAYBACK"),
+          metadata: { activeSessions: activeSessions.length, maxStreams },
+        });
         throw new AppError("CONCURRENT_PLAYBACK", "Concurrent playback limit reached", 409);
       }
     }
@@ -225,15 +221,13 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     });
     await cache.set(`playback:session:${session.id}`, "active", { ex: 8 * 3600 });
     await gatewayControl.syncSession(session.id, "active", 8 * 3600);
-    await db
-      .insert(usageEvents)
-      .values({
-        tenantId,
-        type: "playback_sessions",
-        quantity: 1,
-        assetId: asset.id,
-        sessionId: session.id,
-      });
+    await db.insert(usageEvents).values({
+      tenantId,
+      type: "playback_sessions",
+      quantity: 1,
+      assetId: asset.id,
+      sessionId: session.id,
+    });
     await queueWebhook(db, tenantId, "playback.started", {
       sessionId: session.id,
       assetId: asset.id,

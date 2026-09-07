@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { ShieldCheck, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { PublicNav } from "@/components/public-nav";
 export const metadata = { title: "Integration guide | The Unpirator" };
 export default function Docs() {
   return (
     <div className="marketing">
+      <PublicNav />
       <main className="docs-page">
-        <Link href="/" className="wordmark">
-          <ShieldCheck /> unpirator.
-        </Link>
         <h1>From your site to protected playback.</h1>
         <p>
           Use this guide to connect a customer website to the Control API and universal player. The

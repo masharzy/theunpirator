@@ -14,6 +14,7 @@ import {
   csrfGuard,
   requireSuperAdmin,
   requireTenantRole,
+  requireVerifiedEmail,
 } from "./middleware/auth.js";
 import { apiKeyAuth } from "./middleware/api-key-auth.js";
 import { createRateLimiter } from "./services/rate-limit.js";
@@ -73,9 +74,20 @@ export function createApp(overrides = {}) {
     "/v1/assets",
     auth,
     csrfGuard,
+    (req, res, next) =>
+      ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
+        ? requireVerifiedEmail(req, res, next)
+        : next(),
     assetsRouter({ db, config, requireTenantDeveloper: tenantDeveloper }),
   );
-  app.use("/v1/api-keys", auth, csrfGuard, apiKeysRouter({ db, requireTenantOwner: tenantOwner }));
+  app.use(
+    "/v1/api-keys",
+    auth,
+    csrfGuard,
+    (req, res, next) =>
+      ["POST", "PUT", "PATCH"].includes(req.method) ? requireVerifiedEmail(req, res, next) : next(),
+    apiKeysRouter({ db, requireTenantOwner: tenantOwner }),
+  );
   app.use(
     "/v1/playback",
     createRateLimiter(cache, { prefix: "playback", limit: 240, windowSeconds: 60 }),
