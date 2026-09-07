@@ -5,7 +5,7 @@ import { createApp } from "../src/create-app.js";
 import { loadConfig } from "../src/config.js";
 import { createDatabase } from "@unpirator/db";
 import { eq } from "drizzle-orm";
-import { siteDomains, subscriptions } from "@unpirator/db/schema";
+import { accounts, siteDomains, subscriptions } from "@unpirator/db/schema";
 
 const url = process.env.TEST_DATABASE_URL;
 describe.skipIf(!url)("PostgreSQL API integration", () => {
@@ -62,17 +62,23 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
       [other, "b"],
     ]) {
       const email = `${name}-${run}@integration.example`;
-      const registered = await client
-        .post("/v1/auth/register")
-        .send({ tenantName: `Integration ${name}`, email, password: "local-integration-password" });
+      const registered = await client.post("/v1/auth/register").send({
+        tenantName: `Integration ${name}`,
+        email,
+        password: "Local-integration-password1",
+      });
       expect(registered.status).toBe(201);
+      await database.db
+        .update(accounts)
+        .set({ emailVerifiedAt: new Date() })
+        .where(eq(accounts.email, email));
       if (name === "a") tenant = registered.body.tenant.id;
       else otherTenant = registered.body.tenant.id;
       expect(
         (
           await client
             .post("/v1/auth/login")
-            .send({ email, password: "local-integration-password" })
+            .send({ email, password: "Local-integration-password1" })
         ).status,
       ).toBe(200);
     }
