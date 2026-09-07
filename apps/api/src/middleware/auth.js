@@ -1,5 +1,6 @@
 import { and, eq, gt } from "drizzle-orm";
 import { accountSessions, accounts, tenantMembers } from "@unpirator/db/schema";
+import { adminImpersonationSessions } from "@unpirator/db/commerce-schema";
 import { sha256, safeEqual } from "@unpirator/crypto";
 import { forbidden, unauthorized } from "../errors.js";
 
@@ -30,6 +31,21 @@ export function dashboardAuth({ db, config }) {
         )
         .limit(1);
       if (!row || row.status !== "active") throw unauthorized();
+      const impersonationToken = req.cookies?.unpirator_impersonation;
+      if (impersonationToken) {
+        const [impersonation] = await db
+          .select()
+          .from(adminImpersonationSessions)
+          .where(
+            and(
+              eq(adminImpersonationSessions.tokenHash, sha256(impersonationToken)),
+              eq(adminImpersonationSessions.adminAccountId, row.accountId),
+              gt(adminImpersonationSessions.expiresAt, new Date()),
+            ),
+          )
+          .limit(1);
+        if (impersonation && !impersonation.endedAt) row.impersonation = impersonation;
+      }
       req.auth = row;
       next();
     } catch (error) {
@@ -95,6 +111,7 @@ const platformPermissions = {
     "security.read",
     "sessions.revoke",
     "tenant.notes.manage",
+    "tenants.impersonate",
     "notifications.read",
     "notifications.manage",
   ]),
@@ -149,6 +166,11 @@ export function requireTenantRole(db, minimum = "viewer") {
     try {
       const tenantId = req.get("x-tenant-id") || req.params.tenantId;
       if (!tenantId) throw forbidden("Tenant context required");
+      if (req.auth?.impersonation?.tenantId === tenantId) {
+        req.tenantId = tenantId;
+        req.tenantRole = "owner";
+        return next();
+      }
       if (req.auth?.platformRole === "super_admin") {
         req.tenantId = tenantId;
         return next();

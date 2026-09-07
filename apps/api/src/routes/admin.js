@@ -30,6 +30,8 @@ import {
   paymentRequests,
   providerConnections,
   tenantSettings,
+  tenantSupportNotes,
+  adminImpersonationSessions,
 } from "@unpirator/db/commerce-schema";
 import { z } from "zod";
 import { emailSchema, parseOrThrow } from "@unpirator/contracts";
@@ -421,9 +423,9 @@ export function adminRouter({
           notes: () =>
             db
               .select()
-              .from(auditLogs)
-              .where(and(eq(auditLogs.tenantId, tenantId), eq(auditLogs.targetType, "tenant_note")))
-              .orderBy(desc(auditLogs.createdAt)),
+              .from(tenantSupportNotes)
+              .where(eq(tenantSupportNotes.tenantId, tenantId))
+              .orderBy(desc(tenantSupportNotes.createdAt)),
           features: () => db.select().from(featureFlags).where(eq(featureFlags.scopeId, tenantId)),
           restricted: () =>
             db
@@ -476,6 +478,39 @@ export function adminRouter({
       next(e);
     }
   });
+  router.get(
+    "/command-center",
+    requirePlatformPermission("tenants.read"),
+    async (_req, res, next) => {
+      try {
+        const [business, media, topWorkspaces, attention, providers] = await Promise.all([
+          db.execute(sql`select
+          (select count(*)::int from tenants where status='active') active_workspaces,
+          (select count(*)::int from subscriptions where status='trialing') trial_workspaces,
+          (select count(*)::int from subscriptions where status='active') active_subscriptions,
+          (select count(*)::int from payment_requests where status in ('pending','reviewing')) pending_payments,
+          (select coalesce(sum(amount_minor_snapshot),0)::bigint from payment_requests where status='approved' and reviewed_at >= date_trunc('month',now())) revenue_this_month,
+          (select count(*)::int from accounts where created_at >= date_trunc('month',now())) new_customers`),
+          db.execute(sql`select
+          count(*) filter(where started_at >= current_date)::int gateway_requests_today,
+          count(*) filter(where status='active')::int active_sessions,
+          count(distinct end_user_id) filter(where started_at >= current_date)::int unique_viewers,
+          (select count(*)::int from security_events where created_at >= current_date) security_events
+          from playback_sessions`),
+          db.execute(
+            sql`select t.id,t.name,coalesce(sum(u.quantity),0)::bigint usage from tenants t left join usage_rollups u on u.tenant_id=t.id group by t.id,t.name order by usage desc limit 8`,
+          ),
+          db.execute(
+            sql`select id,'payment' type,'Payment approval waiting' title,tenant_id,"created_at" from payment_requests where status in ('pending','reviewing') union all select id,'security',type,tenant_id,created_at from security_events where severity in ('high','critical') order by created_at desc limit 12`,
+          ),
+          db.select().from(providerHealth),
+        ]);
+        res.json({ business: business[0], media: media[0], topWorkspaces, attention, providers });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
   router.get(
     "/system{/:section}",
     requirePlatformPermission("system.read"),
@@ -889,6 +924,100 @@ export function adminRouter({
           ip: req.ip,
         });
         res.json({ revoked: active.length });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.post(
+    "/tenants/:tenantId/notes",
+    requirePlatformPermission("tenant.notes.manage"),
+    async (req, res, next) => {
+      try {
+        const { body } = parseOrThrow(
+          z.object({ body: z.string().trim().min(2).max(4000) }).strict(),
+          req.body,
+        );
+        const [note] = await db
+          .insert(tenantSupportNotes)
+          .values({ tenantId: req.params.tenantId, authorAccountId: req.auth.accountId, body })
+          .returning();
+        await writeAudit(db, {
+          tenantId: req.params.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: "SUPPORT_NOTE_CREATED",
+          targetType: "tenant_note",
+          targetId: note.id,
+          ip: req.ip,
+        });
+        res.status(201).json({ note });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.post(
+    "/tenants/:tenantId/impersonate",
+    requirePlatformPermission("tenants.impersonate"),
+    async (req, res, next) => {
+      try {
+        const { reason } = parseOrThrow(
+          z.object({ reason: z.string().trim().min(8).max(500) }).strict(),
+          req.body,
+        );
+        const token = randomToken(32),
+          expiresAt = new Date(Date.now() + 20 * 60_000);
+        const [session] = await db
+          .insert(adminImpersonationSessions)
+          .values({
+            adminAccountId: req.auth.accountId,
+            tenantId: req.params.tenantId,
+            tokenHash: sha256(token),
+            reason,
+            expiresAt,
+          })
+          .returning();
+        await writeAudit(db, {
+          tenantId: req.params.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: "IMPERSONATION_STARTED",
+          targetType: "impersonation",
+          targetId: session.id,
+          metadata: { reason, expiresAt },
+          ip: req.ip,
+        });
+        res.cookie("unpirator_impersonation", token, {
+          httpOnly: true,
+          secure: config.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: 1200000,
+          path: "/",
+        });
+        res.json({ tenantId: req.params.tenantId, expiresAt });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.delete(
+    "/impersonation",
+    requirePlatformPermission("tenants.impersonate"),
+    async (req, res, next) => {
+      try {
+        const token = req.cookies?.unpirator_impersonation;
+        if (token)
+          await db
+            .update(adminImpersonationSessions)
+            .set({ endedAt: new Date() })
+            .where(eq(adminImpersonationSessions.tokenHash, sha256(token)));
+        await writeAudit(db, {
+          actorAccountId: req.auth.accountId,
+          action: "IMPERSONATION_ENDED",
+          targetType: "impersonation",
+          ip: req.ip,
+        });
+        res.clearCookie("unpirator_impersonation", { path: "/" });
+        res.json({ ended: true });
       } catch (e) {
         next(e);
       }

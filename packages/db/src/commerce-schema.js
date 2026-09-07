@@ -178,3 +178,31 @@ export const assetConnectionRefs = pgTable("assets", {
     onDelete: "set null",
   }),
 });
+
+export const tenantSupportNotes = pgTable("tenant_support_notes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id")
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .notNull(),
+  authorAccountId: uuid("author_account_id").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  body: text("body").notNull(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const adminImpersonationSessions = pgTable("admin_impersonation_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  adminAccountId: uuid("admin_account_id")
+    .references(() => accounts.id, { onDelete: "cascade" })
+    .notNull(),
+  tenantId: uuid("tenant_id")
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .notNull(),
+  tokenHash: text("token_hash").notNull(),
+  reason: text("reason").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
