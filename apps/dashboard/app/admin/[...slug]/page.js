@@ -2,6 +2,7 @@
 import { useParams } from "next/navigation";
 import { DataPage } from "@/components/data-page";
 import { WorkspaceAdminTools } from "@/components/workspace-admin-tools";
+import { AccountDetailView, WorkspaceSectionView } from "@/components/admin-detail-views";
 
 const definitions = {
   workspaces: [
@@ -76,12 +77,18 @@ export default function AdminModule() {
     "Live platform health records.",
     "/v1/admin/system/overview",
   ];
+  const render =
+    parts[0] === "accounts" && parts[1]
+      ? (data) => <AccountDetailView data={data} />
+      : parts[0] === "workspaces" && parts[1]
+        ? (data) => <WorkspaceSectionView data={data} section={parts[2] || "overview"} />
+        : undefined;
   return (
     <>
       {parts[0] === "workspaces" && parts[1] && (
         <WorkspaceAdminTools tenantId={parts[1]} section={parts[2] || "overview"} />
       )}
-      <DataPage title={title} description={description} endpoint={endpoint} />
+      <DataPage title={title} description={description} endpoint={endpoint} render={render} />
     </>
   );
 }
