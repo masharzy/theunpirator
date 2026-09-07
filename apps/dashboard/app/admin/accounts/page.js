@@ -24,10 +24,13 @@ export default function AdminAccounts() {
     [busy, setBusy] = useState(false),
     [search, setSearch] = useState(""),
     [roleFilter, setRoleFilter] = useState(""),
-    [statusFilter, setStatusFilter] = useState("");
+    [statusFilter, setStatusFilter] = useState(""),
+    [mfaFilter, setMfaFilter] = useState(""),
+    [verifiedFilter, setVerifiedFilter] = useState(""),
+    [googleFilter, setGoogleFilter] = useState("");
   const load = () =>
     api(
-      `/v1/admin/accounts?${new URLSearchParams({ search, role: roleFilter, status: statusFilter })}`,
+      `/v1/admin/accounts?${new URLSearchParams({ search, role: roleFilter, status: statusFilter, mfa: mfaFilter, verified: verifiedFilter, google: googleFilter })}`,
     ).then((data) => setAccounts(data.items));
   useEffect(() => {
     load().catch((e) => setMessage(e.message));
@@ -137,7 +140,7 @@ export default function AdminAccounts() {
           {message}
         </p>
       )}
-      <div className="mt-6 grid gap-3 rounded-2xl border bg-[#f8f7f0] p-4 md:grid-cols-3">
+      <div className="mt-6 grid gap-3 rounded-2xl border bg-[#f8f7f0] p-4 md:grid-cols-3 xl:grid-cols-6">
         <Input
           placeholder="Search email"
           value={search}
@@ -153,6 +156,33 @@ export default function AdminAccounts() {
           {roles.slice(1).map((r) => (
             <option key={r}>{r}</option>
           ))}
+        </select>
+        <select
+          className="rounded-md border bg-white px-3"
+          value={mfaFilter}
+          onChange={(e) => setMfaFilter(e.target.value)}
+        >
+          <option value="">Any MFA</option>
+          <option value="enabled">MFA enabled</option>
+          <option value="disabled">MFA missing</option>
+        </select>
+        <select
+          className="rounded-md border bg-white px-3"
+          value={verifiedFilter}
+          onChange={(e) => setVerifiedFilter(e.target.value)}
+        >
+          <option value="">Any verification</option>
+          <option value="yes">Email verified</option>
+          <option value="no">Email pending</option>
+        </select>
+        <select
+          className="rounded-md border bg-white px-3"
+          value={googleFilter}
+          onChange={(e) => setGoogleFilter(e.target.value)}
+        >
+          <option value="">Any login method</option>
+          <option value="yes">Google linked</option>
+          <option value="no">Google not linked</option>
         </select>
         <select
           className="rounded-md border bg-white px-3"
@@ -213,6 +243,11 @@ export default function AdminAccounts() {
                   Email {account.emailVerifiedAt ? "verified" : "pending"}
                   <br />
                   MFA {account.mfaConfirmedAt ? "enabled" : "required"}
+                  {account.riskFlags?.length > 0 && (
+                    <span className="mt-2 block font-semibold text-red-700">
+                      {account.riskFlags.join(" · ")}
+                    </span>
+                  )}
                 </td>
                 <td className="p-4">{account.workspaceCount}</td>
                 <td className="p-4 text-xs">

@@ -55,6 +55,43 @@ export function WorkspaceAdminTools({ tenantId, section }) {
           body: JSON.stringify({ days, reason }),
         });
       }
+      if (kind === "plan") {
+        const planId = prompt("Plan ID: starter, pro or business");
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!planId || !reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/subscription`, {
+          method: "PUT",
+          body: JSON.stringify({ planId, status: "active", reason }),
+        });
+      }
+      if (kind === "feature") {
+        const key = prompt("Feature key to override");
+        const enabled = confirm("Enable this feature? Cancel will disable it.");
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!key || !reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/features/${key}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled, reason }),
+        });
+      }
+      if (kind === "plan") {
+        const planId = prompt("Plan: starter, pro or business");
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!planId || !reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/subscription`, {
+          method: "PUT",
+          body: JSON.stringify({ planId, status: "active", reason }),
+        });
+      }
+      if (kind === "feature") {
+        const key = prompt("Feature key");
+        if (!key) return;
+        const enabled = confirm("Enable this feature? Cancel means disable.");
+        await api(`/v1/admin/tenants/${tenantId}/features/${key}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled }),
+        });
+      }
       if (kind === "impersonate") {
         const reason = prompt("Support reason (minimum 8 characters)");
         if (!reason) return;
@@ -100,11 +137,27 @@ export function WorkspaceAdminTools({ tenantId, section }) {
           </>
         )}
         {["super_admin", "billing_admin"].includes(role) && (
+          <>
+            <button
+              onClick={() => action("plan")}
+              className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
+            >
+              Change plan
+            </button>
+            <button
+              onClick={() => action("extend")}
+              className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
+            >
+              Extend subscription
+            </button>
+          </>
+        )}
+        {["super_admin", "operations_admin", "security_admin"].includes(role) && (
           <button
-            onClick={() => action("extend")}
+            onClick={() => action("feature")}
             className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
           >
-            Extend subscription
+            Feature override
           </button>
         )}
         {["super_admin", "support_admin", "security_admin"].includes(role) && (
