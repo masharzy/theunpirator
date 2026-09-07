@@ -1,0 +1,97 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+export default function WorkspacesPage() {
+  const [items, setItems] = useState([]),
+    [search, setSearch] = useState(""),
+    [status, setStatus] = useState(""),
+    [error, setError] = useState("");
+  const load = () =>
+    api(`/v1/admin/tenants?${new URLSearchParams({ search, status })}`)
+      .then((d) => setItems(d.items || []))
+      .catch((e) => setError(e.message));
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <div>
+      <p className="text-xs font-bold tracking-[.2em] text-[#657154]">TENANT OPERATIONS</p>
+      <h1 className="mt-3 text-4xl font-semibold">Workspaces</h1>
+      <p className="mt-2 text-[#687260]">
+        Plans, usage, media footprint, live sessions and security risk.
+      </p>
+      <div className="mt-7 flex flex-wrap gap-3 rounded-2xl border bg-[#f8f7f0] p-4">
+        <Input
+          className="max-w-md"
+          placeholder="Search workspace or tenant ID"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && load()}
+        />
+        <select
+          className="rounded-xl border bg-white px-3"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="">All statuses</option>
+          <option>active</option>
+          <option>suspended</option>
+          <option>disabled</option>
+        </select>
+        <Button onClick={load}>Apply</Button>
+      </div>
+      {error && <p className="mt-4 bg-red-50 p-4 text-red-700">{error}</p>}
+      <div className="mt-6 overflow-auto rounded-2xl border bg-white">
+        <table className="w-full min-w-[1050px] text-left text-sm">
+          <thead className="border-b bg-[#f4f6ef]">
+            <tr>
+              {[
+                "Workspace",
+                "Owner",
+                "Plan",
+                "Status",
+                "Sites",
+                "Assets",
+                "Viewers",
+                "Live",
+                "Usage",
+                "Alerts",
+              ].map((x) => (
+                <th className="p-4" key={x}>
+                  {x}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((x) => (
+              <tr className="border-b" key={x.id}>
+                <td className="p-4">
+                  <Link
+                    className="font-semibold hover:underline"
+                    href={`/admin/workspaces/${x.id}`}
+                  >
+                    {x.name}
+                  </Link>
+                  <p className="text-[10px] text-[#87917f]">{x.id}</p>
+                </td>
+                <td className="p-4">{x.owner_email || "—"}</td>
+                <td className="p-4">{x.plan_id || "—"}</td>
+                <td className="p-4">{x.subscription_status || x.status}</td>
+                <td className="p-4">{x.sites}</td>
+                <td className="p-4">{x.assets}</td>
+                <td className="p-4">{x.viewers}</td>
+                <td className="p-4">{x.active_sessions}</td>
+                <td className="p-4">{x.usage}</td>
+                <td className="p-4 font-semibold text-[#9f3024]">{x.security_alerts}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

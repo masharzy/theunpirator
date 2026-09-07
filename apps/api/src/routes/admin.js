@@ -395,14 +395,12 @@ export function adminRouter({
           await db.delete(accountSessions).where(eq(accountSessions.accountId, target.id));
         if (["force_password_reset", "resend_verification"].includes(action)) {
           raw = randomToken(32);
-          await db
-            .insert(accountTokens)
-            .values({
-              accountId: target.id,
-              kind: action === "force_password_reset" ? "password_reset" : "email_verification",
-              tokenHash: sha256(raw),
-              expiresAt: new Date(Date.now() + 3600_000),
-            });
+          await db.insert(accountTokens).values({
+            accountId: target.id,
+            kind: action === "force_password_reset" ? "password_reset" : "email_verification",
+            tokenHash: sha256(raw),
+            expiresAt: new Date(Date.now() + 3600_000),
+          });
           await sendEmail(config, {
             to: target.email,
             subject:
@@ -430,9 +428,22 @@ export function adminRouter({
       }
     },
   );
-  router.get("/tenants", requirePlatformPermission("tenants.read"), async (_req, res, next) => {
+  router.get("/tenants", requirePlatformPermission("tenants.read"), async (req, res, next) => {
     try {
-      res.json({ items: await db.select().from(tenants).orderBy(desc(tenants.createdAt)) });
+      const search = `%${String(req.query.search || "").slice(0, 120)}%`,
+        status = String(req.query.status || "");
+      const items = await db.execute(sql`select t.id,t.name,t.status,t.created_at,t.updated_at,
+        (select a.email from tenant_members tm join accounts a on a.id=tm.account_id where tm.tenant_id=t.id and tm.role='owner' limit 1) owner_email,
+        (select s.plan_id from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1) plan_id,
+        (select s.status from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1) subscription_status,
+        (select count(*)::int from sites where tenant_id=t.id) sites,
+        (select count(*)::int from assets where tenant_id=t.id) assets,
+        (select count(*)::int from end_users where tenant_id=t.id) viewers,
+        (select count(*)::int from playback_sessions where tenant_id=t.id and status='active') active_sessions,
+        (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=t.id) usage,
+        (select count(*)::int from security_events where tenant_id=t.id and severity in ('high','critical')) security_alerts
+        from tenants t where (${search}='%%' or t.name ilike ${search} or t.id::text ilike ${search}) and (${status}='' or t.status=${status}) order by t.created_at desc limit 100`);
+      res.json({ items });
     } catch (e) {
       next(e);
     }
@@ -875,6 +886,46 @@ export function adminRouter({
     },
   );
 
+  router.post(
+    "/tenants/:tenantId/subscription/extend",
+    requirePlatformPermission("subscriptions.manage"),
+    async (req, res, next) => {
+      try {
+        const { days, reason } = parseOrThrow(
+          z
+            .object({ days: z.number().int().min(1).max(365), reason: z.string().min(8).max(500) })
+            .strict(),
+          req.body,
+        );
+        const [current] = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.tenantId, req.params.tenantId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+        if (!current) throw notFound();
+        const base =
+          current.periodEnd && current.periodEnd > new Date() ? current.periodEnd : new Date();
+        const [subscription] = await db
+          .update(subscriptions)
+          .set({ periodEnd: new Date(base.getTime() + days * 86400000), updatedAt: new Date() })
+          .where(eq(subscriptions.id, current.id))
+          .returning();
+        await writeAudit(db, {
+          tenantId: req.params.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: "SUBSCRIPTION_EXTENDED",
+          targetType: "subscription",
+          targetId: current.id,
+          metadata: { days, reason },
+          ip: req.ip,
+        });
+        res.json({ subscription });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
   router.put(
     "/features/:key",
     requirePlatformPermission("features.manage"),

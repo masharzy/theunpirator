@@ -38,12 +38,21 @@ export function WorkspaceAdminTools({ tenantId, section }) {
       }
       if (kind === "revoke" && confirm("Revoke every active playback session?"))
         await api(`/v1/admin/tenants/${tenantId}/revoke-sessions`, { method: "POST" });
-      if (kind === "suspend") {
+      if (["suspend", "activate"].includes(kind)) {
         const reason = prompt("Reason for status change (minimum 8 characters)");
         if (!reason) return;
         await api(`/v1/admin/tenants/${tenantId}/status`, {
           method: "PATCH",
-          body: JSON.stringify({ status: "suspended", reason }),
+          body: JSON.stringify({ status: kind === "suspend" ? "suspended" : "active", reason }),
+        });
+      }
+      if (kind === "extend") {
+        const days = Number(prompt("Extend subscription by how many days?"));
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!days || !reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/subscription/extend`, {
+          method: "POST",
+          body: JSON.stringify({ days, reason }),
         });
       }
       if (kind === "impersonate") {
@@ -75,11 +84,27 @@ export function WorkspaceAdminTools({ tenantId, section }) {
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         {["super_admin", "operations_admin"].includes(role) && (
+          <>
+            <button
+              onClick={() => action("suspend")}
+              className="rounded-xl bg-[#9f3024] px-4 py-2 text-xs font-bold text-white"
+            >
+              Suspend workspace
+            </button>
+            <button
+              onClick={() => action("activate")}
+              className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
+            >
+              Unsuspend
+            </button>
+          </>
+        )}
+        {["super_admin", "billing_admin"].includes(role) && (
           <button
-            onClick={() => action("suspend")}
-            className="rounded-xl bg-[#9f3024] px-4 py-2 text-xs font-bold text-white"
+            onClick={() => action("extend")}
+            className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
           >
-            Suspend workspace
+            Extend subscription
           </button>
         )}
         {["super_admin", "support_admin", "security_admin"].includes(role) && (
