@@ -53,6 +53,7 @@ export const assetCreateSchema = z
     providerReference: z.string().min(1).max(2048),
     allowedHosts: z.array(domainSchema).min(1).max(20),
     providerConfig: z.record(z.string(), z.unknown()).default({}),
+    connectionId: idSchema.optional().nullable(),
     securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
   })
   .strict();

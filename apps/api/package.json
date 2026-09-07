@@ -10,7 +10,8 @@
     "test:unit": "vitest run test/unit",
     "bootstrap:admin": "node scripts/bootstrap-super-admin.js",
     "jobs:webhooks": "node src/jobs/webhook-retry.js",
-    "jobs:usage": "node src/jobs/usage-rollup.js"
+    "jobs:usage": "node src/jobs/usage-rollup.js",
+    "jobs:subscriptions": "node src/jobs/subscription-expiry.js"
   },
   "dependencies": {
     "@unpirator/provider-direct": "workspace:*",

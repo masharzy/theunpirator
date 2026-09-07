@@ -1,70 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Radio, ShieldOff } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-export default function Sessions() {
-  const [items, setItems] = useState([]),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState("");
-  const load = () =>
-    api("/v1/playback/sessions")
-      .then((d) => setItems(d.items))
-      .catch((e) => setError(e.message));
-  useEffect(() => {
-    load();
-  }, []);
-  async function revoke(id) {
-    setBusy(id);
-    try {
-      await api(`/v1/playback/sessions/${id}/revoke`, { method: "POST" });
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy("");
-    }
-  }
-  return (
-    <div>
-      <h1 className="text-3xl font-semibold">Playback sessions</h1>
-      <p className="mt-2 text-muted-foreground">
-        See active viewers and end access to protected streams.
-      </p>
-      {error && (
-        <p role="alert" className="mt-4 text-red-600">
-          {error}
-        </p>
-      )}
-      <div className="mt-8 space-y-3">
-        {items.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-            No sessions yet. Integrate your player to start protected playback.
-          </p>
-        ) : (
-          items.map((s) => (
-            <article
-              key={s.id}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5"
-            >
-              <div>
-                <h2 className="text-sm font-medium">Session {s.id.slice(0, 8)}</h2>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {s.status} · Started {new Date(s.startedAt).toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">Asset {s.assetId}</p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={s.status !== "active" || busy === s.id}
-                onClick={() => revoke(s.id)}
-              >
-                {busy === s.id ? "Revoking…" : s.status === "active" ? "Revoke session" : "Ended"}
-              </Button>
-            </article>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
+import { EmptyState, PageHeader, StatusPill, Surface } from "@/components/console-kit";
+export default function SessionsPage(){const[items,setItems]=useState([]),[filter,setFilter]=useState("active"),[message,setMessage]=useState("");const load=()=>api("/v1/playback/sessions").then(d=>setItems(d.items||[]));useEffect(()=>{load().catch(e=>setMessage(e.message))},[]);const visible=useMemo(()=>filter==="all"?items:items.filter(x=>x.status===filter),[items,filter]);async function revoke(id){try{await api(`/v1/playback/sessions/${id}/revoke`,{method:"POST"});await load()}catch(e){setMessage(e.message)}}return <div className="space-y-8"><PageHeader eyebrow="Playback control" title="Sessions" description="Inspect active protected playback sessions and revoke access immediately." action={<select className="rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={filter} onChange={e=>setFilter(e.target.value)}><option value="active">Active</option><option value="revoked">Revoked</option><option value="ended">Ended</option><option value="all">All</option></select>}/>{message&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</div>}{visible.length===0?<EmptyState title="No matching playback sessions" description="Sessions appear when your integration creates a protected playback grant."/>:<Surface className="overflow-hidden"><div className="divide-y divide-[#edf0e9]">{visible.map(s=><div key={s.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_180px_auto] lg:items-center"><div className="flex items-center gap-3"><span className="grid size-8 place-items-center rounded-xl bg-[#edf5d8] text-[#536b31]"><Radio size={15}/></span><div className="min-w-0"><p className="truncate font-mono text-xs">{s.id}</p><p className="mt-1 truncate text-xs text-[#7d8876]">Asset {s.assetId}</p></div></div><div><p className="text-xs text-[#87917f]">Started</p><p className="mt-1 text-sm">{new Date(s.startedAt).toLocaleString()}</p></div><div><p className="text-xs text-[#87917f]">Heartbeat</p><p className="mt-1 text-sm">{new Date(s.lastHeartbeatAt).toLocaleString()}</p></div><div className="flex items-center gap-3"><StatusPill status={s.status}/>{s.status==="active"&&<Button size="sm" variant="outline" onClick={()=>revoke(s.id)}><ShieldOff size={14}/>Revoke</Button>}</div></div>)}</div></Surface>}</div>}

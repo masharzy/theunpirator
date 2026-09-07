@@ -30,8 +30,10 @@ import { playbackRouter } from "./routes/playback.js";
 import { securityRouter } from "./routes/security.js";
 import { usageRouter } from "./routes/usage.js";
 import { adminRouter } from "./routes/admin.js";
+import { adminCommerceRouter } from "./routes/admin-commerce.js";
 import { internalRouter } from "./routes/internal.js";
 import { billingRouter } from "./routes/billing.js";
+import { workspaceRouter } from "./routes/workspace.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 
 export function createApp(overrides = {}) {
@@ -43,6 +45,7 @@ export function createApp(overrides = {}) {
   const signingRing = decodeKeyRing(config.SIGNING_KEYS_B64);
   if (!signingRing.some((key) => key.kid === config.ACTIVE_SIGNING_KID && key.privateJwk))
     throw new Error("ACTIVE_SIGNING_KID has no private key in SIGNING_KEYS_B64");
+
   const gatewayControl = overrides.gatewayControl || createGatewayControl(config, logger);
   const playbackService = createPlaybackService({ db, cache, config, signingRing, gatewayControl });
   const auth = dashboardAuth({ db, config });
@@ -50,6 +53,7 @@ export function createApp(overrides = {}) {
   const tenantDeveloper = requireTenantRole(db, "developer");
   const tenantAdmin = requireTenantRole(db, "admin");
   const tenantOwner = requireTenantRole(db, "owner");
+
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -64,12 +68,14 @@ export function createApp(overrides = {}) {
   );
   app.use(express.json({ limit: "256kb" }));
   app.use(cookieParser());
+
   app.use("/health", healthRouter({ dbClient, cache }));
   app.use(
     "/v1/auth",
     createRateLimiter(cache, { prefix: "auth", limit: 20, windowSeconds: 60 }),
     authRouter({ db, config, dashboardAuth: auth, csrfGuard }),
   );
+
   app.use("/v1/sites", auth, csrfGuard, sitesRouter({ db, requireTenantAdmin: tenantAdmin }));
   app.use(
     "/v1/assets",
@@ -89,6 +95,7 @@ export function createApp(overrides = {}) {
       ["POST", "PUT", "PATCH"].includes(req.method) ? requireVerifiedEmail(req, res, next) : next(),
     apiKeysRouter({ db, requireTenantOwner: tenantOwner }),
   );
+
   app.use(
     "/v1/playback",
     createRateLimiter(cache, { prefix: "playback", limit: 240, windowSeconds: 60 }),
@@ -101,17 +108,41 @@ export function createApp(overrides = {}) {
       requireTenantAdmin: tenantAdmin,
     }),
   );
+
   app.use(
     "/v1/security",
     auth,
     csrfGuard,
-    securityRouter({ db, dashboardAuth: auth, requireTenantAdmin: tenantAdmin, playbackService }),
+    securityRouter({ db, requireTenantAdmin: tenantAdmin, playbackService }),
   );
   app.use("/v1/usage", usageRouter({ db, dashboardAuth: auth, requireTenantViewer: tenantViewer }));
+
   app.use(
     "/v1/billing",
-    billingRouter({ db, dashboardAuth: auth, requireTenantViewer: tenantViewer }),
+    billingRouter({
+      db,
+      dashboardAuth: auth,
+      csrfGuard,
+      requireTenantViewer: tenantViewer,
+      requireTenantOwner: tenantOwner,
+      requireVerifiedEmail,
+    }),
   );
+
+  app.use(
+    "/v1/workspace",
+    workspaceRouter({
+      db,
+      config,
+      dashboardAuth: auth,
+      csrfGuard,
+      requireTenantViewer: tenantViewer,
+      requireTenantDeveloper: tenantDeveloper,
+      requireTenantAdmin: tenantAdmin,
+      requireTenantOwner: tenantOwner,
+    }),
+  );
+
   app.use(
     "/v1/webhooks",
     webhooksRouter({
@@ -122,6 +153,18 @@ export function createApp(overrides = {}) {
       requireTenantDeveloper: tenantDeveloper,
     }),
   );
+
+  app.use(
+    "/v1/admin/commerce",
+    adminCommerceRouter({
+      db,
+      dashboardAuth: auth,
+      csrfGuard,
+      requirePlatformPermission,
+      requireRecentMfa,
+    }),
+  );
+
   app.use(
     "/v1/admin",
     adminRouter({
@@ -134,6 +177,7 @@ export function createApp(overrides = {}) {
       gatewayControl,
     }),
   );
+
   app.use("/internal", internalRouter({ db, config, signingRing }));
   app.use(notFoundHandler);
   app.use(errorHandler);

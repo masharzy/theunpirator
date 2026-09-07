@@ -1,0 +1,11 @@
+[Unit]
+Description=Run The Unpirator subscription expiry job
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=the-unpirator-subscriptions.service
+
+[Install]
+WantedBy=timers.target
