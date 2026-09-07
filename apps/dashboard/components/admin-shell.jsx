@@ -61,7 +61,6 @@ const groups = [
     [
       [Activity, "/admin/system", "System"],
       [Bell, "/admin/notifications", "Notifications"],
-      [Bell, "/admin/announcements", "Announcements"],
     ],
   ],
 ];

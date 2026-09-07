@@ -24,11 +24,6 @@ const definitions = {
   features: ["Features", "Global and workspace feature assignments.", "/v1/admin/features"],
   security: ["Security", "Recent security detections across the platform.", "/v1/admin/security"],
   audit: ["Audit", "Immutable administrative and tenant activity.", "/v1/admin/audit"],
-  announcements: [
-    "Announcements",
-    "Customer-facing operational notifications and announcements.",
-    "/v1/admin/announcements",
-  ],
 };
 const workspaceSections = new Set([
   "overview",

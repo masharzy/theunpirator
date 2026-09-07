@@ -26,7 +26,6 @@ import {
   webhookDeliveries,
 } from "@unpirator/db/schema";
 import {
-  notifications,
   paymentRequests,
   providerConnections,
   tenantSettings,
@@ -582,23 +581,6 @@ export function adminRouter({
         const load = sources[section];
         if (!load) throw notFound();
         res.json({ items: await load() });
-      } catch (e) {
-        next(e);
-      }
-    },
-  );
-  router.get(
-    "/announcements",
-    requirePlatformPermission("notifications.read"),
-    async (_req, res, next) => {
-      try {
-        res.json({
-          items: await db
-            .select()
-            .from(notifications)
-            .orderBy(desc(notifications.createdAt))
-            .limit(200),
-        });
       } catch (e) {
         next(e);
       }
