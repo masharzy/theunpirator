@@ -3,6 +3,7 @@ import { createDatabase } from "@unpirator/db";
 import { subscriptions, tenantMembers } from "@unpirator/db/schema";
 import { notifications } from "@unpirator/db/commerce-schema";
 import { loadConfig } from "../config.js";
+import { notifyPlatform } from "../services/admin-notifications.js";
 
 export async function expireSubscriptions({ db, now = new Date() }) {
   const expired = await db
@@ -43,6 +44,15 @@ export async function expireSubscriptions({ db, now = new Date() }) {
           })),
         );
       }
+      await notifyPlatform(tx, {
+        type: "subscription_expired",
+        title: "Workspace subscription expired",
+        body: `Subscription ${subscription.id} expired`,
+        tenantId: subscription.tenantId,
+        actionUrl: `/admin/workspaces/${subscription.tenantId}/subscription`,
+        dedupeKey: `subscription:${subscription.id}:expired`,
+        roles: ["super_admin", "billing_admin", "operations_admin"],
+      });
     });
   }
   return { expired: expired.length };

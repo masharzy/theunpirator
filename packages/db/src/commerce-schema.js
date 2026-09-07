@@ -108,6 +108,7 @@ export const notifications = pgTable(
     title: text("title").notNull(),
     body: text("body").notNull(),
     actionUrl: text("action_url"),
+    dedupeKey: text("dedupe_key"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
