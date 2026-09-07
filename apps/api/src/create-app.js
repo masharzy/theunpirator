@@ -12,8 +12,8 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import {
   dashboardAuth,
   csrfGuard,
-  requireSuperAdmin,
   requireRecentMfa,
+  requirePlatformPermission,
   requireTenantRole,
   requireVerifiedEmail,
 } from "./middleware/auth.js";
@@ -129,7 +129,7 @@ export function createApp(overrides = {}) {
       config,
       dashboardAuth: auth,
       csrfGuard,
-      requireSuperAdmin,
+      requirePlatformPermission,
       requireRecentMfa,
       gatewayControl,
     }),
