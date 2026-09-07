@@ -657,20 +657,20 @@ export function adminRouter({
           (select count(*)::int from accounts where created_at >= date_trunc('month',now())) new_customers`),
             db.execute(sql`select
           (select coalesce(sum(quantity),0)::bigint from usage_events where type='gateway_requests' and created_at between ${from} and ${to}) gateway_requests,
-          (select coalesce(sum(quantity),0)::bigint from usage_events where type='egress_bytes' and created_at between ${from} and ${to}) egress_bytes,
-          (select coalesce(sum(quantity),0)::bigint from usage_events where type='playback_heartbeat' and created_at between ${from} and ${to}) playback_minutes,
+          (select coalesce(sum(coalesce((metadata->>'bytes')::bigint,0)),0)::bigint from usage_events where type='gateway_requests' and created_at between ${from} and ${to}) egress_bytes,
+          (select round(coalesce(sum(quantity),0)/2.0,1) from usage_events where type='playback_heartbeat' and created_at between ${from} and ${to}) playback_minutes,
           count(*) filter(where status='active')::int active_sessions,
           count(distinct end_user_id) filter(where started_at between ${from} and ${to})::int unique_viewers,
           (select count(*)::int from security_events where created_at between ${from} and ${to}) security_events
           from playback_sessions`),
             db.execute(
-              sql`select t.id,t.name,coalesce(sum(u.quantity),0)::bigint usage,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by usage desc limit 8`,
+              sql`select t.id,t.name,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,coalesce(sum(u.quantity) filter(where u.type='gateway_requests'),0)::bigint gateway_requests,round(coalesce(sum(u.quantity) filter(where u.type='playback_heartbeat'),0)/2.0,1) playback_minutes,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers,count(distinct p.device_id)::int active_devices from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by egress_bytes desc limit 8`,
             ),
             db.execute(
-              sql`select a.id,a.tenant_id,a.title,coalesce(sum(u.quantity),0)::bigint usage,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title order by usage desc limit 8`,
+              sql`select a.id,a.tenant_id,a.title,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers,(select count(*)::int from security_events se where se.asset_id=a.id and se.created_at between ${from} and ${to}) errors from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title order by egress_bytes desc limit 8`,
             ),
             db.execute(
-              sql`select a.provider,coalesce(sum(u.quantity),0)::bigint requests,count(*) filter(where se.severity in ('high','critical'))::int failures from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join security_events se on se.asset_id=a.id and se.created_at between ${from} and ${to} group by a.provider order by requests desc`,
+              sql`select p.provider,(select coalesce(sum(u.quantity),0)::bigint from usage_events u join assets a on a.id=u.asset_id where a.provider=p.provider and u.type='gateway_requests' and u.created_at between ${from} and ${to}) requests,(select count(*)::int from security_events se join assets a on a.id=se.asset_id where a.provider=p.provider and se.created_at between ${from} and ${to}) failures from (select distinct provider from assets) p order by requests desc`,
             ),
             db.execute(
               sql`select id::text,'payment' type,'Payment approval waiting' title,tenant_id,created_at from payment_requests where status in ('pending','reviewing')
@@ -681,6 +681,17 @@ export function adminRouter({
             ),
             db.select().from(providerHealth),
           ]);
+        const attentionItems = [
+          ...attention,
+          ...providers
+            .filter((provider) => ["degraded", "down"].includes(provider.status))
+            .map((provider) => ({
+              id: provider.provider,
+              type: "provider",
+              title: `${provider.provider} provider ${provider.status}`,
+              created_at: provider.updatedAt,
+            })),
+        ];
         res.json({
           range,
           from,
@@ -690,7 +701,7 @@ export function adminRouter({
           topWorkspaces,
           topAssets,
           topProviders,
-          attention,
+          attention: attentionItems,
           providers,
         });
       } catch (e) {
