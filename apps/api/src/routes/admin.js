@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, ilike, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   assets,
   featureFlags,
@@ -63,10 +63,34 @@ export function adminRouter({
     async (req, res, next) => {
       try {
         const conditions = [];
-        if (req.query.search)
-          conditions.push(ilike(accounts.email, `%${String(req.query.search).slice(0, 120)}%`));
+        if (req.query.search) {
+          const search = `%${String(req.query.search).slice(0, 120)}%`;
+          conditions.push(
+            or(
+              ilike(accounts.email, search),
+              sql`${accounts.id}::text ilike ${search}`,
+              sql`exists(select 1 from tenant_members tm join tenants t on t.id=tm.tenant_id where tm.account_id=${accounts.id} and t.name ilike ${search})`,
+            ),
+          );
+        }
         if (req.query.role) conditions.push(eq(accounts.platformRole, String(req.query.role)));
         if (req.query.status) conditions.push(eq(accounts.status, String(req.query.status)));
+        if (req.query.mfa === "enabled") conditions.push(isNotNull(accounts.mfaConfirmedAt));
+        if (req.query.mfa === "disabled") conditions.push(isNull(accounts.mfaConfirmedAt));
+        if (req.query.verified === "yes") conditions.push(isNotNull(accounts.emailVerifiedAt));
+        if (req.query.verified === "no") conditions.push(isNull(accounts.emailVerifiedAt));
+        if (req.query.google === "yes")
+          conditions.push(
+            sql`exists(select 1 from oauth_identities oi where oi.account_id=${accounts.id} and oi.provider='google')`,
+          );
+        if (req.query.google === "no")
+          conditions.push(
+            sql`not exists(select 1 from oauth_identities oi where oi.account_id=${accounts.id} and oi.provider='google')`,
+          );
+        if (req.query.createdFrom)
+          conditions.push(sql`${accounts.createdAt} >= ${new Date(String(req.query.createdFrom))}`);
+        if (req.query.createdTo)
+          conditions.push(sql`${accounts.createdAt} <= ${new Date(String(req.query.createdTo))}`);
         res.json({
           items: await db
             .select({
@@ -80,6 +104,7 @@ export function adminRouter({
               lastLoginIp: accounts.lastLoginIp,
               workspaceCount: sql`(select count(*)::int from tenant_members tm where tm.account_id = ${accounts.id})`,
               googleLinked: sql`exists(select 1 from oauth_identities oi where oi.account_id = ${accounts.id} and oi.provider='google')`,
+              riskFlags: sql`array_remove(array[case when ${accounts.status}<>'active' then 'account_restricted' end,case when ${accounts.emailVerifiedAt} is null then 'email_unverified' end,case when ${accounts.platformRole} is not null and ${accounts.mfaConfirmedAt} is null then 'mfa_missing' end],null)`,
               createdAt: accounts.createdAt,
             })
             .from(accounts)
@@ -431,7 +456,13 @@ export function adminRouter({
   router.get("/tenants", requirePlatformPermission("tenants.read"), async (req, res, next) => {
     try {
       const search = `%${String(req.query.search || "").slice(0, 120)}%`,
-        status = String(req.query.status || "");
+        status = String(req.query.status || ""),
+        plan = String(req.query.plan || ""),
+        subscriptionStatus = String(req.query.subscriptionStatus || ""),
+        cursor = req.query.cursor ? new Date(String(req.query.cursor)) : null;
+      const sortColumns = { created: "t.created_at", name: "t.name", usage: "usage" };
+      const sort = sortColumns[String(req.query.sort)] || sortColumns.created;
+      const direction = req.query.direction === "asc" ? "asc" : "desc";
       const items = await db.execute(sql`select t.id,t.name,t.status,t.created_at,t.updated_at,
         (select a.email from tenant_members tm join accounts a on a.id=tm.account_id where tm.tenant_id=t.id and tm.role='owner' limit 1) owner_email,
         (select s.plan_id from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1) plan_id,
@@ -442,8 +473,14 @@ export function adminRouter({
         (select count(*)::int from playback_sessions where tenant_id=t.id and status='active') active_sessions,
         (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=t.id) usage,
         (select count(*)::int from security_events where tenant_id=t.id and severity in ('high','critical')) security_alerts
-        from tenants t where (${search}='%%' or t.name ilike ${search} or t.id::text ilike ${search}) and (${status}='' or t.status=${status}) order by t.created_at desc limit 100`);
-      res.json({ items });
+        from tenants t where (${search}='%%' or t.name ilike ${search} or t.id::text ilike ${search}) and (${status}='' or t.status=${status})
+        and (${plan}='' or (select s.plan_id from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1)=${plan})
+        and (${subscriptionStatus}='' or (select s.status from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1)=${subscriptionStatus})
+        and (${cursor}::timestamptz is null or t.created_at < ${cursor}) order by ${sql.raw(sort)} ${sql.raw(direction)} limit 51`);
+      res.json({
+        items: items.slice(0, 50),
+        nextCursor: items.length > 50 ? items[49].created_at : null,
+      });
     } catch (e) {
       next(e);
     }
@@ -885,6 +922,7 @@ export function adminRouter({
             .object({
               planId: z.enum(["starter", "pro", "business"]),
               status: z.enum(["active", "trialing", "canceled"]).default("active"),
+              reason: z.string().min(8).max(500),
             })
             .strict(),
           req.body,
@@ -1007,7 +1045,10 @@ export function adminRouter({
     async (req, res, next) => {
       try {
         const key = req.params.key;
-        const { enabled } = parseOrThrow(z.object({ enabled: z.boolean() }).strict(), req.body);
+        const { enabled, reason } = parseOrThrow(
+          z.object({ enabled: z.boolean(), reason: z.string().min(8).max(500) }).strict(),
+          req.body,
+        );
         const scopeId = req.params.tenantId;
         const [flag] = await db
           .insert(featureFlags)
@@ -1023,7 +1064,7 @@ export function adminRouter({
           action: enabled ? "FEATURE_ENABLED" : "FEATURE_DISABLED",
           targetType: "feature_flag",
           targetId: key,
-          metadata: { restricted: key === "youtube_custom" },
+          metadata: { restricted: key === "youtube_custom", reason },
           ip: req.ip,
         });
         res.json({ flag });

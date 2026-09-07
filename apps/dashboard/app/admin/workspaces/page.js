@@ -8,10 +8,19 @@ export default function WorkspacesPage() {
   const [items, setItems] = useState([]),
     [search, setSearch] = useState(""),
     [status, setStatus] = useState(""),
+    [plan, setPlan] = useState(""),
+    [subscriptionStatus, setSubscriptionStatus] = useState(""),
+    [sort, setSort] = useState("created"),
+    [nextCursor, setNextCursor] = useState(null),
     [error, setError] = useState("");
-  const load = () =>
-    api(`/v1/admin/tenants?${new URLSearchParams({ search, status })}`)
-      .then((d) => setItems(d.items || []))
+  const load = (append = false) =>
+    api(
+      `/v1/admin/tenants?${new URLSearchParams({ search, status, plan, subscriptionStatus, sort, cursor: append && nextCursor ? nextCursor : "" })}`,
+    )
+      .then((d) => {
+        setItems((old) => (append ? [...old, ...(d.items || [])] : d.items || []));
+        setNextCursor(d.nextCursor);
+      })
       .catch((e) => setError(e.message));
   useEffect(() => {
     load();
@@ -41,8 +50,43 @@ export default function WorkspacesPage() {
           <option>suspended</option>
           <option>disabled</option>
         </select>
+        <select
+          className="rounded-xl border bg-white px-3"
+          value={plan}
+          onChange={(e) => setPlan(e.target.value)}
+        >
+          <option value="">All plans</option>
+          <option>starter</option>
+          <option>pro</option>
+          <option>business</option>
+        </select>
+        <select
+          className="rounded-xl border bg-white px-3"
+          value={subscriptionStatus}
+          onChange={(e) => setSubscriptionStatus(e.target.value)}
+        >
+          <option value="">Any subscription</option>
+          <option>trialing</option>
+          <option>active</option>
+          <option>expired</option>
+          <option>canceled</option>
+        </select>
+        <select
+          className="rounded-xl border bg-white px-3"
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          <option value="created">Newest</option>
+          <option value="name">Name</option>
+          <option value="usage">Highest usage</option>
+        </select>
         <Button onClick={load}>Apply</Button>
       </div>
+      {nextCursor && (
+        <Button className="mt-4" variant="outline" onClick={() => load(true)}>
+          Load more
+        </Button>
+      )}
       {error && <p className="mt-4 bg-red-50 p-4 text-red-700">{error}</p>}
       <div className="mt-6 overflow-auto rounded-2xl border bg-white">
         <table className="w-full min-w-[1050px] text-left text-sm">
