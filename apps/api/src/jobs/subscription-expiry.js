@@ -9,10 +9,7 @@ export async function expireSubscriptions({ db, now = new Date() }) {
     .select()
     .from(subscriptions)
     .where(
-      and(
-        inArray(subscriptions.status, ["active", "trialing"]),
-        lte(subscriptions.periodEnd, now),
-      ),
+      and(inArray(subscriptions.status, ["active", "trialing"]), lte(subscriptions.periodEnd, now)),
     );
 
   for (const subscription of expired) {
@@ -32,10 +29,7 @@ export async function expireSubscriptions({ db, now = new Date() }) {
         .select({ accountId: tenantMembers.accountId })
         .from(tenantMembers)
         .where(
-          and(
-            eq(tenantMembers.tenantId, subscription.tenantId),
-            eq(tenantMembers.role, "owner"),
-          ),
+          and(eq(tenantMembers.tenantId, subscription.tenantId), eq(tenantMembers.role, "owner")),
         );
       if (owners.length) {
         await tx.insert(notifications).values(

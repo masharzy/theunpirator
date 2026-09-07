@@ -70,7 +70,7 @@ export function PublicNav() {
             >
               {auth.account.email.slice(0, 1).toUpperCase()}
             </Link>
-          {auth.account.platformRole && (
+            {auth.account.platformRole && (
               <Link href="/admin" className="small-cta">
                 Admin Console <ArrowRight size={15} />
               </Link>

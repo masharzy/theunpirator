@@ -3,4 +3,65 @@ import { AlertTriangle, ShieldCheck, ShieldX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { EmptyState, PageHeader, Stat, StatusPill, Surface } from "@/components/console-kit";
-export default function SecurityPage(){const[events,setEvents]=useState([]),[devices,setDevices]=useState([]),[message,setMessage]=useState("");useEffect(()=>{Promise.all([api("/v1/security/events"),api("/v1/security/devices")]).then(([a,b])=>{setEvents(a.items||[]);setDevices(b.items||[])}).catch(e=>setMessage(e.message))},[]);const critical=useMemo(()=>events.filter(e=>["critical","high"].includes(String(e.severity).toLowerCase())).length,[events]);const blocked=devices.filter(d=>d.status==="blocked").length;return <div className="space-y-8"><PageHeader eyebrow="Trust operations" title="Security Center" description="Review enforcement events, device blocks and suspicious playback activity."/>{message&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</div>}<div className="grid gap-4 sm:grid-cols-3"><Stat label="Recent events" value={events.length} icon={ShieldCheck}/><Stat label="High severity" value={critical} icon={AlertTriangle}/><Stat label="Blocked devices" value={blocked} icon={ShieldX}/></div>{events.length===0?<EmptyState title="No security events" description="Enforcement events will appear here as playback traffic arrives."/>:<Surface className="overflow-hidden"><div className="divide-y divide-[#edf0e9]">{events.map(e=><div key={e.id} className="grid gap-3 p-5 md:grid-cols-[1fr_120px_170px] md:items-center"><div><p className="font-medium">{String(e.type).replaceAll("_"," ")}</p><p className="mt-1 font-mono text-[11px] text-[#87917f]">risk {e.riskScore}</p></div><StatusPill status={e.severity}/><p className="text-xs text-[#75806e]">{new Date(e.createdAt).toLocaleString()}</p></div>)}</div></Surface>}</div>}
+export default function SecurityPage() {
+  const [events, setEvents] = useState([]),
+    [devices, setDevices] = useState([]),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    Promise.all([api("/v1/security/events"), api("/v1/security/devices")])
+      .then(([a, b]) => {
+        setEvents(a.items || []);
+        setDevices(b.items || []);
+      })
+      .catch((e) => setMessage(e.message));
+  }, []);
+  const critical = useMemo(
+    () =>
+      events.filter((e) => ["critical", "high"].includes(String(e.severity).toLowerCase())).length,
+    [events],
+  );
+  const blocked = devices.filter((d) => d.status === "blocked").length;
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Trust operations"
+        title="Security Center"
+        description="Review enforcement events, device blocks and suspicious playback activity."
+      />
+      {message && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {message}
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Recent events" value={events.length} icon={ShieldCheck} />
+        <Stat label="High severity" value={critical} icon={AlertTriangle} />
+        <Stat label="Blocked devices" value={blocked} icon={ShieldX} />
+      </div>
+      {events.length === 0 ? (
+        <EmptyState
+          title="No security events"
+          description="Enforcement events will appear here as playback traffic arrives."
+        />
+      ) : (
+        <Surface className="overflow-hidden">
+          <div className="divide-y divide-[#edf0e9]">
+            {events.map((e) => (
+              <div
+                key={e.id}
+                className="grid gap-3 p-5 md:grid-cols-[1fr_120px_170px] md:items-center"
+              >
+                <div>
+                  <p className="font-medium">{String(e.type).replaceAll("_", " ")}</p>
+                  <p className="mt-1 font-mono text-[11px] text-[#87917f]">risk {e.riskScore}</p>
+                </div>
+                <StatusPill status={e.severity} />
+                <p className="text-xs text-[#75806e]">{new Date(e.createdAt).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </Surface>
+      )}
+    </div>
+  );
+}

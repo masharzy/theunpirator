@@ -186,11 +186,7 @@ export function billingRouter({
           .where(
             and(
               eq(paymentRequests.tenantId, req.tenantId),
-              inArray(paymentRequests.status, [
-                "pending",
-                "reviewing",
-                "needs_information",
-              ]),
+              inArray(paymentRequests.status, ["pending", "reviewing", "needs_information"]),
             ),
           )
           .limit(1);
@@ -227,27 +223,18 @@ export function billingRouter({
           .select()
           .from(paymentMethods)
           .where(
-            and(
-              eq(paymentMethods.id, input.paymentMethodId),
-              eq(paymentMethods.enabled, true),
-            ),
+            and(eq(paymentMethods.id, input.paymentMethodId), eq(paymentMethods.enabled, true)),
           )
           .limit(1);
         if (!method) throw notFound("Payment method not found");
-        if (
-          method.minAmountMinor != null &&
-          plan.priceMinor < method.minAmountMinor
-        ) {
+        if (method.minAmountMinor != null && plan.priceMinor < method.minAmountMinor) {
           throw new AppError(
             "PAYMENT_AMOUNT_NOT_SUPPORTED",
             "Selected payment method does not support this amount",
             409,
           );
         }
-        if (
-          method.maxAmountMinor != null &&
-          plan.priceMinor > method.maxAmountMinor
-        ) {
+        if (method.maxAmountMinor != null && plan.priceMinor > method.maxAmountMinor) {
           throw new AppError(
             "PAYMENT_AMOUNT_NOT_SUPPORTED",
             "Selected payment method does not support this amount",
@@ -289,9 +276,7 @@ export function billingRouter({
           const billingAdmins = await tx
             .select({ id: accounts.id })
             .from(accounts)
-            .where(
-              inArray(accounts.platformRole, ["super_admin", "billing_admin"]),
-            );
+            .where(inArray(accounts.platformRole, ["super_admin", "billing_admin"]));
           if (billingAdmins.length) {
             await tx.insert(notifications).values(
               billingAdmins.map((account) => ({
@@ -352,28 +337,24 @@ export function billingRouter({
     }
   });
 
-  router.patch(
-    "/notifications/:notificationId/read",
-    csrfGuard,
-    async (req, res, next) => {
-      try {
-        const [item] = await db
-          .update(notifications)
-          .set({ readAt: new Date() })
-          .where(
-            and(
-              eq(notifications.id, req.params.notificationId),
-              eq(notifications.accountId, req.auth.accountId),
-            ),
-          )
-          .returning();
-        if (!item) throw notFound();
-        res.json({ notification: item });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  router.patch("/notifications/:notificationId/read", csrfGuard, async (req, res, next) => {
+    try {
+      const [item] = await db
+        .update(notifications)
+        .set({ readAt: new Date() })
+        .where(
+          and(
+            eq(notifications.id, req.params.notificationId),
+            eq(notifications.accountId, req.auth.accountId),
+          ),
+        )
+        .returning();
+      if (!item) throw notFound();
+      res.json({ notification: item });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   return router;
 }

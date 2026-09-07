@@ -71,21 +71,14 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
       const [viewer] = await db
         .select()
         .from(endUsers)
-        .where(
-          and(eq(endUsers.id, req.params.id), eq(endUsers.tenantId, req.tenantId)),
-        )
+        .where(and(eq(endUsers.id, req.params.id), eq(endUsers.tenantId, req.tenantId)))
         .limit(1);
       if (!viewer) throw notFound();
       const [viewerDevices, sessions] = await Promise.all([
         db
           .select()
           .from(devices)
-          .where(
-            and(
-              eq(devices.tenantId, req.tenantId),
-              eq(devices.endUserId, viewer.id),
-            ),
-          )
+          .where(and(eq(devices.tenantId, req.tenantId), eq(devices.endUserId, viewer.id)))
           .orderBy(desc(devices.lastSeenAt)),
         db
           .select()
@@ -224,9 +217,7 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
       const viewerDevices = await db
         .select({ id: devices.id })
         .from(devices)
-        .where(
-          and(eq(devices.tenantId, req.tenantId), eq(devices.endUserId, viewer.id)),
-        );
+        .where(and(eq(devices.tenantId, req.tenantId), eq(devices.endUserId, viewer.id)));
       let revoked = 0;
       for (const device of viewerDevices)
         revoked += await revokeMatchingSessions(req, playbackSessions.deviceId, device.id);

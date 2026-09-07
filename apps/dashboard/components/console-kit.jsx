@@ -15,7 +15,9 @@ export function PageHeader({ eyebrow, title, description, action }) {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#172014] md:text-4xl">
           {title}
         </h1>
-        {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66705f]">{description}</p>}
+        {description && (
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66705f]">{description}</p>
+        )}
       </div>
       {action}
     </div>
@@ -65,7 +67,9 @@ export function StatusPill({ status }) {
       ? "bg-amber-50 text-amber-700 ring-amber-200"
       : "bg-slate-100 text-slate-600 ring-slate-200";
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ring-1 ${classes}`}>
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ring-1 ${classes}`}
+    >
       {value}
     </span>
   );
@@ -83,7 +87,10 @@ export function ProgressMeter({ label, used = 0, limit, format = (v) => String(v
         </span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf0e8]">
-        <div className="h-full rounded-full bg-[#7d9853]" style={{ width: finite ? `${pct}%` : "0%" }} />
+        <div
+          className="h-full rounded-full bg-[#7d9853]"
+          style={{ width: finite ? `${pct}%` : "0%" }}
+        />
       </div>
       {finite && (
         <p className="mt-1 text-right text-[11px] text-[#90998a]">
