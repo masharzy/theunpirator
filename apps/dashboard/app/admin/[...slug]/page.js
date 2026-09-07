@@ -1,43 +1,94 @@
 "use client";
 import { useParams } from "next/navigation";
 import { DataPage } from "@/components/data-page";
-const endpoints = {
-  accounts: "/v1/admin/accounts",
-  workspaces: "/v1/admin/tenants",
-  subscriptions: "/v1/admin/subscriptions",
-  plans: "/v1/admin/plans",
-  providers: "/v1/admin/providers",
-  features: "/v1/admin/features",
-  security: "/v1/admin/security",
-  audit: "/v1/admin/audit",
+
+const definitions = {
+  workspaces: [
+    "Workspaces",
+    "Tenant status, ownership and lifecycle records.",
+    "/v1/admin/tenants",
+  ],
+  usage: ["Usage", "Current usage rollups across every workspace.", "/v1/admin/usage"],
+  analytics: [
+    "Analytics",
+    "Live platform totals calculated from operational records.",
+    "/v1/admin/analytics",
+  ],
+  providers: ["Providers", "Provider availability and incident status.", "/v1/admin/providers"],
+  "restricted-integrations": [
+    "Restricted integrations",
+    "Restricted provider feature controls and current state.",
+    "/v1/admin/features",
+  ],
+  features: ["Features", "Global and workspace feature assignments.", "/v1/admin/features"],
+  security: ["Security", "Recent security detections across the platform.", "/v1/admin/security"],
+  audit: ["Audit", "Immutable administrative and tenant activity.", "/v1/admin/audit"],
+  team: [
+    "Admin team",
+    "Platform operators, roles, status and MFA readiness.",
+    "/v1/admin/accounts",
+  ],
+  roles: [
+    "Roles",
+    "Operator role assignments enforced by the API permission layer.",
+    "/v1/admin/accounts",
+  ],
+  announcements: [
+    "Announcements",
+    "Customer-facing operational notifications and announcements.",
+    "/v1/admin/announcements",
+  ],
 };
+const workspaceSections = new Set([
+  "overview",
+  "members",
+  "sites",
+  "connections",
+  "assets",
+  "viewers",
+  "devices",
+  "sessions",
+  "usage",
+  "subscription",
+  "payments",
+  "security",
+  "audit",
+  "notes",
+  "features",
+  "restricted",
+]);
+const systemSections = new Set(["overview", "health", "jobs", "webhooks", "keys", "settings"]);
+const words = (value) => value.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
+
 export default function AdminModule() {
-  const params = useParams(),
-    parts = Array.isArray(params.slug) ? params.slug : [params.slug],
-    key = parts[0],
-    title = parts
-      .map((part) => part.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase()))
-      .join(" / "),
-    endpoint = endpoints[key];
-  if (endpoint)
-    return (
-      <DataPage
-        title={title}
-        description="Platform-wide operator records. API permissions remain authoritative."
-        endpoint={endpoint}
-      />
-    );
-  return (
-    <div>
-      <p className="text-xs font-bold tracking-[.2em] text-[#657154]">ADMIN MODULE</p>
-      <h1 className="mt-3 text-4xl font-semibold">{title}</h1>
-      <div className="mt-8 rounded-2xl border border-dashed border-[#cbd3bf] bg-white p-10">
-        <h2 className="font-semibold">Module route is ready</h2>
-        <p className="mt-2 max-w-xl text-sm text-[#687260]">
-          This operator surface is part of the admin route tree. Live records and actions will
-          appear when its domain model is implemented.
-        </p>
-      </div>
-    </div>
-  );
+  const params = useParams();
+  const parts = Array.isArray(params.slug) ? params.slug : [params.slug].filter(Boolean);
+  let definition = definitions[parts[0]];
+  if (parts[0] === "accounts" && parts[1]) {
+    definition = [
+      "Account details",
+      "Identity, workspace membership and active authentication sessions.",
+      `/v1/admin/accounts/${parts[1]}`,
+    ];
+  } else if (parts[0] === "workspaces" && parts[1]) {
+    const section = workspaceSections.has(parts[2]) ? parts[2] : "overview";
+    definition = [
+      `Workspace · ${words(section)}`,
+      "Live tenant configuration and operational records.",
+      `/v1/admin/tenants/${parts[1]}/${section}`,
+    ];
+  } else if (parts[0] === "system") {
+    const section = systemSections.has(parts[1]) ? parts[1] : "overview";
+    definition = [
+      `System · ${words(section)}`,
+      "Platform infrastructure records with sensitive values excluded.",
+      `/v1/admin/system/${section}`,
+    ];
+  }
+  const [title, description, endpoint] = definition || [
+    "Admin resource",
+    "Live platform health records.",
+    "/v1/admin/system/overview",
+  ];
+  return <DataPage title={title} description={description} endpoint={endpoint} />;
 }

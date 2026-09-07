@@ -527,7 +527,7 @@ export function adminCommerceRouter({
 
   router.get(
     "/notifications",
-    requirePlatformPermission("tenants.read"),
+    requirePlatformPermission("notifications.read"),
     async (req, res, next) => {
       try {
         const items = await db
@@ -545,7 +545,7 @@ export function adminCommerceRouter({
 
   router.patch(
     "/notifications/:notificationId/read",
-    requirePlatformPermission("tenants.read"),
+    requirePlatformPermission("notifications.manage"),
     async (req, res, next) => {
       try {
         const [item] = await db

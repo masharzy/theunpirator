@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   assets,
   featureFlags,
@@ -17,7 +17,20 @@ import {
   accountTokens,
   oauthIdentities,
   mfaRecoveryCodes,
+  tenantMembers,
+  endUsers,
+  devices,
+  usageRollups,
+  apiKeys,
+  webhookEndpoints,
+  webhookDeliveries,
 } from "@unpirator/db/schema";
+import {
+  notifications,
+  paymentRequests,
+  providerConnections,
+  tenantSettings,
+} from "@unpirator/db/commerce-schema";
 import { z } from "zod";
 import { emailSchema, parseOrThrow } from "@unpirator/contracts";
 import { randomToken, sha256 } from "@unpirator/crypto";
@@ -62,6 +75,47 @@ export function adminRouter({
             .orderBy(desc(accounts.createdAt))
             .limit(200),
         });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.get(
+    "/accounts/:accountId",
+    requirePlatformPermission("platform.accounts.read"),
+    async (req, res, next) => {
+      try {
+        const [account] = await db
+          .select({
+            id: accounts.id,
+            email: accounts.email,
+            platformRole: accounts.platformRole,
+            status: accounts.status,
+            emailVerifiedAt: accounts.emailVerifiedAt,
+            mfaConfirmedAt: accounts.mfaConfirmedAt,
+            createdAt: accounts.createdAt,
+            updatedAt: accounts.updatedAt,
+          })
+          .from(accounts)
+          .where(eq(accounts.id, req.params.accountId))
+          .limit(1);
+        if (!account) throw notFound();
+        const memberships = await db
+          .select()
+          .from(tenantMembers)
+          .where(eq(tenantMembers.accountId, account.id));
+        const sessions = await db
+          .select({
+            id: accountSessions.id,
+            createdAt: accountSessions.createdAt,
+            expiresAt: accountSessions.expiresAt,
+            mfaVerifiedAt: accountSessions.mfaVerifiedAt,
+          })
+          .from(accountSessions)
+          .where(eq(accountSessions.accountId, account.id))
+          .orderBy(desc(accountSessions.createdAt))
+          .limit(25);
+        res.json({ account, memberships, sessions });
       } catch (e) {
         next(e);
       }
@@ -285,6 +339,211 @@ export function adminRouter({
       next(e);
     }
   });
+  router.get(
+    "/tenants/:tenantId{/:section}",
+    (req, res, next) => {
+      const permissionBySection = {
+        sessions: "security.read",
+        usage: "usage.read",
+        subscription: "subscriptions.read",
+        payments: "payments.read",
+        security: "security.read",
+        audit: "audit.read",
+        restricted: "providers.read",
+      };
+      return requirePlatformPermission(permissionBySection[req.params.section] || "tenants.read")(
+        req,
+        res,
+        next,
+      );
+    },
+    async (req, res, next) => {
+      try {
+        const tenantId = req.params.tenantId;
+        const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+        if (!tenant) throw notFound();
+        const sources = {
+          overview: () =>
+            Promise.all([
+              db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)),
+              db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)),
+            ]).then(([subscription, settings]) => ({ tenant, subscription, settings })),
+          members: () =>
+            db.select().from(tenantMembers).where(eq(tenantMembers.tenantId, tenantId)),
+          sites: () => db.select().from(sites).where(eq(sites.tenantId, tenantId)),
+          connections: () =>
+            db
+              .select({
+                id: providerConnections.id,
+                provider: providerConnections.provider,
+                name: providerConnections.name,
+                status: providerConnections.status,
+                lastTestAt: providerConnections.lastTestAt,
+                lastSuccessAt: providerConnections.lastSuccessAt,
+                lastErrorCode: providerConnections.lastErrorCode,
+                createdAt: providerConnections.createdAt,
+              })
+              .from(providerConnections)
+              .where(eq(providerConnections.tenantId, tenantId)),
+          assets: () => db.select().from(assets).where(eq(assets.tenantId, tenantId)),
+          viewers: () => db.select().from(endUsers).where(eq(endUsers.tenantId, tenantId)),
+          devices: () => db.select().from(devices).where(eq(devices.tenantId, tenantId)),
+          sessions: () =>
+            db
+              .select()
+              .from(playbackSessions)
+              .where(eq(playbackSessions.tenantId, tenantId))
+              .orderBy(desc(playbackSessions.startedAt))
+              .limit(200),
+          usage: () => db.select().from(usageRollups).where(eq(usageRollups.tenantId, tenantId)),
+          subscription: () =>
+            db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)),
+          payments: () =>
+            db
+              .select()
+              .from(paymentRequests)
+              .where(eq(paymentRequests.tenantId, tenantId))
+              .orderBy(desc(paymentRequests.createdAt)),
+          security: () =>
+            db
+              .select()
+              .from(securityEvents)
+              .where(eq(securityEvents.tenantId, tenantId))
+              .orderBy(desc(securityEvents.createdAt))
+              .limit(200),
+          audit: () =>
+            db
+              .select()
+              .from(auditLogs)
+              .where(eq(auditLogs.tenantId, tenantId))
+              .orderBy(desc(auditLogs.createdAt))
+              .limit(200),
+          notes: () =>
+            db
+              .select()
+              .from(auditLogs)
+              .where(and(eq(auditLogs.tenantId, tenantId), eq(auditLogs.targetType, "tenant_note")))
+              .orderBy(desc(auditLogs.createdAt)),
+          features: () => db.select().from(featureFlags).where(eq(featureFlags.scopeId, tenantId)),
+          restricted: () =>
+            db
+              .select()
+              .from(featureFlags)
+              .where(
+                and(eq(featureFlags.scopeId, tenantId), eq(featureFlags.key, "youtube_custom")),
+              ),
+        };
+        const section = req.params.section || "overview";
+        const load = sources[section];
+        if (!load) throw notFound();
+        const result = await load();
+        res.json(Array.isArray(result) ? { tenant, items: result } : result);
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.get("/usage", requirePlatformPermission("usage.read"), async (_req, res, next) => {
+    try {
+      res.json({
+        items: await db
+          .select()
+          .from(usageRollups)
+          .orderBy(desc(usageRollups.updatedAt))
+          .limit(500),
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.get("/analytics", requirePlatformPermission("usage.read"), async (_req, res, next) => {
+    try {
+      const [workspaceCount, accountCount, sessionCount, eventCount] = await Promise.all([
+        db.select({ value: sql`count(*)::int` }).from(tenants),
+        db.select({ value: sql`count(*)::int` }).from(accounts),
+        db.select({ value: sql`count(*)::int` }).from(playbackSessions),
+        db.select({ value: sql`count(*)::int` }).from(securityEvents),
+      ]);
+      res.json({
+        metrics: {
+          workspaces: workspaceCount[0].value,
+          accounts: accountCount[0].value,
+          playbackSessions: sessionCount[0].value,
+          securityEvents: eventCount[0].value,
+        },
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.get(
+    "/system{/:section}",
+    requirePlatformPermission("system.read"),
+    async (req, res, next) => {
+      try {
+        const section = req.params.section || "overview";
+        const sources = {
+          overview: () => db.select().from(providerHealth),
+          health: () => db.select().from(providerHealth),
+          jobs: () =>
+            db
+              .select()
+              .from(webhookDeliveries)
+              .orderBy(desc(webhookDeliveries.createdAt))
+              .limit(200),
+          webhooks: () =>
+            db
+              .select({
+                id: webhookEndpoints.id,
+                tenantId: webhookEndpoints.tenantId,
+                url: webhookEndpoints.url,
+                events: webhookEndpoints.events,
+                status: webhookEndpoints.status,
+                createdAt: webhookEndpoints.createdAt,
+              })
+              .from(webhookEndpoints)
+              .limit(200),
+          keys: () =>
+            db
+              .select({
+                id: apiKeys.id,
+                tenantId: apiKeys.tenantId,
+                name: apiKeys.name,
+                keyPrefix: apiKeys.keyPrefix,
+                scopes: apiKeys.scopes,
+                lastUsedAt: apiKeys.lastUsedAt,
+                expiresAt: apiKeys.expiresAt,
+                revokedAt: apiKeys.revokedAt,
+              })
+              .from(apiKeys)
+              .limit(200),
+          settings: () => db.select().from(tenantSettings).limit(200),
+        };
+        const load = sources[section];
+        if (!load) throw notFound();
+        res.json({ items: await load() });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.get(
+    "/announcements",
+    requirePlatformPermission("notifications.read"),
+    async (_req, res, next) => {
+      try {
+        res.json({
+          items: await db
+            .select()
+            .from(notifications)
+            .orderBy(desc(notifications.createdAt))
+            .limit(200),
+        });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
   router.get("/providers", requirePlatformPermission("providers.read"), async (_req, res, next) => {
     try {
       res.json({ items: await db.select().from(providerHealth) });
@@ -598,7 +857,7 @@ export function adminRouter({
 
   router.post(
     "/tenants/:tenantId/revoke-sessions",
-    requirePlatformPermission("security.manage"),
+    requirePlatformPermission("sessions.revoke"),
     async (req, res, next) => {
       try {
         const active = await db

@@ -5,8 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PageHeader, StatusPill, Surface, money } from "@/components/console-kit";
+import { useAuth } from "@/components/auth-provider";
 
 export default function AdminPaymentsPage() {
+  const auth = useAuth();
+  const canReview = ["super_admin", "billing_admin"].includes(auth?.account?.platformRole);
   const [items, setItems] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState(null);
@@ -161,40 +164,43 @@ export default function AdminPaymentsPage() {
                 </div>
               )}
 
-              {!["approved", "rejected", "canceled", "expired"].includes(detail.payment.status) && (
-                <>
-                  <label className="mt-5 block text-sm font-medium">
-                    Review note
-                    <textarea
-                      className="mt-2 min-h-24 w-full rounded-xl border border-[#dfe4d6] p-3 text-sm"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Reason, verification details or information requested"
-                    />
-                  </label>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <Button variant="outline" onClick={() => review("reviewing")}>
-                      <Eye size={15} /> Mark reviewing
-                    </Button>
-                    <Button variant="outline" onClick={() => review("needs_information")}>
-                      <MessageSquareWarning size={15} /> Need information
-                    </Button>
-                    <Button
-                      className="bg-emerald-700 hover:bg-emerald-800"
-                      onClick={() => review("approve")}
-                    >
-                      <CheckCircle2 size={15} /> Approve & activate
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="border-red-200 text-red-700"
-                      onClick={() => review("reject")}
-                    >
-                      <XCircle size={15} /> Reject
-                    </Button>
-                  </div>
-                </>
-              )}
+              {canReview &&
+                !["approved", "rejected", "canceled", "expired"].includes(
+                  detail.payment.status,
+                ) && (
+                  <>
+                    <label className="mt-5 block text-sm font-medium">
+                      Review note
+                      <textarea
+                        className="mt-2 min-h-24 w-full rounded-xl border border-[#dfe4d6] p-3 text-sm"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Reason, verification details or information requested"
+                      />
+                    </label>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      <Button variant="outline" onClick={() => review("reviewing")}>
+                        <Eye size={15} /> Mark reviewing
+                      </Button>
+                      <Button variant="outline" onClick={() => review("needs_information")}>
+                        <MessageSquareWarning size={15} /> Need information
+                      </Button>
+                      <Button
+                        className="bg-emerald-700 hover:bg-emerald-800"
+                        onClick={() => review("approve")}
+                      >
+                        <CheckCircle2 size={15} /> Approve & activate
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-red-200 text-red-700"
+                        onClick={() => review("reject")}
+                      >
+                        <XCircle size={15} /> Reject
+                      </Button>
+                    </div>
+                  </>
+                )}
             </>
           ) : (
             <div className="grid min-h-72 place-items-center text-center text-sm text-[#7b8574]">
