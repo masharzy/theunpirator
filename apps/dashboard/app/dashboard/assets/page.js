@@ -46,7 +46,11 @@ export default function AssetsPage() {
   const filtered = useMemo(() => {
     const term = query.toLowerCase();
     return items.filter((item) =>
-      [item.title, item.provider, item.status].some((value) => String(value || "").toLowerCase().includes(term)),
+      [item.title, item.provider, item.status].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(term),
+      ),
     );
   }, [items, query]);
 
@@ -98,20 +102,39 @@ export default function AssetsPage() {
           </Button>
         }
       />
-      {message && <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">{message}</div>}
+      {message && (
+        <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">
+          {message}
+        </div>
+      )}
 
       {showCreate && (
         <Surface className="p-6">
           <form className="grid gap-4 lg:grid-cols-2" onSubmit={create}>
             <label className="text-sm font-medium">
               Title
-              <Input className="mt-2" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lesson 01" />
+              <Input
+                className="mt-2"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Lesson 01"
+              />
             </label>
             <label className="text-sm font-medium">
               Site
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={siteId} onChange={(e) => setSiteId(e.target.value)} required>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={siteId}
+                onChange={(e) => setSiteId(e.target.value)}
+                required
+              >
                 <option value="">Choose site</option>
-                {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                {sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-sm font-medium">
@@ -124,27 +147,59 @@ export default function AssetsPage() {
                   setConnectionId("");
                 }}
               >
-                {providers.map((value) => <option key={value} value={value}>{value}</option>)}
+                {providers.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-sm font-medium">
               Saved connection
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={connectionId}
+                onChange={(e) => setConnectionId(e.target.value)}
+              >
                 <option value="">No saved connection</option>
-                {matchingConnections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {matchingConnections.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-sm font-medium lg:col-span-2">
               Provider reference / authorized source
-              <Input className="mt-2" required value={providerReference} onChange={(e) => setProviderReference(e.target.value)} placeholder={provider === "s3" || provider === "r2" ? "bucket/path/video.mp4" : "https://media.example.com/video.m3u8"} />
+              <Input
+                className="mt-2"
+                required
+                value={providerReference}
+                onChange={(e) => setProviderReference(e.target.value)}
+                placeholder={
+                  provider === "s3" || provider === "r2"
+                    ? "bucket/path/video.mp4"
+                    : "https://media.example.com/video.m3u8"
+                }
+              />
             </label>
             <label className="text-sm font-medium">
               Allowed source hosts
-              <Input className="mt-2" required value={allowedHosts} onChange={(e) => setAllowedHosts(e.target.value)} placeholder="media.example.com, cdn.example.com" />
+              <Input
+                className="mt-2"
+                required
+                value={allowedHosts}
+                onChange={(e) => setAllowedHosts(e.target.value)}
+                placeholder="media.example.com, cdn.example.com"
+              />
             </label>
             <label className="text-sm font-medium">
               Security policy
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={securityPolicy} onChange={(e) => setSecurityPolicy(e.target.value)}>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={securityPolicy}
+                onChange={(e) => setSecurityPolicy(e.target.value)}
+              >
                 <option value="standard">Standard</option>
                 <option value="strict">Strict</option>
                 <option value="maximum">Maximum</option>
@@ -152,7 +207,9 @@ export default function AssetsPage() {
             </label>
             <div className="flex gap-2 lg:col-span-2">
               <Button disabled={!siteId}>Create protected asset</Button>
-              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
             </div>
           </form>
         </Surface>
@@ -187,7 +244,9 @@ export default function AssetsPage() {
                   <StatusPill status={item.status} />
                 </div>
                 <h2 className="mt-6 line-clamp-2 font-semibold">{item.title}</h2>
-                <p className="mt-2 text-xs uppercase tracking-[.12em] text-[#899283]">{item.provider} · {item.securityPolicy}</p>
+                <p className="mt-2 text-xs uppercase tracking-[.12em] text-[#899283]">
+                  {item.provider} · {item.securityPolicy}
+                </p>
                 <p className="mt-5 truncate font-mono text-[10px] text-[#9aa292]">{item.id}</p>
               </Surface>
             </Link>

@@ -33,7 +33,9 @@ export default function AssetDetailPage() {
     setStatus(assetData.asset.status);
     setPolicy(assetData.asset.securityPolicy);
     setConnectionId(assetData.asset.connectionId || "");
-    setConnections((connectionData.items || []).filter((item) => item.provider === assetData.asset.provider));
+    setConnections(
+      (connectionData.items || []).filter((item) => item.provider === assetData.asset.provider),
+    );
   };
 
   useEffect(() => {
@@ -71,7 +73,10 @@ export default function AssetDetailPage() {
   if (!asset)
     return (
       <div className="space-y-4">
-        <Link href="/dashboard/assets" className="inline-flex items-center gap-2 text-sm text-[#607052]">
+        <Link
+          href="/dashboard/assets"
+          className="inline-flex items-center gap-2 text-sm text-[#607052]"
+        >
           <ArrowLeft size={15} /> Assets
         </Link>
         <p className="text-sm text-[#7b8574]">{message || "Loading asset…"}</p>
@@ -80,7 +85,10 @@ export default function AssetDetailPage() {
 
   return (
     <div className="space-y-8">
-      <Link href="/dashboard/assets" className="inline-flex items-center gap-2 text-sm font-medium text-[#607052]">
+      <Link
+        href="/dashboard/assets"
+        className="inline-flex items-center gap-2 text-sm font-medium text-[#607052]"
+      >
         <ArrowLeft size={15} />
         Back to assets
       </Link>
@@ -90,7 +98,11 @@ export default function AssetDetailPage() {
         description="Control this source, connection and baseline security policy."
         action={<StatusPill status={asset.status} />}
       />
-      {message && <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">{message}</div>}
+      {message && (
+        <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">
+          {message}
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Surface className="p-6">
@@ -102,14 +114,22 @@ export default function AssetDetailPage() {
             </label>
             <label className="block text-sm font-medium">
               Status
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
                 <option value="active">Active</option>
                 <option value="disabled">Disabled</option>
               </select>
             </label>
             <label className="block text-sm font-medium">
               Security policy
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={policy} onChange={(e) => setPolicy(e.target.value)}>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={policy}
+                onChange={(e) => setPolicy(e.target.value)}
+              >
                 <option value="standard">Standard</option>
                 <option value="strict">Strict</option>
                 <option value="maximum">Maximum</option>
@@ -117,11 +137,16 @@ export default function AssetDetailPage() {
             </label>
             <label className="block text-sm font-medium">
               Saved {asset.provider} connection
-              <select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
+              <select
+                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                value={connectionId}
+                onChange={(e) => setConnectionId(e.target.value)}
+              >
                 <option value="">No saved connection</option>
                 {connections.map((item) => (
                   <option key={item.id} value={item.id} disabled={item.status === "disabled"}>
-                    {item.name}{item.status === "disabled" ? " (disabled)" : ""}
+                    {item.name}
+                    {item.status === "disabled" ? " (disabled)" : ""}
                   </option>
                 ))}
               </select>

@@ -1,7 +1,81 @@
 "use client";
-import { useEffect,useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHeader,Surface } from "@/components/console-kit";
-export default function SettingsPage(){const[name,setName]=useState(""),[timezone,setTimezone]=useState("Asia/Dhaka"),[policy,setPolicy]=useState("strict"),[status,setStatus]=useState(""),[message,setMessage]=useState("");useEffect(()=>{api("/v1/workspace/settings").then(d=>{setName(d.tenant?.name||"");setStatus(d.tenant?.status||"");setTimezone(d.settings?.timezone||"Asia/Dhaka");setPolicy(d.settings?.defaultSecurityPolicy||"strict")}).catch(e=>setMessage(e.message))},[]);async function save(e){e.preventDefault();try{await api("/v1/workspace/settings",{method:"PATCH",body:JSON.stringify({name,timezone,defaultSecurityPolicy:policy})});setMessage("Workspace settings saved.")}catch(err){setMessage(err.message)}}return <div className="space-y-8"><PageHeader eyebrow="Workspace" title="Settings" description="Manage workspace identity, timezone and default security posture."/>{message&&<div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">{message}</div>}<Surface className="max-w-2xl p-6"><form className="space-y-5" onSubmit={save}><label className="block text-sm font-medium">Workspace name<Input className="mt-2" value={name} onChange={e=>setName(e.target.value)}/></label><label className="block text-sm font-medium">Timezone<Input className="mt-2" value={timezone} onChange={e=>setTimezone(e.target.value)}/></label><label className="block text-sm font-medium">Default security policy<select className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={policy} onChange={e=>setPolicy(e.target.value)}><option value="standard">Standard</option><option value="strict">Strict</option><option value="maximum">Maximum</option></select></label><div className="rounded-xl bg-[#f7f9f2] p-4 text-sm text-[#6f7a68]">Workspace status: <b>{status||"—"}</b></div><Button>Save settings</Button></form></Surface></div>}
+import { PageHeader, Surface } from "@/components/console-kit";
+export default function SettingsPage() {
+  const [name, setName] = useState(""),
+    [timezone, setTimezone] = useState("Asia/Dhaka"),
+    [policy, setPolicy] = useState("strict"),
+    [status, setStatus] = useState(""),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    api("/v1/workspace/settings")
+      .then((d) => {
+        setName(d.tenant?.name || "");
+        setStatus(d.tenant?.status || "");
+        setTimezone(d.settings?.timezone || "Asia/Dhaka");
+        setPolicy(d.settings?.defaultSecurityPolicy || "strict");
+      })
+      .catch((e) => setMessage(e.message));
+  }, []);
+  async function save(e) {
+    e.preventDefault();
+    try {
+      await api("/v1/workspace/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ name, timezone, defaultSecurityPolicy: policy }),
+      });
+      setMessage("Workspace settings saved.");
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Manage workspace identity, timezone and default security posture."
+      />
+      {message && (
+        <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">
+          {message}
+        </div>
+      )}
+      <Surface className="max-w-2xl p-6">
+        <form className="space-y-5" onSubmit={save}>
+          <label className="block text-sm font-medium">
+            Workspace name
+            <Input className="mt-2" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block text-sm font-medium">
+            Timezone
+            <Input
+              className="mt-2"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+          </label>
+          <label className="block text-sm font-medium">
+            Default security policy
+            <select
+              className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+              value={policy}
+              onChange={(e) => setPolicy(e.target.value)}
+            >
+              <option value="standard">Standard</option>
+              <option value="strict">Strict</option>
+              <option value="maximum">Maximum</option>
+            </select>
+          </label>
+          <div className="rounded-xl bg-[#f7f9f2] p-4 text-sm text-[#6f7a68]">
+            Workspace status: <b>{status || "—"}</b>
+          </div>
+          <Button>Save settings</Button>
+        </form>
+      </Surface>
+    </div>
+  );
+}

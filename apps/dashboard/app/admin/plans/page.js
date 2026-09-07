@@ -136,7 +136,8 @@ export default function AdminPlansPage() {
   }
 
   async function archive(plan) {
-    if (!confirm(`Archive ${plan.name}? Existing subscriptions remain historically visible.`)) return;
+    if (!confirm(`Archive ${plan.name}? Existing subscriptions remain historically visible.`))
+      return;
     try {
       await api(`/v1/admin/commerce/plans/${plan.id}`, { method: "DELETE" });
       setMessage("Plan archived and removed from self-service selection.");
@@ -193,7 +194,9 @@ export default function AdminPlansPage() {
                 />
                 <Input
                   value={form.currency}
-                  onChange={(event) => setForm({ ...form, currency: event.target.value.toUpperCase() })}
+                  onChange={(event) =>
+                    setForm({ ...form, currency: event.target.value.toUpperCase() })
+                  }
                 />
                 <Input
                   type="number"
@@ -245,25 +248,41 @@ export default function AdminPlansPage() {
                 {numericEntitlements.map(([key, label]) => (
                   <label key={key} className="text-xs font-medium text-[#5f6b58]">
                     {label}
-                    <Input className="mt-1.5 bg-white" type="number" min="0" value={form.entitlements?.[key] ?? ""} onChange={(event) => setEntitlement(key, event.target.value)} />
+                    <Input
+                      className="mt-1.5 bg-white"
+                      type="number"
+                      min="0"
+                      value={form.entitlements?.[key] ?? ""}
+                      onChange={(event) => setEntitlement(key, event.target.value)}
+                    />
                   </label>
                 ))}
               </div>
             </div>
 
             <div className="rounded-2xl bg-[#f7f9f2] p-4">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#71805b]">Features</p>
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#71805b]">
+                Features
+              </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {booleanEntitlements.map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={Boolean(form.entitlements?.[key])} onChange={(event) => setEntitlement(key, event.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.entitlements?.[key])}
+                      onChange={(event) => setEntitlement(key, event.target.checked)}
+                    />
                     {label}
                   </label>
                 ))}
               </div>
               <label className="mt-4 block text-xs font-medium text-[#5f6b58]">
                 Session limit action
-                <select className="mt-1.5 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm" value={form.entitlements?.session_policy || "block_new"} onChange={(event) => setEntitlement("session_policy", event.target.value)}>
+                <select
+                  className="mt-1.5 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                  value={form.entitlements?.session_policy || "block_new"}
+                  onChange={(event) => setEntitlement("session_policy", event.target.value)}
+                >
                   <option value="block_new">Block new stream</option>
                   <option value="revoke_old">Revoke old stream</option>
                 </select>
@@ -271,8 +290,14 @@ export default function AdminPlansPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button><Save size={15} /> {editing ? "Save plan" : "Create plan"}</Button>
-              {editing && <Button type="button" variant="outline" onClick={reset}>Cancel</Button>}
+              <Button>
+                <Save size={15} /> {editing ? "Save plan" : "Create plan"}
+              </Button>
+              {editing && (
+                <Button type="button" variant="outline" onClick={reset}>
+                  Cancel
+                </Button>
+              )}
             </div>
           </form>
         </Surface>
@@ -286,7 +311,9 @@ export default function AdminPlansPage() {
                     <h2 className="font-semibold">{plan.name}</h2>
                     <StatusPill status={plan.archivedAt ? "archived" : plan.status} />
                   </div>
-                  <p className="mt-2 max-w-xl text-sm text-[#75806e]">{plan.description || "No description"}</p>
+                  <p className="mt-2 max-w-xl text-sm text-[#75806e]">
+                    {plan.description || "No description"}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-semibold">{money(plan.priceMinor, plan.currency)}</p>
@@ -294,15 +321,39 @@ export default function AdminPlansPage() {
                 </div>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs"><span className="text-[#87917f]">Sites</span><p className="mt-1 font-semibold">{plan.entitlements?.max_sites ?? "—"}</p></div>
-                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs"><span className="text-[#87917f]">Devices / viewer</span><p className="mt-1 font-semibold">{plan.entitlements?.max_devices_per_user ?? "—"}</p></div>
-                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs"><span className="text-[#87917f]">Concurrent streams</span><p className="mt-1 font-semibold">{plan.entitlements?.max_concurrent_streams ?? "—"}</p></div>
+                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs">
+                  <span className="text-[#87917f]">Sites</span>
+                  <p className="mt-1 font-semibold">{plan.entitlements?.max_sites ?? "—"}</p>
+                </div>
+                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs">
+                  <span className="text-[#87917f]">Devices / viewer</span>
+                  <p className="mt-1 font-semibold">
+                    {plan.entitlements?.max_devices_per_user ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-[#f7f9f2] p-3 text-xs">
+                  <span className="text-[#87917f]">Concurrent streams</span>
+                  <p className="mt-1 font-semibold">
+                    {plan.entitlements?.max_concurrent_streams ?? "—"}
+                  </p>
+                </div>
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f7f9f2] p-3">
                 <p className="font-mono text-xs">{plan.id}</p>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => edit(plan)}>Edit</Button>
-                  {!plan.archivedAt && <Button size="sm" variant="outline" className="border-red-200 text-red-700" onClick={() => archive(plan)}><Archive size={14} /> Archive</Button>}
+                  <Button size="sm" variant="outline" onClick={() => edit(plan)}>
+                    Edit
+                  </Button>
+                  {!plan.archivedAt && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-200 text-red-700"
+                      onClick={() => archive(plan)}
+                    >
+                      <Archive size={14} /> Archive
+                    </Button>
+                  )}
                 </div>
               </div>
             </Surface>
