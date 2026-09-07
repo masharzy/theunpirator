@@ -21,8 +21,14 @@ export default function AdminAccounts() {
     [email, setEmail] = useState(""),
     [reason, setReason] = useState(""),
     [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
-  const load = () => api("/v1/admin/accounts").then((data) => setAccounts(data.items));
+    [busy, setBusy] = useState(false),
+    [search, setSearch] = useState(""),
+    [roleFilter, setRoleFilter] = useState(""),
+    [statusFilter, setStatusFilter] = useState("");
+  const load = () =>
+    api(
+      `/v1/admin/accounts?${new URLSearchParams({ search, role: roleFilter, status: statusFilter })}`,
+    ).then((data) => setAccounts(data.items));
   useEffect(() => {
     load().catch((e) => setMessage(e.message));
   }, []);
@@ -61,6 +67,22 @@ export default function AdminAccounts() {
   }
   async function resetMfa(account) {
     await updateMfa(account);
+  }
+  async function accountAction(account, action) {
+    if (reason.length < 8) return setMessage("Enter a reason of at least 8 characters first.");
+    setBusy(true);
+    try {
+      await api(`/v1/admin/accounts/${account.id}/actions`, {
+        method: "POST",
+        body: JSON.stringify({ action, reason }),
+      });
+      setMessage("Protected account action completed.");
+      await load();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
   async function updateMfa(account) {
     if (reason.length < 8) {
@@ -115,6 +137,36 @@ export default function AdminAccounts() {
           {message}
         </p>
       )}
+      <div className="mt-6 grid gap-3 rounded-2xl border bg-[#f8f7f0] p-4 md:grid-cols-3">
+        <Input
+          placeholder="Search email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && load()}
+        />
+        <select
+          className="rounded-md border bg-white px-3"
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+        >
+          <option value="">All roles</option>
+          {roles.slice(1).map((r) => (
+            <option key={r}>{r}</option>
+          ))}
+        </select>
+        <select
+          className="rounded-md border bg-white px-3"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="">All statuses</option>
+          <option>active</option>
+          <option>disabled</option>
+        </select>
+        <Button variant="outline" onClick={load}>
+          Apply filters
+        </Button>
+      </div>
       <div className="mt-6 overflow-x-auto rounded-2xl border bg-white">
         <table className="w-full text-left text-sm">
           <thead>
@@ -122,6 +174,8 @@ export default function AdminAccounts() {
               <th className="p-4">Account</th>
               <th className="p-4">Role</th>
               <th className="p-4">Security</th>
+              <th className="p-4">Workspaces</th>
+              <th className="p-4">Last login / IP</th>
               <th className="p-4">Status</th>
               <th className="p-4">Actions</th>
             </tr>
@@ -160,10 +214,16 @@ export default function AdminAccounts() {
                   <br />
                   MFA {account.mfaConfirmedAt ? "enabled" : "required"}
                 </td>
+                <td className="p-4">{account.workspaceCount}</td>
+                <td className="p-4 text-xs">
+                  {account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString() : "Never"}
+                  <br />
+                  {account.lastLoginIp || "—"}
+                </td>
                 <td className="p-4">{account.status}</td>
                 <td className="p-4">
                   {canManage && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -184,6 +244,42 @@ export default function AdminAccounts() {
                           onClick={() => resetMfa(account)}
                         >
                           Reset MFA
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => accountAction(account, "revoke_sessions")}
+                      >
+                        Revoke sessions
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => accountAction(account, "force_password_reset")}
+                      >
+                        Force reset
+                      </Button>
+                      {!account.emailVerifiedAt && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => accountAction(account, "resend_verification")}
+                        >
+                          Resend verification
+                        </Button>
+                      )}
+                      {account.googleLinked && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => accountAction(account, "remove_google")}
+                        >
+                          Remove Google
                         </Button>
                       )}
                     </div>
