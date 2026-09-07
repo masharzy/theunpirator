@@ -114,7 +114,10 @@ export default function AdminCommandCenter() {
                   key={x.id}
                 >
                   <span>{x.name}</span>
-                  <b>{x.usage}</b>
+                  <b>
+                    {x.egress_bytes} bytes · {x.gateway_requests} requests · {x.playback_minutes}{" "}
+                    min
+                  </b>
                 </Link>
               ))}
             </section>
@@ -127,7 +130,11 @@ export default function AdminCommandCenter() {
                     href={
                       x.type === "payment"
                         ? "/admin/payments"
-                        : `/admin/workspaces/${x.tenant_id}/security`
+                        : x.type === "provider"
+                          ? "/admin/providers"
+                          : x.type === "webhook"
+                            ? "/admin/system/jobs"
+                            : `/admin/workspaces/${x.tenant_id}/${x.type === "subscription" ? "subscription" : "security"}`
                     }
                     key={`${x.type}-${x.id}`}
                   >
@@ -150,7 +157,8 @@ export default function AdminCommandCenter() {
                 >
                   <span>{x.title}</span>
                   <b>
-                    {x.usage} · {x.viewers} viewers
+                    {x.egress_bytes} bytes · {x.plays} plays · {x.viewers} viewers · {x.errors}{" "}
+                    errors
                   </b>
                 </Link>
               ))}
