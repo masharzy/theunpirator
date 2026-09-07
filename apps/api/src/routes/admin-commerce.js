@@ -13,7 +13,10 @@ import { writeAudit } from "../services/audit.js";
 
 const planSchema = z
   .object({
-    id: z.string().regex(/^[a-z0-9_-]{2,40}$/).optional(),
+    id: z
+      .string()
+      .regex(/^[a-z0-9_-]{2,40}$/)
+      .optional(),
     name: z.string().trim().min(2).max(80),
     description: z.string().trim().max(500).optional().nullable(),
     priceMinor: z.number().int().min(0).nullable().optional(),
@@ -61,54 +64,40 @@ export function adminCommerceRouter({
   const router = Router();
   router.use(dashboardAuth, csrfGuard);
   router.use((req, res, next) =>
-    ["GET", "HEAD", "OPTIONS"].includes(req.method)
-      ? next()
-      : requireRecentMfa(req, res, next),
+    ["GET", "HEAD", "OPTIONS"].includes(req.method) ? next() : requireRecentMfa(req, res, next),
   );
 
-  router.get(
-    "/plans",
-    requirePlatformPermission("subscriptions.read"),
-    async (_req, res, next) => {
-      try {
-        res.json({
-          items: await db
-            .select()
-            .from(billingPlans)
-            .orderBy(billingPlans.sortOrder),
-        });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  router.get("/plans", requirePlatformPermission("subscriptions.read"), async (_req, res, next) => {
+    try {
+      res.json({
+        items: await db.select().from(billingPlans).orderBy(billingPlans.sortOrder),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
-  router.post(
-    "/plans",
-    requirePlatformPermission("plans.manage"),
-    async (req, res, next) => {
-      try {
-        const input = planSchema.parse(req.body);
-        if (!input.id)
-          throw new AppError("PLAN_ID_REQUIRED", "Plan ID is required", 400);
-        const [plan] = await db
-          .insert(billingPlans)
-          .values({ ...input, archivedAt: null })
-          .returning();
-        await writeAudit(db, {
-          actorAccountId: req.auth.accountId,
-          action: "PLAN_CREATED",
-          targetType: "plan",
-          targetId: plan.id,
-          metadata: { name: plan.name, priceMinor: plan.priceMinor },
-          ip: req.ip,
-        });
-        res.status(201).json({ plan });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  router.post("/plans", requirePlatformPermission("plans.manage"), async (req, res, next) => {
+    try {
+      const input = planSchema.parse(req.body);
+      if (!input.id) throw new AppError("PLAN_ID_REQUIRED", "Plan ID is required", 400);
+      const [plan] = await db
+        .insert(billingPlans)
+        .values({ ...input, archivedAt: null })
+        .returning();
+      await writeAudit(db, {
+        actorAccountId: req.auth.accountId,
+        action: "PLAN_CREATED",
+        targetType: "plan",
+        targetId: plan.id,
+        metadata: { name: plan.name, priceMinor: plan.priceMinor },
+        ip: req.ip,
+      });
+      res.status(201).json({ plan });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.patch(
     "/plans/:planId",
@@ -173,10 +162,7 @@ export function adminCommerceRouter({
     async (_req, res, next) => {
       try {
         res.json({
-          items: await db
-            .select()
-            .from(paymentMethods)
-            .orderBy(paymentMethods.sortOrder),
+          items: await db.select().from(paymentMethods).orderBy(paymentMethods.sortOrder),
         });
       } catch (error) {
         next(error);
@@ -258,47 +244,41 @@ export function adminCommerceRouter({
     },
   );
 
-  router.get(
-    "/payments",
-    requirePlatformPermission("payments.read"),
-    async (req, res, next) => {
-      try {
-        const status = req.query.status ? String(req.query.status) : null;
-        const where = status
-          ? eq(paymentRequests.status, status)
-          : sql`true`;
-        const items = await db
-          .select({
-            id: paymentRequests.id,
-            tenantId: paymentRequests.tenantId,
-            tenantName: tenants.name,
-            accountId: paymentRequests.accountId,
-            email: accounts.email,
-            planId: paymentRequests.planId,
-            planName: paymentRequests.planNameSnapshot,
-            amountMinor: paymentRequests.amountMinorSnapshot,
-            currency: paymentRequests.currencySnapshot,
-            senderNumber: paymentRequests.senderNumber,
-            transactionId: paymentRequests.transactionId,
-            status: paymentRequests.status,
-            submittedAt: paymentRequests.submittedAt,
-            reviewedAt: paymentRequests.reviewedAt,
-            reviewedBy: paymentRequests.reviewedBy,
-            reviewNote: paymentRequests.reviewNote,
-            rejectionReason: paymentRequests.rejectionReason,
-          })
-          .from(paymentRequests)
-          .innerJoin(tenants, eq(paymentRequests.tenantId, tenants.id))
-          .innerJoin(accounts, eq(paymentRequests.accountId, accounts.id))
-          .where(where)
-          .orderBy(desc(paymentRequests.createdAt))
-          .limit(300);
-        res.json({ items });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  router.get("/payments", requirePlatformPermission("payments.read"), async (req, res, next) => {
+    try {
+      const status = req.query.status ? String(req.query.status) : null;
+      const where = status ? eq(paymentRequests.status, status) : sql`true`;
+      const items = await db
+        .select({
+          id: paymentRequests.id,
+          tenantId: paymentRequests.tenantId,
+          tenantName: tenants.name,
+          accountId: paymentRequests.accountId,
+          email: accounts.email,
+          planId: paymentRequests.planId,
+          planName: paymentRequests.planNameSnapshot,
+          amountMinor: paymentRequests.amountMinorSnapshot,
+          currency: paymentRequests.currencySnapshot,
+          senderNumber: paymentRequests.senderNumber,
+          transactionId: paymentRequests.transactionId,
+          status: paymentRequests.status,
+          submittedAt: paymentRequests.submittedAt,
+          reviewedAt: paymentRequests.reviewedAt,
+          reviewedBy: paymentRequests.reviewedBy,
+          reviewNote: paymentRequests.reviewNote,
+          rejectionReason: paymentRequests.rejectionReason,
+        })
+        .from(paymentRequests)
+        .innerJoin(tenants, eq(paymentRequests.tenantId, tenants.id))
+        .innerJoin(accounts, eq(paymentRequests.accountId, accounts.id))
+        .where(where)
+        .orderBy(desc(paymentRequests.createdAt))
+        .limit(300);
+      res.json({ items });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get(
     "/payments/:paymentId",
@@ -354,11 +334,7 @@ export function adminCommerceRouter({
             return { payment, subscription: subscription || null, idempotent: true };
           }
 
-          if (
-            !["pending", "reviewing", "needs_information"].includes(
-              payment.status,
-            )
-          ) {
+          if (!["pending", "reviewing", "needs_information"].includes(payment.status)) {
             throw new AppError(
               "PAYMENT_ALREADY_FINAL",
               "This payment request has already been finalized",
@@ -444,17 +420,10 @@ export function adminCommerceRouter({
             .from(billingPlans)
             .where(eq(billingPlans.id, payment.planId))
             .limit(1);
-          if (!plan)
-            throw new AppError(
-              "PLAN_REMOVED",
-              "The requested plan no longer exists",
-              409,
-            );
+          if (!plan) throw new AppError("PLAN_REMOVED", "The requested plan no longer exists", 409);
 
           const periodStart = now;
-          const periodEnd = new Date(
-            now.getTime() + payment.durationDaysSnapshot * 86400_000,
-          );
+          const periodEnd = new Date(now.getTime() + payment.durationDaysSnapshot * 86400_000);
 
           await tx
             .update(subscriptions)

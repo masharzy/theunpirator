@@ -34,30 +34,50 @@ export default function AdminSubscriptionsPage() {
         action={
           <label className="flex items-center gap-2 rounded-xl border border-[#dfe4d6] bg-white px-3">
             <Search size={15} className="text-[#87917f]" />
-            <input className="py-2.5 text-sm outline-none" placeholder="Search workspace or plan" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input
+              className="py-2.5 text-sm outline-none"
+              placeholder="Search workspace or plan"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </label>
         }
       />
-      {message && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</div>}
+      {message && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {message}
+        </div>
+      )}
       <Surface className="overflow-hidden">
         {visible.length ? (
           <div className="divide-y divide-[#edf0e9]">
             {visible.map((item) => (
-              <div key={item.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_180px_130px] lg:items-center">
+              <div
+                key={item.id}
+                className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_180px_130px] lg:items-center"
+              >
                 <div className="flex items-start gap-3">
-                  <span className="grid size-9 place-items-center rounded-xl bg-[#edf5d8] text-[#536b31]"><CalendarClock size={16} /></span>
+                  <span className="grid size-9 place-items-center rounded-xl bg-[#edf5d8] text-[#536b31]">
+                    <CalendarClock size={16} />
+                  </span>
                   <div>
                     <p className="font-semibold">{item.tenantName}</p>
-                    <p className="mt-1 text-xs text-[#7d8876]">{item.planName} · {item.provider || "internal/trial"}</p>
+                    <p className="mt-1 text-xs text-[#7d8876]">
+                      {item.planName} · {item.provider || "internal/trial"}
+                    </p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-[#87917f]">Starts</p>
-                  <p className="mt-1 text-sm">{item.periodStart ? new Date(item.periodStart).toLocaleDateString() : "—"}</p>
+                  <p className="mt-1 text-sm">
+                    {item.periodStart ? new Date(item.periodStart).toLocaleDateString() : "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-[#87917f]">Ends</p>
-                  <p className="mt-1 text-sm">{item.periodEnd ? new Date(item.periodEnd).toLocaleDateString() : "—"}</p>
+                  <p className="mt-1 text-sm">
+                    {item.periodEnd ? new Date(item.periodEnd).toLocaleDateString() : "—"}
+                  </p>
                 </div>
                 <StatusPill status={item.status} />
               </div>

@@ -30,11 +30,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      api("/v1/workspace/summary"),
-      api("/v1/billing"),
-      api("/v1/usage/summary"),
-    ])
+    Promise.all([api("/v1/workspace/summary"), api("/v1/billing"), api("/v1/usage/summary")])
       .then(([summaryData, billingData, usageData]) => {
         setSummary(summaryData);
         setBilling(billingData);
@@ -107,7 +103,11 @@ export default function Dashboard() {
           </div>
           <div className="p-6">
             <div className="grid gap-5 md:grid-cols-2">
-              <ProgressMeter label="Sites" used={counts.sites || 0} limit={entitlements.max_sites} />
+              <ProgressMeter
+                label="Sites"
+                used={counts.sites || 0}
+                limit={entitlements.max_sites}
+              />
               <ProgressMeter
                 label="Concurrent streams"
                 used={counts.activeSessions || 0}
@@ -187,9 +187,7 @@ export default function Dashboard() {
         <Surface className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-[#e4e8df] p-5">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#71805b]">
-                Media
-              </p>
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#71805b]">Media</p>
               <h2 className="mt-1 font-semibold">Recent assets</h2>
             </div>
             <Link href="/dashboard/assets" className="text-sm font-semibold text-[#536b31]">
