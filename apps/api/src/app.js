@@ -118,3 +118,13 @@ export function createApp(overrides = {}) {
   app.use(errorHandler);
   return { app, config, logger, db, dbClient, cache };
 }
+
+// Vercel's Express detector treats src/app.js as the serverless entry point.
+// Create the production app lazily so tests can keep importing createApp with
+// explicit overrides and the VPS can continue starting through src/server.js.
+let vercelApp;
+
+export default function handler(request, response) {
+  vercelApp ||= createApp().app;
+  return vercelApp(request, response);
+}
