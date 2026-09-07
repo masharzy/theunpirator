@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
   assets,
   featureFlags,
@@ -12,8 +12,11 @@ import {
   auditLogs,
   securityEvents,
   accounts,
+  accountMfaMethods,
+  accountSessions,
   accountTokens,
   oauthIdentities,
+  mfaRecoveryCodes,
 } from "@unpirator/db/schema";
 import { z } from "zod";
 import { emailSchema, parseOrThrow } from "@unpirator/contracts";
@@ -181,6 +184,69 @@ export function adminRouter({
         html: `<p>Your platform access was changed.</p><p>Role: ${nextRole || "customer"}<br>Status: ${nextStatus}</p><p>Reason: ${input.reason}</p>`,
       }).catch((error) => req.log?.error({ err: error }, "admin change email failed"));
       res.json({ account: updated });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.post("/accounts/:accountId/mfa-reset", async (req, res, next) => {
+    try {
+      const { reason } = parseOrThrow(
+        z.object({ reason: z.string().min(8).max(500) }).strict(),
+        req.body,
+      );
+      if (req.params.accountId === req.auth.accountId)
+        throw Object.assign(new Error("Another super admin must reset your MFA"), {
+          status: 409,
+          code: "SELF_MFA_RESET_FORBIDDEN",
+        });
+      const [target] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, req.params.accountId))
+        .limit(1);
+      if (!target) throw notFound();
+      const readyAdmins = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.platformRole, "super_admin"),
+            eq(accounts.status, "active"),
+            isNotNull(accounts.mfaConfirmedAt),
+          ),
+        );
+      if (
+        target.platformRole === "super_admin" &&
+        target.status === "active" &&
+        readyAdmins.length <= 2
+      )
+        throw Object.assign(
+          new Error("A third active super admin is required before resetting this administrator"),
+          { status: 409, code: "ADMIN_RECOVERY_GUARD" },
+        );
+      await db.transaction(async (tx) => {
+        await tx
+          .update(accounts)
+          .set({ mfaSecretEncrypted: null, mfaConfirmedAt: null, updatedAt: new Date() })
+          .where(eq(accounts.id, target.id));
+        await tx.delete(accountMfaMethods).where(eq(accountMfaMethods.accountId, target.id));
+        await tx.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.accountId, target.id));
+        await tx.delete(accountSessions).where(eq(accountSessions.accountId, target.id));
+        await writeAudit(tx, {
+          actorAccountId: req.auth.accountId,
+          action: "ADMIN_MFA_RESET",
+          targetType: "account",
+          targetId: target.id,
+          metadata: { reason },
+          ip: req.ip,
+        });
+      });
+      await sendEmail(config, {
+        to: target.email,
+        subject: "Your The Unpirator MFA was reset",
+        html: `<p>Your authenticator was reset by another administrator.</p><p>Reason: ${reason}</p><p>Sign in and configure MFA again.</p>`,
+      }).catch((error) => req.log?.error({ err: error }, "MFA reset notification failed"));
+      res.json({ reset: true });
     } catch (e) {
       next(e);
     }

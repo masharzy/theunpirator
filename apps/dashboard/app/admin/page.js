@@ -4,7 +4,9 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DataPage } from "@/components/data-page";
 import Link from "next/link";
+import { useAuth } from "@/components/auth-provider";
 export default function Admin() {
+  const auth = useAuth();
   const [tenants, setTenants] = useState([]),
     [accounts, setAccounts] = useState([]),
     [providers, setProviders] = useState([]),
@@ -56,6 +58,11 @@ export default function Admin() {
     if (!reason) return;
     await action("/v1/admin/accounts", { email: inviteEmail, reason }, "POST");
     setInviteEmail("");
+  }
+  async function resetMfa(account) {
+    const reason = window.prompt("Reason for resetting MFA (minimum 8 characters)");
+    if (!reason) return;
+    await action(`/v1/admin/accounts/${account.id}/mfa-reset`, { reason }, "POST");
   }
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
@@ -206,6 +213,11 @@ export default function Admin() {
                   >
                     {account.status === "active" ? "Disable" : "Enable"}
                   </Button>
+                  {account.mfaConfirmedAt && account.id !== auth?.account?.id && (
+                    <Button variant="destructive" disabled={busy} onClick={() => resetMfa(account)}>
+                      Reset MFA
+                    </Button>
+                  )}
                 </div>
               </div>
             </section>

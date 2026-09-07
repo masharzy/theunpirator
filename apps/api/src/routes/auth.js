@@ -4,7 +4,9 @@ import { and, desc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import {
   accountSessions,
   accountTokens,
+  accountMfaMethods,
   accounts,
+  mfaRecoveryCodes,
   oauthIdentities,
   tenantMembers,
   tenants,
@@ -26,6 +28,13 @@ import { createHash } from "node:crypto";
 import { generateTotpSecret, verifyTotp } from "../services/totp.js";
 
 const hour = 3600_000;
+const privilegedRoles = new Set([
+  "super_admin",
+  "operations_admin",
+  "billing_admin",
+  "support_admin",
+  "security_admin",
+]);
 const cookieBase = (config) => ({
   secure: config.NODE_ENV === "production",
   sameSite: "lax",
@@ -153,7 +162,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
         !(await argon2.verify(account.passwordHash, input.password))
       )
         throw unauthorized("Invalid email or password");
-      if (account.platformRole === "super_admin" && account.mfaConfirmedAt) {
+      if (privilegedRoles.has(account.platformRole) && account.mfaConfirmedAt) {
         const challenge = await makeToken(db, account.id, "mfa_login", 10 * 60_000);
         return res.json({ mfaRequired: true, challenge });
       }
@@ -171,7 +180,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           email: account.email,
           platformRole: account.platformRole,
           emailVerified: Boolean(account.emailVerifiedAt),
-          mfaSetupRequired: account.platformRole === "super_admin" && !account.mfaConfirmedAt,
+          mfaSetupRequired: privilegedRoles.has(account.platformRole) && !account.mfaConfirmedAt,
         },
       });
     } catch (error) {
@@ -201,11 +210,59 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
       if (!account?.mfaConfirmedAt || !account.mfaSecretEncrypted || account.status !== "active")
         throw unauthorized("MFA is unavailable");
       const { secret } = decryptJson(account.mfaSecretEncrypted, config.APP_ENCRYPTION_KEY_BASE64);
-      if (!verifyTotp(secret, req.body?.code)) throw unauthorized("Invalid authenticator code");
-      await db
-        .update(accountTokens)
-        .set({ usedAt: new Date() })
-        .where(eq(accountTokens.id, challenge.id));
+      const now = new Date();
+      const [method] = await db
+        .select()
+        .from(accountMfaMethods)
+        .where(
+          and(
+            eq(accountMfaMethods.accountId, account.id),
+            eq(accountMfaMethods.type, "totp"),
+            eq(accountMfaMethods.enabled, true),
+          ),
+        )
+        .limit(1);
+      const replayed =
+        method?.lastUsedAt &&
+        Math.floor(method.lastUsedAt.getTime() / 30000) === Math.floor(now.getTime() / 30000);
+      let accepted = !replayed && verifyTotp(secret, req.body?.code),
+        recovery;
+      if (!accepted)
+        [recovery] = await db
+          .select()
+          .from(mfaRecoveryCodes)
+          .where(
+            and(
+              eq(mfaRecoveryCodes.accountId, account.id),
+              eq(
+                mfaRecoveryCodes.codeHash,
+                sha256(
+                  String(req.body?.code || "")
+                    .trim()
+                    .toUpperCase(),
+                ),
+              ),
+              isNull(mfaRecoveryCodes.usedAt),
+            ),
+          )
+          .limit(1);
+      if (!accepted && !recovery) throw unauthorized("Invalid authenticator or recovery code");
+      await db.transaction(async (tx) => {
+        await tx
+          .update(accountTokens)
+          .set({ usedAt: now })
+          .where(eq(accountTokens.id, challenge.id));
+        if (recovery)
+          await tx
+            .update(mfaRecoveryCodes)
+            .set({ usedAt: now })
+            .where(eq(mfaRecoveryCodes.id, recovery.id));
+        else
+          await tx
+            .update(accountMfaMethods)
+            .set({ lastUsedAt: now })
+            .where(eq(accountMfaMethods.id, method.id));
+      });
       await issueSession(db, config, req, res, account, true);
       await writeAudit(db, {
         actorAccountId: account.id,
@@ -529,7 +586,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
         .update(accountTokens)
         .set({ usedAt: new Date() })
         .where(eq(accountTokens.id, state.id));
-      if (account.platformRole === "super_admin" && account.mfaConfirmedAt) {
+      if (privilegedRoles.has(account.platformRole) && account.mfaConfirmedAt) {
         const challenge = await makeToken(db, account.id, "mfa_login", 10 * 60_000);
         return res.redirect(
           `${config.DASHBOARD_URL}/login?mfa_challenge=${encodeURIComponent(challenge)}`,
@@ -537,7 +594,7 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
       }
       await issueSession(db, config, req, res, account);
       res.redirect(
-        `${config.DASHBOARD_URL}${account.platformRole === "super_admin" ? "/dashboard/account?setup=mfa" : `/dashboard${isNew ? "/onboarding" : ""}`}`,
+        `${config.DASHBOARD_URL}${privilegedRoles.has(account.platformRole) ? "/dashboard/account?setup=mfa" : `/dashboard${isNew ? "/onboarding" : ""}`}`,
       );
     } catch (error) {
       next(error);
@@ -599,7 +656,12 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
   });
   router.post("/mfa/setup", dashboardAuth, csrfGuard, async (req, res, next) => {
     try {
-      if (req.auth.platformRole !== "super_admin") throw forbidden("Super admin required");
+      if (!privilegedRoles.has(req.auth.platformRole)) throw forbidden("Platform admin required");
+      if (req.auth.mfaConfirmedAt)
+        throw Object.assign(new Error("MFA reset requires another super admin"), {
+          status: 409,
+          code: "MFA_ADMIN_RESET_REQUIRED",
+        });
       const secret = generateTotpSecret();
       await db
         .update(accounts)
@@ -633,6 +695,8 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
       const { secret } = decryptJson(account.mfaSecretEncrypted, config.APP_ENCRYPTION_KEY_BASE64);
       if (!verifyTotp(secret, req.body?.code)) throw unauthorized("Invalid authenticator code");
       const now = new Date();
+      const recoveryCodes = Array.from({ length: 10 }, () => randomToken(9).toUpperCase());
+      const receipt = randomToken(32);
       await db.transaction(async (tx) => {
         await tx
           .update(accounts)
@@ -642,6 +706,73 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
             updatedAt: now,
           })
           .where(eq(accounts.id, account.id));
+        await tx
+          .insert(accountMfaMethods)
+          .values({
+            accountId: account.id,
+            type: "totp",
+            encryptedSecret: account.mfaSecretEncrypted,
+            verifiedAt: now,
+            enabled: true,
+            lastUsedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [accountMfaMethods.accountId, accountMfaMethods.type],
+            set: {
+              encryptedSecret: account.mfaSecretEncrypted,
+              verifiedAt: now,
+              enabled: true,
+              lastUsedAt: now,
+            },
+          });
+        await tx.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.accountId, account.id));
+        await tx
+          .insert(mfaRecoveryCodes)
+          .values(recoveryCodes.map((code) => ({ accountId: account.id, codeHash: sha256(code) })));
+        await tx.insert(accountTokens).values({
+          accountId: account.id,
+          kind: "mfa_recovery_ack",
+          tokenHash: sha256(receipt),
+          expiresAt: new Date(Date.now() + 15 * 60_000),
+        });
+      });
+      await writeAudit(db, {
+        actorAccountId: account.id,
+        action: "ADMIN_MFA_ENABLED",
+        targetType: "account",
+        targetId: account.id,
+        ip: req.ip,
+      });
+      await sendEmail(config, {
+        to: account.email,
+        subject: "MFA enabled on your The Unpirator account",
+        html: "<p>An authenticator was enabled for your platform account.</p>",
+      }).catch((error) => req.log?.error({ err: error }, "MFA notification failed"));
+      res.json({ confirmed: true, recoveryCodes, receipt });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.post("/mfa/recovery/ack", dashboardAuth, csrfGuard, async (req, res, next) => {
+    try {
+      const [receipt] = await db
+        .select()
+        .from(accountTokens)
+        .where(
+          and(
+            eq(accountTokens.accountId, req.auth.accountId),
+            eq(accountTokens.kind, "mfa_recovery_ack"),
+            eq(accountTokens.tokenHash, sha256(String(req.body?.receipt || ""))),
+            isNull(accountTokens.usedAt),
+            gt(accountTokens.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (!receipt || req.body?.acknowledged !== true)
+        throw forbidden("Acknowledge that recovery codes were saved");
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx.update(accountTokens).set({ usedAt: now }).where(eq(accountTokens.id, receipt.id));
         await tx
           .update(accountSessions)
           .set({ mfaVerifiedAt: now })
@@ -663,21 +794,14 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
           .values({
             id: "platform",
             completedAt: now,
-            completedBy: account.id,
+            completedBy: req.auth.accountId,
             bootstrapVersion: 1,
           })
           .onConflictDoUpdate({
             target: platformBootstrapState.id,
-            set: { completedAt: now, completedBy: account.id, bootstrapVersion: 1 },
+            set: { completedAt: now, completedBy: req.auth.accountId, bootstrapVersion: 1 },
           });
-      await writeAudit(db, {
-        actorAccountId: account.id,
-        action: "ADMIN_MFA_ENABLED",
-        targetType: "account",
-        targetId: account.id,
-        ip: req.ip,
-      });
-      res.json({ confirmed: true });
+      res.json({ acknowledged: true });
     } catch (error) {
       next(error);
     }
