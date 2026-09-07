@@ -1,11 +1,11 @@
 import { and, eq, gt } from "drizzle-orm";
-import { accountSessions, accounts, tenantMembers } from "@unpirator/db/schema";
+import { accountSessions, accounts, auditLogs, tenantMembers } from "@unpirator/db/schema";
 import { adminImpersonationSessions } from "@unpirator/db/commerce-schema";
 import { sha256, safeEqual } from "@unpirator/crypto";
 import { forbidden, unauthorized } from "../errors.js";
 
 export function dashboardAuth({ db, config }) {
-  return async (req, _res, next) => {
+  return async (req, res, next) => {
     try {
       const raw = req.cookies?.[config.SESSION_COOKIE_NAME];
       if (!raw) throw unauthorized();
@@ -44,7 +44,25 @@ export function dashboardAuth({ db, config }) {
             ),
           )
           .limit(1);
-        if (impersonation && !impersonation.endedAt) row.impersonation = impersonation;
+        if (impersonation && !impersonation.endedAt) {
+          row.impersonation = impersonation;
+          if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+            res.on("finish", () => {
+              if (res.statusCode < 400)
+                db.insert(auditLogs)
+                  .values({
+                    tenantId: impersonation.tenantId,
+                    actorAccountId: row.accountId,
+                    action: "IMPERSONATION_ACTION",
+                    targetType: "http_request",
+                    targetId: req.originalUrl,
+                    metadata: { method: req.method, impersonationId: impersonation.id },
+                    ip: req.ip,
+                  })
+                  .catch(() => {});
+            });
+          }
+        } else res.clearCookie("unpirator_impersonation", { path: "/" });
       }
       req.auth = row;
       next();
