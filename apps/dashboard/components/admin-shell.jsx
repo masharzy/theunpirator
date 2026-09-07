@@ -11,7 +11,6 @@ import {
   CreditCard,
   Database,
   Gauge,
-  KeyRound,
   Menu,
   Search,
   ShieldAlert,
@@ -55,8 +54,6 @@ const groups = [
     [
       [ShieldAlert, "/admin/security", "Security"],
       [Database, "/admin/audit", "Audit"],
-      [Users, "/admin/team", "Team"],
-      [KeyRound, "/admin/roles", "Roles"],
     ],
   ],
   [

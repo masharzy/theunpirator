@@ -24,16 +24,6 @@ const definitions = {
   features: ["Features", "Global and workspace feature assignments.", "/v1/admin/features"],
   security: ["Security", "Recent security detections across the platform.", "/v1/admin/security"],
   audit: ["Audit", "Immutable administrative and tenant activity.", "/v1/admin/audit"],
-  team: [
-    "Admin team",
-    "Platform operators, roles, status and MFA readiness.",
-    "/v1/admin/accounts",
-  ],
-  roles: [
-    "Roles",
-    "Operator role assignments enforced by the API permission layer.",
-    "/v1/admin/accounts",
-  ],
   announcements: [
     "Announcements",
     "Customer-facing operational notifications and announcements.",
