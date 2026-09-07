@@ -32,6 +32,7 @@ import {
   tenantSettings,
   tenantSupportNotes,
   adminImpersonationSessions,
+  restrictedIntegrationAccess,
 } from "@unpirator/db/commerce-schema";
 import { z } from "zod";
 import { emailSchema, parseOrThrow } from "@unpirator/contracts";
@@ -632,13 +633,99 @@ export function adminRouter({
       next(e);
     }
   });
-  router.get("/features", requirePlatformPermission("providers.read"), async (_req, res, next) => {
+  router.get("/features", requirePlatformPermission("features.read"), async (_req, res, next) => {
     try {
       res.json({ items: await db.select().from(featureFlags) });
     } catch (e) {
       next(e);
     }
   });
+  router.get(
+    "/restricted-integrations",
+    requirePlatformPermission("providers.read"),
+    async (_req, res, next) => {
+      try {
+        res.json({
+          items: await db
+            .select({
+              id: restrictedIntegrationAccess.id,
+              tenantId: restrictedIntegrationAccess.tenantId,
+              tenantName: tenants.name,
+              provider: restrictedIntegrationAccess.provider,
+              status: restrictedIntegrationAccess.status,
+              eligibility: restrictedIntegrationAccess.eligibility,
+              reason: restrictedIntegrationAccess.reason,
+              reviewedAt: restrictedIntegrationAccess.reviewedAt,
+              expiresAt: restrictedIntegrationAccess.expiresAt,
+              updatedAt: restrictedIntegrationAccess.updatedAt,
+            })
+            .from(restrictedIntegrationAccess)
+            .innerJoin(tenants, eq(restrictedIntegrationAccess.tenantId, tenants.id))
+            .orderBy(desc(restrictedIntegrationAccess.updatedAt)),
+        });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.patch(
+    "/restricted-integrations/:id",
+    requirePlatformPermission("restricted.manage"),
+    async (req, res, next) => {
+      try {
+        const input = parseOrThrow(
+          z
+            .object({
+              status: z.enum(["approved", "rejected", "disabled"]),
+              reason: z.string().trim().min(8).max(500),
+              eligibility: z.record(z.string(), z.boolean()).optional(),
+            })
+            .strict(),
+          req.body,
+        );
+        const [access] = await db
+          .update(restrictedIntegrationAccess)
+          .set({
+            ...input,
+            reviewedBy: req.auth.accountId,
+            reviewedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(restrictedIntegrationAccess.id, req.params.id))
+          .returning();
+        if (!access) throw notFound();
+        await db
+          .insert(featureFlags)
+          .values({
+            key: access.provider,
+            scopeType: "tenant",
+            scopeId: access.tenantId,
+            enabled: input.status === "approved",
+            updatedBy: req.auth.accountId,
+          })
+          .onConflictDoUpdate({
+            target: [featureFlags.key, featureFlags.scopeType, featureFlags.scopeId],
+            set: {
+              enabled: input.status === "approved",
+              updatedBy: req.auth.accountId,
+              updatedAt: new Date(),
+            },
+          });
+        await writeAudit(db, {
+          tenantId: access.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: `RESTRICTED_INTEGRATION_${input.status.toUpperCase()}`,
+          targetType: "restricted_integration",
+          targetId: access.id,
+          metadata: { reason: input.reason },
+          ip: req.ip,
+        });
+        res.json({ access });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
   router.put(
     "/tenants/:tenantId/subscription",
     requirePlatformPermission("subscriptions.manage"),
@@ -688,10 +775,13 @@ export function adminRouter({
 
   router.put(
     "/features/:key",
-    requirePlatformPermission("restricted.manage"),
+    requirePlatformPermission("features.manage"),
     async (req, res, next) => {
       try {
-        const { enabled } = parseOrThrow(z.object({ enabled: z.boolean() }).strict(), req.body);
+        const { enabled, reason } = parseOrThrow(
+          z.object({ enabled: z.boolean(), reason: z.string().trim().min(8).max(500) }).strict(),
+          req.body,
+        );
         const key = req.params.key;
         const [flag] = await db
           .insert(featureFlags)
@@ -712,6 +802,7 @@ export function adminRouter({
           action: enabled ? "GLOBAL_FEATURE_ENABLED" : "GLOBAL_FEATURE_DISABLED",
           targetType: "feature_flag",
           targetId: key,
+          metadata: { reason },
           ip: req.ip,
         });
         res.json({ flag });

@@ -206,3 +206,19 @@ export const adminImpersonationSessions = pgTable("admin_impersonation_sessions"
   endedAt: timestamp("ended_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const restrictedIntegrationAccess = pgTable("restricted_integration_access", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id")
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .notNull(),
+  provider: text("provider").notNull(),
+  status: text("status").default("pending").notNull(),
+  eligibility: jsonb("eligibility").default({}).notNull(),
+  requestedBy: uuid("requested_by").references(() => accounts.id, { onDelete: "set null" }),
+  reviewedBy: uuid("reviewed_by").references(() => accounts.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  ...timestamps,
+});
