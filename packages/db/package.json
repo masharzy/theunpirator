@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./schema": "./src/schema.js"
+    "./schema": "./src/schema.js",
+    "./commerce-schema": "./src/commerce-schema.js"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.5",

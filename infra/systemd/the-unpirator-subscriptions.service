@@ -1,0 +1,10 @@
+[Unit]
+Description=The Unpirator subscription expiry job
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=unpirator
+WorkingDirectory=/opt/the-unpirator
+EnvironmentFile=/etc/the-unpirator/api.env
+ExecStart=/usr/bin/env pnpm --filter @unpirator/api jobs:subscriptions
