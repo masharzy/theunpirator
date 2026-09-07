@@ -1,0 +1,28 @@
+# Copy to wrangler.production.toml for deployment. The copied file is ignored by Git.
+name = "the-unpirator-media-gateway"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+workers_dev = true
+
+[vars]
+REQUIRE_SESSION_STATE = "true"
+REQUIRE_ORIGIN = "true"
+
+[[durable_objects.bindings]]
+name = "SESSION_STATE"
+class_name = "SessionState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionState"]
+
+[[kv_namespaces]]
+binding = "SOURCE_CACHE"
+# Replace with the ID returned by: npx wrangler kv namespace create SOURCE_CACHE
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Configure with `wrangler secret put` before deploying:
+# PLAYBACK_PUBLIC_KEYS_B64
+# GATEWAY_CONTROL_SECRET
+# INTERNAL_API_URL
+# GATEWAY_INTERNAL_SECRET

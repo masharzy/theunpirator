@@ -1,0 +1,12 @@
+{
+  "name": "@unpirator/player",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.js",
+  "dependencies": {
+    "hls.js": "^1.6.10"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

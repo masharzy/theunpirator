@@ -1,0 +1,13 @@
+node_modules
+.next
+coverage
+dist
+pnpm-lock.yaml
+apps/dashboard/components/ui
+.wrangler
+artifacts
+.env
+.env.*
+.dev.vars
+playwright-report
+test-results

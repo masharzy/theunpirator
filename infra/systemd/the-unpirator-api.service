@@ -1,0 +1,19 @@
+[Unit]
+Description=The Unpirator Control API
+After=network-online.target
+
+[Service]
+Type=simple
+User=unpirator
+WorkingDirectory=/opt/the-unpirator
+EnvironmentFile=/etc/the-unpirator/api.env
+ExecStart=/usr/bin/corepack pnpm --filter @unpirator/api start
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

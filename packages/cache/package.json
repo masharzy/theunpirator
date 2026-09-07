@@ -1,0 +1,10 @@
+{
+  "name": "@unpirator/cache",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.js",
+  "dependencies": {
+    "@upstash/redis": "^1.35.3",
+    "ioredis": "^5.7.0"
+  }
+}
