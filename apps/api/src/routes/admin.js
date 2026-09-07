@@ -588,31 +588,67 @@ export function adminRouter({
   router.get(
     "/command-center",
     requirePlatformPermission("tenants.read"),
-    async (_req, res, next) => {
+    async (req, res, next) => {
       try {
-        const [business, media, topWorkspaces, attention, providers] = await Promise.all([
-          db.execute(sql`select
+        const range = String(req.query.range || "today");
+        const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "billing" ? 31 : 1;
+        const parsedFrom = req.query.from ? new Date(String(req.query.from)) : null;
+        const parsedTo = req.query.to ? new Date(String(req.query.to)) : null;
+        const from =
+          range === "custom" && parsedFrom && !Number.isNaN(parsedFrom.getTime())
+            ? parsedFrom
+            : new Date(Date.now() - days * 86400000);
+        const to =
+          range === "custom" && parsedTo && !Number.isNaN(parsedTo.getTime())
+            ? parsedTo
+            : new Date();
+        const [business, media, topWorkspaces, topAssets, topProviders, attention, providers] =
+          await Promise.all([
+            db.execute(sql`select
           (select count(*)::int from tenants where status='active') active_workspaces,
           (select count(*)::int from subscriptions where status='trialing') trial_workspaces,
           (select count(*)::int from subscriptions where status='active') active_subscriptions,
           (select count(*)::int from payment_requests where status in ('pending','reviewing')) pending_payments,
           (select coalesce(sum(amount_minor_snapshot),0)::bigint from payment_requests where status='approved' and reviewed_at >= date_trunc('month',now())) revenue_this_month,
           (select count(*)::int from accounts where created_at >= date_trunc('month',now())) new_customers`),
-          db.execute(sql`select
-          count(*) filter(where started_at >= current_date)::int gateway_requests_today,
+            db.execute(sql`select
+          (select coalesce(sum(quantity),0)::bigint from usage_events where type='gateway_requests' and created_at between ${from} and ${to}) gateway_requests,
+          (select coalesce(sum(quantity),0)::bigint from usage_events where type='egress_bytes' and created_at between ${from} and ${to}) egress_bytes,
+          (select coalesce(sum(quantity),0)::bigint from usage_events where type='playback_heartbeat' and created_at between ${from} and ${to}) playback_minutes,
           count(*) filter(where status='active')::int active_sessions,
-          count(distinct end_user_id) filter(where started_at >= current_date)::int unique_viewers,
-          (select count(*)::int from security_events where created_at >= current_date) security_events
+          count(distinct end_user_id) filter(where started_at between ${from} and ${to})::int unique_viewers,
+          (select count(*)::int from security_events where created_at between ${from} and ${to}) security_events
           from playback_sessions`),
-          db.execute(
-            sql`select t.id,t.name,coalesce(sum(u.quantity),0)::bigint usage from tenants t left join usage_rollups u on u.tenant_id=t.id group by t.id,t.name order by usage desc limit 8`,
-          ),
-          db.execute(
-            sql`select id,'payment' type,'Payment approval waiting' title,tenant_id,"created_at" from payment_requests where status in ('pending','reviewing') union all select id,'security',type,tenant_id,created_at from security_events where severity in ('high','critical') order by created_at desc limit 12`,
-          ),
-          db.select().from(providerHealth),
-        ]);
-        res.json({ business: business[0], media: media[0], topWorkspaces, attention, providers });
+            db.execute(
+              sql`select t.id,t.name,coalesce(sum(u.quantity),0)::bigint usage,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by usage desc limit 8`,
+            ),
+            db.execute(
+              sql`select a.id,a.tenant_id,a.title,coalesce(sum(u.quantity),0)::bigint usage,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title order by usage desc limit 8`,
+            ),
+            db.execute(
+              sql`select a.provider,coalesce(sum(u.quantity),0)::bigint requests,count(*) filter(where se.severity in ('high','critical'))::int failures from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join security_events se on se.asset_id=a.id and se.created_at between ${from} and ${to} group by a.provider order by requests desc`,
+            ),
+            db.execute(
+              sql`select id::text,'payment' type,'Payment approval waiting' title,tenant_id,created_at from payment_requests where status in ('pending','reviewing')
+              union all select id::text,'security',type,tenant_id,created_at from security_events where severity in ('high','critical')
+              union all select id::text,'subscription','Subscription expiring',tenant_id,updated_at from subscriptions where status='active' and period_end < now()+interval '7 days'
+              union all select endpoint_id::text,'webhook','Webhook retries exhausted',null::uuid,created_at from webhook_deliveries where status='failed'
+              order by created_at desc limit 20`,
+            ),
+            db.select().from(providerHealth),
+          ]);
+        res.json({
+          range,
+          from,
+          to,
+          business: business[0],
+          media: media[0],
+          topWorkspaces,
+          topAssets,
+          topProviders,
+          attention,
+          providers,
+        });
       } catch (e) {
         next(e);
       }
