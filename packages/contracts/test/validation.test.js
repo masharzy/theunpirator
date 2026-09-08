@@ -36,6 +36,20 @@ describe("public input validation", () => {
       }).success,
     ).toBe(false);
   });
+  it("normalizes verbose client metadata instead of rejecting playback", () => {
+    const browser =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+    const result = playbackSessionSchema.parse({
+      siteId: "site",
+      assetId: "asset",
+      deviceId: "device123",
+      externalUserId: "user",
+      client: { browser },
+    });
+
+    expect(result.client.browser).toBe(browser.slice(0, 100));
+  });
   it("normalizes email addresses and rejects weak passwords", () => {
     expect(
       registerSchema.parse({
