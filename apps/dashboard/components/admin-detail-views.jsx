@@ -59,10 +59,46 @@ export function AccountDetailView({ data }) {
           <p className="text-xs">Workspace memberships</p>
         </div>
       </div>
-      <h2 className="font-semibold">Current sessions & login history</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border bg-white p-4 text-sm">
+          <b>Email verification</b>
+          <p className="mt-2 text-[#778170]">
+            {data.account.emailVerifiedAt
+              ? new Date(data.account.emailVerifiedAt).toLocaleString()
+              : "Pending"}
+          </p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 text-sm">
+          <b>Google identity</b>
+          <p className="mt-2 text-[#778170]">
+            {data.identities?.some((identity) => identity.provider === "google")
+              ? "Connected"
+              : "Not connected"}
+          </p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 text-sm">
+          <b>Last login</b>
+          <p className="mt-2 text-[#778170]">
+            {data.account.lastLoginAt
+              ? new Date(data.account.lastLoginAt).toLocaleString()
+              : "Never"}
+          </p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 text-sm">
+          <b>Last IP</b>
+          <p className="mt-2 text-[#778170]">{show(data.account.lastLoginIp)}</p>
+        </div>
+      </div>
+      <h2 className="font-semibold">Current sessions</h2>
       <Records items={data.sessions} />
+      <h2 className="font-semibold">Login history</h2>
+      <Records items={data.loginHistory} />
+      <h2 className="font-semibold">Workspace memberships</h2>
+      <Records items={data.memberships} />
       <h2 className="font-semibold">Linked identities</h2>
       <Records items={data.identities} />
+      <h2 className="font-semibold">Security events</h2>
+      <Records items={data.security} />
       <h2 className="font-semibold">Account audit trail</h2>
       <Records items={data.audit} />
     </div>

@@ -36,8 +36,14 @@ export function WorkspaceAdminTools({ tenantId, section }) {
           body: JSON.stringify({ body }),
         });
       }
-      if (kind === "revoke" && confirm("Revoke every active playback session?"))
-        await api(`/v1/admin/tenants/${tenantId}/revoke-sessions`, { method: "POST" });
+      if (kind === "revoke" && confirm("Revoke every active playback session?")) {
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/revoke-sessions`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+      }
       if (["suspend", "activate"].includes(kind)) {
         const reason = prompt("Reason for status change (minimum 8 characters)");
         if (!reason) return;
@@ -84,24 +90,6 @@ export function WorkspaceAdminTools({ tenantId, section }) {
         await api(`/v1/admin/tenants/${tenantId}/usage-override`, {
           method: "PUT",
           body: JSON.stringify({ metric, limit, reason }),
-        });
-      }
-      if (kind === "plan") {
-        const planId = prompt("Plan: starter, pro or business");
-        const reason = prompt("Reason (minimum 8 characters)");
-        if (!planId || !reason) return;
-        await api(`/v1/admin/tenants/${tenantId}/subscription`, {
-          method: "PUT",
-          body: JSON.stringify({ planId, status: "active", reason }),
-        });
-      }
-      if (kind === "feature") {
-        const key = prompt("Feature key");
-        if (!key) return;
-        const enabled = confirm("Enable this feature? Cancel means disable.");
-        await api(`/v1/admin/tenants/${tenantId}/features/${key}`, {
-          method: "PUT",
-          body: JSON.stringify({ enabled }),
         });
       }
       if (kind === "impersonate") {

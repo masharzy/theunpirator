@@ -27,10 +27,12 @@ export default function AdminAccounts() {
     [statusFilter, setStatusFilter] = useState(""),
     [mfaFilter, setMfaFilter] = useState(""),
     [verifiedFilter, setVerifiedFilter] = useState(""),
-    [googleFilter, setGoogleFilter] = useState("");
+    [googleFilter, setGoogleFilter] = useState(""),
+    [createdFrom, setCreatedFrom] = useState(""),
+    [createdTo, setCreatedTo] = useState("");
   const load = () =>
     api(
-      `/v1/admin/accounts?${new URLSearchParams({ search, role: roleFilter, status: statusFilter, mfa: mfaFilter, verified: verifiedFilter, google: googleFilter })}`,
+      `/v1/admin/accounts?${new URLSearchParams({ search, role: roleFilter, status: statusFilter, mfa: mfaFilter, verified: verifiedFilter, google: googleFilter, createdFrom, createdTo })}`,
     ).then((data) => setAccounts(data.items));
   useEffect(() => {
     load().catch((e) => setMessage(e.message));
@@ -142,7 +144,7 @@ export default function AdminAccounts() {
       )}
       <div className="mt-6 grid gap-3 rounded-2xl border bg-[#f8f7f0] p-4 md:grid-cols-3 xl:grid-cols-6">
         <Input
-          placeholder="Search email"
+          placeholder="Search email, ID, workspace or role"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
@@ -157,6 +159,20 @@ export default function AdminAccounts() {
             <option key={r}>{r}</option>
           ))}
         </select>
+        <input
+          aria-label="Created from"
+          type="date"
+          className="rounded-md border bg-white px-3"
+          value={createdFrom}
+          onChange={(e) => setCreatedFrom(e.target.value)}
+        />
+        <input
+          aria-label="Created to"
+          type="date"
+          className="rounded-md border bg-white px-3"
+          value={createdTo}
+          onChange={(e) => setCreatedTo(e.target.value)}
+        />
         <select
           className="rounded-md border bg-white px-3"
           value={mfaFilter}
@@ -204,8 +220,10 @@ export default function AdminAccounts() {
               <th className="p-4">Account</th>
               <th className="p-4">Role</th>
               <th className="p-4">Security</th>
+              <th className="p-4">Google</th>
               <th className="p-4">Workspaces</th>
               <th className="p-4">Last login / IP</th>
+              <th className="p-4">Created</th>
               <th className="p-4">Status</th>
               <th className="p-4">Actions</th>
             </tr>
@@ -249,12 +267,14 @@ export default function AdminAccounts() {
                     </span>
                   )}
                 </td>
+                <td className="p-4">{account.googleLinked ? "Linked" : "Not linked"}</td>
                 <td className="p-4">{account.workspaceCount}</td>
                 <td className="p-4 text-xs">
                   {account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString() : "Never"}
                   <br />
                   {account.lastLoginIp || "—"}
                 </td>
+                <td className="p-4 text-xs">{new Date(account.createdAt).toLocaleDateString()}</td>
                 <td className="p-4">{account.status}</td>
                 <td className="p-4">
                   {canManage && (

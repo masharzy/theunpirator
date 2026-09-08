@@ -79,6 +79,8 @@ export default function WorkspacesPage() {
           <option value="created">Newest</option>
           <option value="name">Name</option>
           <option value="usage">Highest usage</option>
+          <option value="bandwidth">Highest bandwidth</option>
+          <option value="activity">Recent activity</option>
         </select>
         <Button onClick={load}>Apply</Button>
       </div>
@@ -89,20 +91,23 @@ export default function WorkspacesPage() {
       )}
       {error && <p className="mt-4 bg-red-50 p-4 text-red-700">{error}</p>}
       <div className="mt-6 overflow-auto rounded-2xl border bg-white">
-        <table className="w-full min-w-[1050px] text-left text-sm">
+        <table className="w-full min-w-[1500px] text-left text-sm">
           <thead className="border-b bg-[#f4f6ef]">
             <tr>
               {[
                 "Workspace",
                 "Owner",
                 "Plan",
-                "Status",
+                "Subscription",
+                "Usage %",
                 "Sites",
                 "Assets",
                 "Viewers",
                 "Live",
-                "Usage",
+                "Monthly bandwidth",
                 "Alerts",
+                "Last activity",
+                "Created",
               ].map((x) => (
                 <th className="p-4" key={x}>
                   {x}
@@ -125,12 +130,17 @@ export default function WorkspacesPage() {
                 <td className="p-4">{x.owner_email || "—"}</td>
                 <td className="p-4">{x.plan_id || "—"}</td>
                 <td className="p-4">{x.subscription_status || x.status}</td>
+                <td className="p-4">{x.usage_percent == null ? "—" : `${x.usage_percent}%`}</td>
                 <td className="p-4">{x.sites}</td>
                 <td className="p-4">{x.assets}</td>
                 <td className="p-4">{x.viewers}</td>
                 <td className="p-4">{x.active_sessions}</td>
-                <td className="p-4">{x.usage}</td>
+                <td className="p-4">{Number(x.monthly_bandwidth || 0).toLocaleString()} B</td>
                 <td className="p-4 font-semibold text-[#9f3024]">{x.security_alerts}</td>
+                <td className="p-4">
+                  {x.last_activity ? new Date(x.last_activity).toLocaleString() : "—"}
+                </td>
+                <td className="p-4">{new Date(x.created_at).toLocaleDateString()}</td>
               </tr>
             ))}
           </tbody>
