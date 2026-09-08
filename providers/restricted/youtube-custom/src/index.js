@@ -134,20 +134,49 @@ function isAllowedMediaUrl(value) {
   }
 }
 
-function progressiveFormats(player, profile) {
-  return (player.streamingData?.formats || [])
-    .filter((item) => {
-      const mime = item.mimeType || "";
-      return (
-        isAllowedMediaUrl(item.url) &&
-        mime.toLowerCase().startsWith("video/mp4") &&
-        /avc1/i.test(mime) &&
-        /mp4a/i.test(mime) &&
-        Number(item.height) > 0
-      );
-    })
-    .map((item) => ({ ...item, profile }))
-    .sort((a, b) => Number(b.height) - Number(a.height) || Number(b.bitrate) - Number(a.bitrate));
+function codecFrom(mimeType = "") {
+  return /codecs="([^"]+)"/i.exec(mimeType)?.[1] || "";
+}
+
+function protectedAdaptiveStreams(player, profile) {
+  const formats = (player.streamingData?.adaptiveFormats || []).filter(
+    (item) =>
+      isAllowedMediaUrl(item.url) &&
+      /^\s*(video|audio)\/mp4/i.test(item.mimeType || "") &&
+      item.initRange?.start != null &&
+      item.initRange?.end != null &&
+      item.indexRange?.start != null &&
+      item.indexRange?.end != null,
+  );
+  const normalize = (item) => ({
+    url: item.url,
+    hostname: new URL(item.url).hostname,
+    mimeType: (item.mimeType || "application/octet-stream").split(";")[0],
+    codec: codecFrom(item.mimeType),
+    bitrate: Number(item.bitrate || item.averageBitrate || 0),
+    contentLength: Number(item.contentLength || 0),
+    durationMs: Number(item.approxDurationMs || 0),
+    initRange: { start: Number(item.initRange.start), end: Number(item.initRange.end) },
+    indexRange: { start: Number(item.indexRange.start), end: Number(item.indexRange.end) },
+    profile: profile.name,
+  });
+  const video = formats
+    .filter((item) => /^\s*video\/mp4/i.test(item.mimeType || "") && /avc1/i.test(item.mimeType || ""))
+    .sort((a, b) => Number(b.height) - Number(a.height) || Number(b.bitrate) - Number(a.bitrate))
+    .slice(0, 4)
+    .map((item) => ({
+      ...normalize(item),
+      height: Number(item.height || 0),
+      width: Number(item.width || 0),
+      fps: Number(item.fps || 0),
+      qualityLabel: item.qualityLabel || `${Number(item.height || 0)}p`,
+    }));
+  const audio = formats
+    .filter((item) => /^\s*audio\/mp4/i.test(item.mimeType || "") && /mp4a/i.test(item.mimeType || ""))
+    .sort((a, b) => Number(b.bitrate) - Number(a.bitrate))
+    .slice(0, 2)
+    .map((item) => ({ ...normalize(item), audioQuality: item.audioQuality || null }));
+  return video.length && audio.length ? { video, audio } : null;
 }
 
 function expiryFrom(url) {
@@ -168,7 +197,7 @@ async function resolveYoutube(sourceUrl) {
     ([visitor], index, all) =>
       all.findIndex(([v, r]) => v === visitor && r === all[index][1]) === index,
   );
-  let lastReason = "No compatible progressive MP4 was returned";
+  let lastReason = "No compatible protected MP4 streams were returned";
   for (const [visitor, region] of attempts) {
     for (const profile of PROFILES) {
       try {
@@ -178,22 +207,28 @@ async function resolveYoutube(sourceUrl) {
           lastReason = player.playabilityStatus?.reason || lastReason;
           continue;
         }
-        const [format] = progressiveFormats(player, profile);
-        if (!format) continue;
-        const hostname = new URL(format.url).hostname;
+        const protectedStreams = protectedAdaptiveStreams(player, profile);
+        if (!protectedStreams) continue;
+        const primary = protectedStreams.video[0];
+        const allowedHosts = [
+          ...new Set(
+            [...protectedStreams.video, ...protectedStreams.audio].map((stream) => stream.hostname),
+          ),
+        ];
         return {
-          url: format.url,
-          allowedHosts: [hostname],
+          url: null,
+          allowedHosts,
           headers: { "user-agent": profile.userAgent, referer: "https://www.youtube.com/" },
-          expiresAt: expiryFrom(format.url),
-          contentType: (format.mimeType || "video/mp4").split(";")[0],
+          expiresAt: expiryFrom(primary.url),
+          contentType: "video/mp4",
           supportsRange: true,
           cacheTtlSeconds: 60,
+          delivery: { mode: "protected_segments", streams: protectedStreams },
           metadata: {
             videoId,
             title: player.videoDetails?.title || "YouTube video",
-            height: Number(format.height),
-            qualityLabel: format.qualityLabel || `${format.height}p`,
+            height: Number(primary.height || 0),
+            qualityLabel: primary.qualityLabel || `${Number(primary.height || 0)}p`,
           },
         };
       } catch (error) {

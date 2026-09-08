@@ -23,6 +23,29 @@ describe("YouTube custom resolver", () => {
             playabilityStatus: { status: "OK" },
             videoDetails: { title: "Authorized lesson" },
             streamingData: {
+              adaptiveFormats: [
+                {
+                  url: sourceUrl,
+                  mimeType: 'video/mp4; codecs="avc1.42001E"',
+                  height: 720,
+                  width: 1280,
+                  bitrate: 1500000,
+                  qualityLabel: "720p",
+                  contentLength: "1000000",
+                  approxDurationMs: "60000",
+                  initRange: { start: "0", end: "739" },
+                  indexRange: { start: "740", end: "999" },
+                },
+                {
+                  url: sourceUrl.replace("videoplayback", "audioplayback"),
+                  mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+                  bitrate: 128000,
+                  contentLength: "100000",
+                  approxDurationMs: "60000",
+                  initRange: { start: "0", end: "719" },
+                  indexRange: { start: "720", end: "899" },
+                },
+              ],
               formats: [
                 {
                   url: sourceUrl,
@@ -45,8 +68,11 @@ describe("YouTube custom resolver", () => {
     const source = await youtubeCustomProvider.resolve({
       asset: { providerReference: "https://www.youtube.com/watch?v=abc123DEF45" },
     });
-    expect(source.url).toBe(sourceUrl);
+    expect(source.url).toBeNull();
     expect(source.allowedHosts).toEqual(["r1---sn-test.googlevideo.com"]);
-    expect(source.metadata).toMatchObject({ title: "Authorized lesson", height: 360 });
+    expect(source.delivery.mode).toBe("protected_segments");
+    expect(source.delivery.streams.video[0]).toMatchObject({ height: 720, codec: "avc1.42001E" });
+    expect(source.delivery.streams.audio[0]).toMatchObject({ codec: "mp4a.40.2" });
+    expect(source.metadata).toMatchObject({ title: "Authorized lesson", height: 720 });
   });
 });

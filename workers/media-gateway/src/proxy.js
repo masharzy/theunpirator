@@ -15,7 +15,7 @@ const COPY_RESPONSE_HEADERS = [
   "content-encoding",
 ];
 
-function assertOrigin(request, allowedOrigins, env) {
+export function assertOrigin(request, allowedOrigins, env) {
   const origin = request.headers.get("origin");
   if (!origin && env.REQUIRE_ORIGIN !== "true") return;
   if (!origin) throw securityError("DOMAIN_MISMATCH", 403);
@@ -95,6 +95,12 @@ function looksLikeHls(url, response, source) {
 export async function proxyPrimary(request, env, claims, assetId) {
   let source = await getSource(env, claims, assetId);
   assertOrigin(request, source.allowedOrigins, env);
+  if (source.delivery?.mode === "protected_segments")
+    throw securityError(
+      "NATIVE_DELIVERY_DISABLED",
+      403,
+      "Use the protected playback runtime",
+    );
   let response = await originFetch(request, source.url, source);
   if ([401, 403, 404].includes(response.status)) {
     await invalidateSource(env, claims, assetId);

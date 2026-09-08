@@ -281,7 +281,12 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       token,
       tokenExpiresIn: tokenTtl,
       refreshUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/refresh`,
-      mode: asset.provider === "hls" ? "hls" : "native",
+      mode:
+        asset.provider === "youtube_custom"
+          ? "protected_segments"
+          : asset.provider === "hls"
+            ? "hls"
+            : "native",
       sessionExpiresAt: expiresAt,
       watermark: (await featureEnabled(db, "dynamic_watermark", tenantId, true))
         ? {
