@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   accounts,
+  auditLogs,
   apiKeys,
   assets,
   devices,
@@ -13,6 +14,7 @@ import {
   sites,
   tenantMembers,
   tenants,
+  usageEvents,
 } from "@unpirator/db/schema";
 import {
   assetConnectionRefs,
@@ -261,6 +263,70 @@ export function workspaceRouter({
       });
     } catch (e) {
       next(e);
+    }
+  });
+
+  router.get("/audit", requireTenantAdmin, async (req, res, next) => {
+    try {
+      const items = await db
+        .select({
+          id: auditLogs.id,
+          action: auditLogs.action,
+          actorAccountId: auditLogs.actorAccountId,
+          targetType: auditLogs.targetType,
+          targetId: auditLogs.targetId,
+          metadata: auditLogs.metadata,
+          ip: auditLogs.ip,
+          createdAt: auditLogs.createdAt,
+        })
+        .from(auditLogs)
+        .where(eq(auditLogs.tenantId, req.tenantId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(300);
+      res.json({ items });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/logs", requireTenantDeveloper, async (req, res, next) => {
+    try {
+      const [usage, security] = await Promise.all([
+        db
+          .select({
+            id: usageEvents.id,
+            category: sql`'usage'`,
+            event: usageEvents.type,
+            quantity: usageEvents.quantity,
+            assetId: usageEvents.assetId,
+            sessionId: usageEvents.sessionId,
+            createdAt: usageEvents.createdAt,
+          })
+          .from(usageEvents)
+          .where(eq(usageEvents.tenantId, req.tenantId))
+          .orderBy(desc(usageEvents.createdAt))
+          .limit(200),
+        db
+          .select({
+            id: securityEvents.id,
+            category: sql`'security'`,
+            event: securityEvents.type,
+            quantity: securityEvents.riskScore,
+            assetId: securityEvents.assetId,
+            sessionId: securityEvents.sessionId,
+            createdAt: securityEvents.createdAt,
+          })
+          .from(securityEvents)
+          .where(eq(securityEvents.tenantId, req.tenantId))
+          .orderBy(desc(securityEvents.createdAt))
+          .limit(200),
+      ]);
+      const items = [...usage, ...security]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 300);
+      res.json({ items });
+    } catch (error) {
+      next(error);
     }
   });
 
