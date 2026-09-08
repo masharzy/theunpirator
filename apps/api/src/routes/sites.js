@@ -7,6 +7,11 @@ import { siteDomains, sites } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 import { notFound } from "../errors.js";
 import { getEntitlements } from "../services/entitlements.js";
+import {
+  domainChallenges,
+  verifyFileChallenge,
+  verifyMetaChallenge,
+} from "../services/domain-verification.js";
 
 export function sitesRouter({ db, requireTenantAdmin }) {
   const router = Router();
@@ -72,11 +77,7 @@ export function sitesRouter({ db, requireTenantAdmin }) {
           id: d.id,
           domain: d.domain,
           verifiedAt: d.verifiedAt,
-          dns: {
-            name: `_unpirator.${d.domain}`,
-            type: "TXT",
-            value: `unpirator-verification=${d.verificationToken}`,
-          },
+          ...domainChallenges(d.domain, d.verificationToken),
         })),
       });
     } catch (e) {
@@ -102,14 +103,34 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         )
         .limit(1);
       if (!row) throw notFound();
-      let records = [];
+      const method = req.body?.method || "dns";
+      if (!["dns", "meta", "file"].includes(method)) {
+        const error = new Error("Choose DNS, meta tag, or verification file");
+        error.code = "VALIDATION_ERROR";
+        error.status = 400;
+        throw error;
+      }
+      let verified = false;
       try {
-        records = await resolveTxt(`_unpirator.${row.domain}`);
-      } catch {}
-      const expected = `unpirator-verification=${row.token}`;
-      const verified = records.some((parts) => parts.join("") === expected);
+        if (method === "dns") {
+          const records = await resolveTxt(`_unpirator.${row.domain}`);
+          const expected = `unpirator-verification=${row.token}`;
+          verified = records.some((parts) => parts.join("") === expected);
+        } else if (method === "meta") {
+          verified = await verifyMetaChallenge(row.domain, row.token);
+        } else {
+          verified = await verifyFileChallenge(row.domain, row.token);
+        }
+      } catch (error) {
+        if (error?.code === "DOMAIN_NOT_PUBLIC") throw error;
+      }
       if (!verified) {
-        const error = new Error("DNS verification record not found");
+        const labels = {
+          dns: "DNS record",
+          meta: "verification meta tag",
+          file: "verification file",
+        };
+        const error = new Error(`${labels[method]} not found`);
         error.code = "DOMAIN_NOT_VERIFIED";
         error.status = 409;
         throw error;
@@ -125,7 +146,7 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         action: "DOMAIN_VERIFIED",
         targetType: "site_domain",
         targetId: domain.id,
-        metadata: { domain: domain.domain },
+        metadata: { domain: domain.domain, method },
         ip: req.ip,
       });
       res.json({ domain: { id: domain.id, domain: domain.domain, verifiedAt: domain.verifiedAt } });
