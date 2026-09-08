@@ -167,11 +167,15 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
         return res.json({ mfaRequired: true, challenge });
       }
       await issueSession(db, config, req, res, account);
+      const suspiciousLogin = Boolean(account.lastLoginIp && account.lastLoginIp !== req.ip);
       await writeAudit(db, {
         actorAccountId: account.id,
-        action: "ACCOUNT_LOGIN",
+        action: suspiciousLogin ? "SUSPICIOUS_LOGIN" : "ACCOUNT_LOGIN",
         targetType: "account",
         targetId: account.id,
+        metadata: suspiciousLogin
+          ? { previousIp: account.lastLoginIp, currentIp: req.ip }
+          : undefined,
         ip: req.ip,
       });
       res.json({
@@ -264,11 +268,15 @@ export function authRouter({ db, config, dashboardAuth, csrfGuard }) {
             .where(eq(accountMfaMethods.id, method.id));
       });
       await issueSession(db, config, req, res, account, true);
+      const suspiciousLogin = Boolean(account.lastLoginIp && account.lastLoginIp !== req.ip);
       await writeAudit(db, {
         actorAccountId: account.id,
-        action: "ADMIN_MFA_LOGIN",
+        action: suspiciousLogin ? "SUSPICIOUS_LOGIN" : "ADMIN_MFA_LOGIN",
         targetType: "account",
         targetId: account.id,
+        metadata: suspiciousLogin
+          ? { previousIp: account.lastLoginIp, currentIp: req.ip, mfaVerified: true }
+          : undefined,
         ip: req.ip,
       });
       res.json({

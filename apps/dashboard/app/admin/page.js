@@ -10,6 +10,8 @@ export default function AdminCommandCenter() {
   const [range, setRange] = useState("today");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [workspaceMetric, setWorkspaceMetric] = useState("egress_bytes");
+  const [assetMetric, setAssetMetric] = useState("egress_bytes");
   useEffect(() => {
     api(`/v1/admin/command-center?${new URLSearchParams({ range, from, to })}`)
       .then(setData)
@@ -74,9 +76,15 @@ export default function AdminCommandCenter() {
                   <p className="font-semibold">{x.service}</p>
                   <p className="mt-2 text-xs font-bold uppercase text-[#607a39]">{x.status}</p>
                   <p className="mt-2 text-[10px] text-[#818a7a]">
+                    Latency {x.latencyMs == null ? "not measured" : `${x.latencyMs} ms`} ·{" "}
                     {x.lastSuccess
                       ? `Last success ${new Date(x.lastSuccess).toLocaleString()}`
                       : "No success recorded"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-[#9f3024]">
+                    {x.lastFailure
+                      ? `Last failure ${new Date(x.lastFailure).toLocaleString()}`
+                      : "No failure recorded"}
                   </p>
                 </div>
               ))}
@@ -106,18 +114,28 @@ export default function AdminCommandCenter() {
           </section>
           <div className="grid gap-5 lg:grid-cols-2">
             <section className="rounded-2xl border bg-white p-5">
-              <h2 className="font-semibold">Top consumers</h2>
-              {data.topWorkspaces.map((x) => (
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-semibold">Top workspaces</h2>
+                <select
+                  className="rounded-lg border bg-white px-2 py-1 text-xs"
+                  value={workspaceMetric}
+                  onChange={(event) => setWorkspaceMetric(event.target.value)}
+                >
+                  {Object.keys(data.workspaceRankings || {}).map((metric) => (
+                    <option value={metric} key={metric}>
+                      {label(metric)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(data.workspaceRankings?.[workspaceMetric] || data.topWorkspaces).map((x) => (
                 <Link
                   className="mt-3 flex justify-between border-b py-2 text-sm"
                   href={`/admin/workspaces/${x.id}`}
                   key={x.id}
                 >
                   <span>{x.name}</span>
-                  <b>
-                    {x.egress_bytes} bytes · {x.gateway_requests} requests · {x.playback_minutes}{" "}
-                    min
-                  </b>
+                  <b>{String(x[workspaceMetric] ?? 0)}</b>
                 </Link>
               ))}
             </section>
@@ -128,13 +146,14 @@ export default function AdminCommandCenter() {
                   <Link
                     className="mt-3 block border-b py-2 text-sm"
                     href={
-                      x.type === "payment"
+                      x.action_url ||
+                      (x.type === "payment"
                         ? "/admin/payments"
                         : x.type === "provider"
                           ? "/admin/providers"
                           : x.type === "webhook"
                             ? "/admin/system/jobs"
-                            : `/admin/workspaces/${x.tenant_id}/${x.type === "subscription" ? "subscription" : x.type === "quota" ? "usage" : "security"}`
+                            : `/admin/workspaces/${x.tenant_id}/${x.type === "subscription" ? "subscription" : x.type === "quota" ? "usage" : "security"}`)
                     }
                     key={`${x.type}-${x.id}`}
                   >
@@ -148,18 +167,28 @@ export default function AdminCommandCenter() {
           </div>
           <div className="grid gap-5 lg:grid-cols-2">
             <section className="rounded-2xl border bg-white p-5">
-              <h2 className="font-semibold">Top assets</h2>
-              {data.topAssets.map((x) => (
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-semibold">Top assets</h2>
+                <select
+                  className="rounded-lg border bg-white px-2 py-1 text-xs"
+                  value={assetMetric}
+                  onChange={(event) => setAssetMetric(event.target.value)}
+                >
+                  {Object.keys(data.assetRankings || {}).map((metric) => (
+                    <option value={metric} key={metric}>
+                      {label(metric)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(data.assetRankings?.[assetMetric] || data.topAssets).map((x) => (
                 <Link
                   className="mt-3 flex justify-between border-b py-2 text-sm"
                   href={`/admin/workspaces/${x.tenant_id}/assets`}
                   key={x.id}
                 >
                   <span>{x.title}</span>
-                  <b>
-                    {x.egress_bytes} bytes · {x.plays} plays · {x.viewers} viewers · {x.errors}{" "}
-                    errors
-                  </b>
+                  <b>{String(x[assetMetric] ?? 0)}</b>
                 </Link>
               ))}
             </section>
@@ -169,7 +198,7 @@ export default function AdminCommandCenter() {
                 <div className="mt-3 flex justify-between border-b py-2 text-sm" key={x.provider}>
                   <span className="uppercase">{x.provider}</span>
                   <b>
-                    {x.requests} requests · {x.failures} failures
+                    {x.requests} requests · {x.failure_rate || 0}% failure rate
                   </b>
                 </div>
               ))}

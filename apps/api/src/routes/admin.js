@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
   assets,
   featureFlags,
@@ -69,6 +69,7 @@ export function adminRouter({
           conditions.push(
             or(
               ilike(accounts.email, search),
+              ilike(accounts.platformRole, search),
               sql`${accounts.id}::text ilike ${search}`,
               sql`exists(select 1 from tenant_members tm join tenants t on t.id=tm.tenant_id where tm.account_id=${accounts.id} and t.name ilike ${search})`,
             ),
@@ -90,8 +91,11 @@ export function adminRouter({
           );
         if (req.query.createdFrom)
           conditions.push(sql`${accounts.createdAt} >= ${new Date(String(req.query.createdFrom))}`);
-        if (req.query.createdTo)
-          conditions.push(sql`${accounts.createdAt} <= ${new Date(String(req.query.createdTo))}`);
+        if (req.query.createdTo) {
+          const createdTo = new Date(String(req.query.createdTo));
+          createdTo.setUTCDate(createdTo.getUTCDate() + 1);
+          conditions.push(sql`${accounts.createdAt} < ${createdTo}`);
+        }
         res.json({
           items: await db
             .select({
@@ -141,8 +145,13 @@ export function adminRouter({
           .limit(1);
         if (!account) throw notFound();
         const memberships = await db
-          .select()
+          .select({
+            tenantId: tenantMembers.tenantId,
+            tenantName: tenants.name,
+            role: tenantMembers.role,
+          })
           .from(tenantMembers)
+          .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
           .where(eq(tenantMembers.accountId, account.id));
         const sessions = await db
           .select({
@@ -154,10 +163,15 @@ export function adminRouter({
             userAgent: accountSessions.userAgent,
           })
           .from(accountSessions)
-          .where(eq(accountSessions.accountId, account.id))
+          .where(
+            and(
+              eq(accountSessions.accountId, account.id),
+              gt(accountSessions.expiresAt, new Date()),
+            ),
+          )
           .orderBy(desc(accountSessions.createdAt))
           .limit(25);
-        const [identities, audit] = await Promise.all([
+        const [identities, audit, loginHistory, accountSecurity] = await Promise.all([
           db
             .select({
               id: oauthIdentities.id,
@@ -173,8 +187,35 @@ export function adminRouter({
             .where(eq(auditLogs.targetId, account.id))
             .orderBy(desc(auditLogs.createdAt))
             .limit(100),
+          db
+            .select()
+            .from(auditLogs)
+            .where(
+              and(
+                eq(auditLogs.targetId, account.id),
+                sql`${auditLogs.action} in ('ACCOUNT_LOGIN','ADMIN_MFA_LOGIN','SUSPICIOUS_LOGIN')`,
+              ),
+            )
+            .orderBy(desc(auditLogs.createdAt))
+            .limit(100),
+          db
+            .select()
+            .from(securityEvents)
+            .where(
+              sql`exists(select 1 from tenant_members tm where tm.account_id=${account.id} and tm.tenant_id=${securityEvents.tenantId})`,
+            )
+            .orderBy(desc(securityEvents.createdAt))
+            .limit(100),
         ]);
-        res.json({ account, memberships, sessions, identities, audit });
+        res.json({
+          account,
+          memberships,
+          sessions,
+          identities,
+          loginHistory,
+          audit,
+          security: accountSecurity,
+        });
       } catch (e) {
         next(e);
       }
@@ -460,11 +501,18 @@ export function adminRouter({
         status = String(req.query.status || ""),
         plan = String(req.query.plan || ""),
         subscriptionStatus = String(req.query.subscriptionStatus || ""),
-        cursor = req.query.cursor ? new Date(String(req.query.cursor)) : null;
-      const sortColumns = { created: "t.created_at", name: "t.name", usage: "usage" };
+        cursor = Math.max(0, Number.parseInt(String(req.query.cursor || "0"), 10) || 0);
+      const sortColumns = {
+        created: "created_at",
+        name: "name",
+        usage: "usage_percent",
+        bandwidth: "monthly_bandwidth",
+        activity: "last_activity",
+      };
       const sort = sortColumns[String(req.query.sort)] || sortColumns.created;
       const direction = req.query.direction === "asc" ? "asc" : "desc";
-      const items = await db.execute(sql`select t.id,t.name,t.status,t.created_at,t.updated_at,
+      const items =
+        await db.execute(sql`select * from (select t.id,t.name,t.status,t.created_at,t.updated_at,
         (select a.email from tenant_members tm join accounts a on a.id=tm.account_id where tm.tenant_id=t.id and tm.role='owner' limit 1) owner_email,
         (select s.plan_id from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1) plan_id,
         (select s.status from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1) subscription_status,
@@ -472,15 +520,19 @@ export function adminRouter({
         (select count(*)::int from assets where tenant_id=t.id) assets,
         (select count(*)::int from end_users where tenant_id=t.id) viewers,
         (select count(*)::int from playback_sessions where tenant_id=t.id and status='active') active_sessions,
-        (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=t.id) usage,
-        (select count(*)::int from security_events where tenant_id=t.id and severity in ('high','critical')) security_alerts
+        (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=t.id and period=to_char(now(),'YYYY-MM') and metric='gateway_requests') usage,
+        round(100 * (select coalesce(sum(quantity),0)::numeric from usage_rollups where tenant_id=t.id and period=to_char(now(),'YYYY-MM') and metric='gateway_requests') / nullif(coalesce((select (p.entitlements->>'monthly_gateway_requests')::numeric from subscriptions s join plans p on p.id=s.plan_id where s.tenant_id=t.id order by s.created_at desc limit 1),0),0),1) usage_percent,
+        (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=t.id and period=to_char(now(),'YYYY-MM') and metric='egress_bytes') monthly_bandwidth,
+        (select status from payment_requests where tenant_id=t.id order by created_at desc limit 1) payment_status,
+        (select count(*)::int from security_events where tenant_id=t.id and severity in ('high','critical')) security_alerts,
+        (select max(created_at) from usage_events where tenant_id=t.id) last_activity
         from tenants t where (${search}='%%' or t.name ilike ${search} or t.id::text ilike ${search}) and (${status}='' or t.status=${status})
         and (${plan}='' or (select s.plan_id from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1)=${plan})
         and (${subscriptionStatus}='' or (select s.status from subscriptions s where s.tenant_id=t.id order by s.created_at desc limit 1)=${subscriptionStatus})
-        and (${cursor}::timestamptz is null or t.created_at < ${cursor}) order by ${sql.raw(sort)} ${sql.raw(direction)} limit 51`);
+        ) workspace_rows order by ${sql.raw(sort)} ${sql.raw(direction)} nulls last, id asc limit 51 offset ${cursor}`);
       res.json({
         items: items.slice(0, 50),
-        nextCursor: items.length > 50 ? items[49].created_at : null,
+        nextCursor: items.length > 50 ? String(cursor + 50) : null,
       });
     } catch (e) {
       next(e);
@@ -522,6 +574,8 @@ export function adminRouter({
                 (select count(*)::int from devices where tenant_id=${tenantId} and status='active') devices,
                 (select count(*)::int from playback_sessions where tenant_id=${tenantId} and status='active') active_sessions,
                 (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=${tenantId} and period=to_char(now(),'YYYY-MM')) usage,
+                (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=${tenantId} and period=to_char(now(),'YYYY-MM') and metric='egress_bytes') monthly_bandwidth,
+                round(100 * (select coalesce(sum(quantity),0)::numeric from usage_rollups where tenant_id=${tenantId} and period=to_char(now(),'YYYY-MM') and metric='gateway_requests') / nullif(coalesce((select (p.entitlements->>'monthly_gateway_requests')::numeric from subscriptions s join plans p on p.id=s.plan_id where s.tenant_id=${tenantId} order by s.created_at desc limit 1),0),0),1) usage_percent,
                 (select count(*)::int from security_events where tenant_id=${tenantId} and severity in ('high','critical')) security_risk,
                 (select status from payment_requests where tenant_id=${tenantId} order by created_at desc limit 1) payment_status,
                 (select max(created_at) from usage_events where tenant_id=${tenantId}) last_activity`),
@@ -605,10 +659,8 @@ export function adminRouter({
           restricted: () =>
             db
               .select()
-              .from(featureFlags)
-              .where(
-                and(eq(featureFlags.scopeId, tenantId), eq(featureFlags.key, "youtube_custom")),
-              ),
+              .from(restrictedIntegrationAccess)
+              .where(eq(restrictedIntegrationAccess.tenantId, tenantId)),
         };
         const section = req.params.section || "overview";
         const load = sources[section];
@@ -658,41 +710,62 @@ export function adminRouter({
     requirePlatformPermission("tenants.read"),
     async (req, res, next) => {
       try {
-        const databaseStarted = Date.now();
-        await db.execute(sql`select 1`);
-        const databaseLatency = Date.now() - databaseStarted;
-        const cacheStarted = Date.now();
-        const cacheStatus = await cache.ping().catch(() => "ERROR");
-        const cacheLatency = Date.now() - cacheStarted;
-        const gatewayStarted = Date.now();
-        const gatewayHealthy = await fetch(`${config.GATEWAY_PUBLIC_URL}/health`, {
-          signal: AbortSignal.timeout(2500),
-        })
-          .then((response) => response.ok)
-          .catch(() => false);
-        const gatewayLatency = Date.now() - gatewayStarted;
-        const range = String(req.query.range || "today");
-        const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "billing" ? 31 : 1;
+        const timedProbe = async (probe) => {
+          const startedAt = Date.now();
+          try {
+            return { healthy: await probe(), latencyMs: Date.now() - startedAt };
+          } catch {
+            return { healthy: false, latencyMs: Date.now() - startedAt };
+          }
+        };
+        const [databaseProbe, cacheProbe, gatewayProbe, emailProbe] = await Promise.all([
+          timedProbe(() => db.execute(sql`select 1`).then(() => true)),
+          timedProbe(() => cache.ping().then((status) => status === "PONG")),
+          timedProbe(() =>
+            fetch(`${config.GATEWAY_PUBLIC_URL}/health`, {
+              signal: AbortSignal.timeout(1000),
+            }).then((response) => response.ok),
+          ),
+          config.RESEND_API_KEY
+            ? timedProbe(() =>
+                fetch("https://api.resend.com/domains", {
+                  headers: { Authorization: `Bearer ${config.RESEND_API_KEY}` },
+                  signal: AbortSignal.timeout(1000),
+                }).then((response) => response.ok),
+              )
+            : Promise.resolve({ healthy: false, latencyMs: null }),
+        ]);
+        const range = ["today", "7d", "30d", "billing", "custom"].includes(String(req.query.range))
+          ? String(req.query.range)
+          : "today";
+        const now = new Date();
+        const days = range === "7d" ? 7 : range === "30d" ? 30 : 1;
         const parsedFrom = req.query.from ? new Date(String(req.query.from)) : null;
         const parsedTo = req.query.to ? new Date(String(req.query.to)) : null;
-        const from =
+        const from = (
           range === "custom" && parsedFrom && !Number.isNaN(parsedFrom.getTime())
             ? parsedFrom
-            : new Date(Date.now() - days * 86400000);
-        const to =
+            : range === "billing"
+              ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+              : range === "today"
+                ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+                : new Date(Date.now() - days * 86400000)
+        ).toISOString();
+        const to = (
           range === "custom" && parsedTo && !Number.isNaN(parsedTo.getTime())
-            ? parsedTo
-            : new Date();
+            ? new Date(parsedTo.getTime() + 86400000 - 1)
+            : now
+        ).toISOString();
         const [business, media, topWorkspaces, topAssets, topProviders, attention, providers] =
           await Promise.all([
-            db.execute(sql`select
+            db.execute(sql`with current_subscriptions as (select distinct on (tenant_id) * from subscriptions order by tenant_id,created_at desc) select
           (select count(*)::int from tenants where status='active') active_workspaces,
-          (select count(*)::int from subscriptions where status='trialing') trial_workspaces,
-          (select count(*)::int from subscriptions where status='active') active_subscriptions,
+          (select count(*)::int from current_subscriptions where status='trialing') trial_workspaces,
+          (select count(*)::int from current_subscriptions where status='active') active_subscriptions,
           (select count(*)::int from payment_requests where status in ('pending','reviewing')) pending_payments,
           (select count(*)::int from payment_requests where status in ('pending','reviewing') and created_at < now()-interval '12 hours') overdue_payments,
-          (select count(*)::int from subscriptions where status='expired') expired_subscriptions,
-          (select count(*)::int from subscriptions where status='canceled') canceled_customers,
+          (select count(*)::int from current_subscriptions where status='expired') expired_subscriptions,
+          (select count(*)::int from current_subscriptions where status='canceled') canceled_customers,
           (select count(*)::int from subscriptions s join plans p on p.id=s.plan_id where s.status='active' and coalesce((p.entitlements->>'monthly_gateway_requests')::bigint,0)>0 and (select coalesce(sum(quantity),0) from usage_rollups u where u.tenant_id=s.tenant_id and u.period=to_char(now(),'YYYY-MM') and u.metric='gateway_requests') >= (p.entitlements->>'monthly_gateway_requests')::bigint*.8) high_usage_customers,
           (select coalesce(sum(amount_minor_snapshot),0)::bigint from payment_requests where status='approved' and reviewed_at >= date_trunc('month',now())) revenue_this_month,
           (select count(*)::int from accounts where created_at >= date_trunc('month',now())) new_customers`),
@@ -707,20 +780,23 @@ export function adminRouter({
           ,(select count(*)::int from security_events where type ilike '%ORIGIN%' and created_at between ${from} and ${to}) origin_errors
           from playback_sessions`),
             db.execute(
-              sql`select t.id,t.name,max(u.created_at) updated_at,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,coalesce(sum(u.quantity) filter(where u.type='gateway_requests'),0)::bigint gateway_requests,round(coalesce(sum(u.quantity) filter(where u.type='playback_heartbeat'),0)/2.0,1) playback_minutes,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers,count(distinct p.device_id)::int active_devices from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by egress_bytes desc limit 8`,
+              sql`select t.id,t.name,max(u.created_at) updated_at,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,coalesce(sum(u.quantity) filter(where u.type='gateway_requests'),0)::bigint gateway_requests,round(coalesce(sum(u.quantity) filter(where u.type='playback_heartbeat'),0)/2.0,1) playback_minutes,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers,count(distinct p.device_id)::int active_devices from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name`,
             ),
             db.execute(
-              sql`select a.id,a.tenant_id,a.title,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers,(select count(*)::int from security_events se where se.asset_id=a.id and se.created_at between ${from} and ${to}) errors from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title order by egress_bytes desc limit 8`,
+              sql`select a.id,a.tenant_id,a.title,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers,(select count(*)::int from security_events se where se.asset_id=a.id and se.created_at between ${from} and ${to}) errors from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title`,
             ),
             db.execute(
-              sql`select p.provider,(select coalesce(sum(u.quantity),0)::bigint from usage_events u join assets a on a.id=u.asset_id where a.provider=p.provider and u.type='gateway_requests' and u.created_at between ${from} and ${to}) requests,(select count(*)::int from security_events se join assets a on a.id=se.asset_id where a.provider=p.provider and se.created_at between ${from} and ${to}) failures from (select distinct provider from assets) p order by requests desc`,
+              sql`select metrics.*,round(100.0*failures/nullif(requests,0),2) failure_rate from (select p.provider,(select coalesce(sum(u.quantity),0)::bigint from usage_events u join assets a on a.id=u.asset_id where a.provider=p.provider and u.type='gateway_requests' and u.created_at between ${from} and ${to}) requests,(select count(*)::int from security_events se join assets a on a.id=se.asset_id where a.provider=p.provider and se.created_at between ${from} and ${to}) failures from (select distinct provider from assets) p) metrics order by requests desc`,
             ),
             db.execute(
-              sql`select id::text,'payment' type,'Payment approval waiting' title,tenant_id,created_at from payment_requests where status in ('pending','reviewing')
-              union all select id::text,'security',type,tenant_id,created_at from security_events where severity in ('high','critical')
-              union all select id::text,'subscription','Subscription expiring',tenant_id,updated_at from subscriptions where status='active' and period_end < now()+interval '7 days'
-              union all select endpoint_id::text,'webhook','Webhook retries exhausted',null::uuid,created_at from webhook_deliveries where status='failed'
-              union all select s.id::text,'quota',case when used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint then 'Workspace quota exceeded' else 'Workspace above 80% quota' end,s.tenant_id,s.updated_at from subscriptions s join plans p on p.id=s.plan_id cross join lateral (select coalesce(sum(quantity),0)::bigint quantity from usage_rollups u where u.tenant_id=s.tenant_id and u.period=to_char(now(),'YYYY-MM') and u.metric='gateway_requests') used where s.status='active' and coalesce((p.entitlements->>'monthly_gateway_requests')::bigint,0)>0 and used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint*.8
+              sql`select id::text,'payment' type,case when created_at < now()-interval '12 hours' then 'Payment approval overdue' else 'Payment approval waiting' end title,tenant_id,created_at,'/admin/payments' action_url from payment_requests where status in ('pending','reviewing')
+              union all select id::text,'security',type,tenant_id,created_at,'/admin/workspaces/'||tenant_id::text||'/security' from security_events where severity in ('high','critical')
+              union all select id::text,'subscription','Subscription expiring',tenant_id,updated_at,'/admin/workspaces/'||tenant_id::text||'/subscription' from subscriptions where status='active' and period_end < now()+interval '7 days'
+              union all select endpoint_id::text,'webhook','Webhook retries exhausted',null::uuid,created_at,'/admin/system/jobs' from webhook_deliveries where status='failed'
+              union all select id::text,'job','Background webhook job failed',null::uuid,created_at,'/admin/system/jobs' from webhook_deliveries where status='failed'
+              union all select s.id::text,'quota',case when used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint then 'Workspace quota exceeded' else 'Workspace above 80% quota' end,s.tenant_id,s.updated_at,'/admin/workspaces/'||s.tenant_id::text||'/usage' from subscriptions s join plans p on p.id=s.plan_id cross join lateral (select coalesce(sum(quantity),0)::bigint quantity from usage_rollups u where u.tenant_id=s.tenant_id and u.period=to_char(now(),'YYYY-MM') and u.metric='gateway_requests') used where s.status='active' and coalesce((p.entitlements->>'monthly_gateway_requests')::bigint,0)>0 and used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint*.8
+              union all select id::text,'account',case action when 'SUSPICIOUS_LOGIN' then 'Suspicious account login' when 'PLATFORM_ROLE_CHANGED' then 'Administrator role changed' else 'Administrator MFA reset' end,null::uuid,created_at,'/admin/accounts/'||target_id from audit_logs where action in ('SUSPICIOUS_LOGIN','PLATFORM_ROLE_CHANGED','ADMIN_MFA_RESET')
+              union all select id::text,'restricted','Restricted provider activated',tenant_id,created_at,'/admin/restricted-integrations' from audit_logs where action='RESTRICTED_INTEGRATION_APPROVED'
               order by created_at desc limit 20`,
             ),
             db.select().from(providerHealth),
@@ -729,28 +805,31 @@ export function adminRouter({
           { service: "API", status: "healthy", latencyMs: 0, lastSuccess: new Date() },
           {
             service: "Database",
-            status: "healthy",
-            latencyMs: databaseLatency,
-            lastSuccess: new Date(),
+            status: databaseProbe.healthy ? "healthy" : "down",
+            latencyMs: databaseProbe.latencyMs,
+            lastSuccess: databaseProbe.healthy ? new Date() : null,
+            lastFailure: databaseProbe.healthy ? null : new Date(),
           },
           {
             service: "Redis",
-            status: cacheStatus === "PONG" ? "healthy" : "degraded",
-            latencyMs: cacheLatency,
-            lastSuccess: cacheStatus === "PONG" ? new Date() : null,
+            status: cacheProbe.healthy ? "healthy" : "degraded",
+            latencyMs: cacheProbe.latencyMs,
+            lastSuccess: cacheProbe.healthy ? new Date() : null,
+            lastFailure: cacheProbe.healthy ? null : new Date(),
           },
           {
             service: "Cloudflare Gateway",
-            status: gatewayHealthy ? "healthy" : "down",
-            latencyMs: gatewayLatency,
-            lastSuccess: gatewayHealthy ? new Date() : null,
-            lastFailure: gatewayHealthy ? null : new Date(),
+            status: gatewayProbe.healthy ? "healthy" : "down",
+            latencyMs: gatewayProbe.latencyMs,
+            lastSuccess: gatewayProbe.healthy ? new Date() : null,
+            lastFailure: gatewayProbe.healthy ? null : new Date(),
           },
           {
             service: "Durable Objects",
-            status: gatewayHealthy ? "healthy" : "down",
-            latencyMs: gatewayLatency,
-            lastSuccess: gatewayHealthy ? new Date() : null,
+            status: gatewayProbe.healthy ? "healthy" : "down",
+            latencyMs: gatewayProbe.latencyMs,
+            lastSuccess: gatewayProbe.healthy ? new Date() : null,
+            lastFailure: gatewayProbe.healthy ? null : new Date(),
           },
           {
             service: "Usage job",
@@ -761,12 +840,37 @@ export function adminRouter({
             service: "Webhook worker",
             status: attention.some((x) => x.type === "webhook") ? "degraded" : "healthy",
           },
-          { service: "Email", status: config.RESEND_API_KEY ? "healthy" : "degraded" },
+          {
+            service: "Email",
+            status: emailProbe.healthy ? "healthy" : "degraded",
+            latencyMs: emailProbe.latencyMs,
+            lastSuccess: emailProbe.healthy ? new Date() : null,
+            lastFailure: emailProbe.healthy ? null : new Date(),
+          },
           {
             service: "Payment queue",
             status: Number(business[0]?.overdue_payments || 0) ? "degraded" : "healthy",
           },
-        ];
+          {
+            service: "Provider health",
+            status: providers.some((item) => item.status === "down")
+              ? "down"
+              : providers.some((item) => item.status === "degraded")
+                ? "degraded"
+                : "healthy",
+            lastSuccess: providers
+              .filter((item) => item.status === "healthy")
+              .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0]?.updatedAt,
+            lastFailure: providers
+              .filter((item) => ["degraded", "down"].includes(item.status))
+              .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0]?.updatedAt,
+          },
+        ].map((service) => ({
+          latencyMs: null,
+          lastSuccess: null,
+          lastFailure: null,
+          ...service,
+        }));
         const attentionItems = [
           ...attention,
           ...providers
@@ -776,16 +880,37 @@ export function adminRouter({
               type: "provider",
               title: `${provider.provider} provider ${provider.status}`,
               created_at: provider.updatedAt,
+              action_url: "/admin/providers",
             })),
         ];
+        const rank = (rows, field) =>
+          [...rows].sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0)).slice(0, 8);
+        const workspaceRankings = Object.fromEntries(
+          [
+            "egress_bytes",
+            "gateway_requests",
+            "playback_minutes",
+            "sessions",
+            "viewers",
+            "active_devices",
+          ].map((field) => [field, rank(topWorkspaces, field)]),
+        );
+        const assetRankings = Object.fromEntries(
+          ["egress_bytes", "plays", "viewers", "errors"].map((field) => [
+            field,
+            rank(topAssets, field),
+          ]),
+        );
         res.json({
           range,
           from,
           to,
           business: business[0],
           media: media[0],
-          topWorkspaces,
-          topAssets,
+          topWorkspaces: workspaceRankings.egress_bytes,
+          topAssets: assetRankings.egress_bytes,
+          workspaceRankings,
+          assetRankings,
           topProviders,
           attention: attentionItems,
           providers,
@@ -1209,7 +1334,7 @@ export function adminRouter({
 
   router.put(
     "/tenants/:tenantId/features/:key",
-    requirePlatformPermission("tenants.manage"),
+    requirePlatformPermission("features.manage"),
     async (req, res, next) => {
       try {
         const key = req.params.key;
@@ -1247,13 +1372,15 @@ export function adminRouter({
     requirePlatformPermission("tenants.manage"),
     async (req, res, next) => {
       try {
-        const status = String(req.body?.status || "");
-        if (!allowedStatuses.has(status)) {
-          const e = new Error("Invalid status");
-          e.status = 400;
-          e.code = "VALIDATION_ERROR";
-          throw e;
-        }
+        const { status, reason } = parseOrThrow(
+          z
+            .object({
+              status: z.enum([...allowedStatuses]),
+              reason: z.string().trim().min(8).max(500),
+            })
+            .strict(),
+          req.body,
+        );
         const [row] = await db
           .update(tenants)
           .set({ status, updatedAt: new Date() })
@@ -1266,7 +1393,7 @@ export function adminRouter({
           action: "TENANT_STATUS_CHANGED",
           targetType: "tenant",
           targetId: row.id,
-          metadata: { status },
+          metadata: { status, reason },
           ip: req.ip,
         });
         res.json({ tenant: row });
@@ -1384,6 +1511,10 @@ export function adminRouter({
     requirePlatformPermission("sessions.revoke"),
     async (req, res, next) => {
       try {
+        const { reason } = parseOrThrow(
+          z.object({ reason: z.string().trim().min(8).max(500) }).strict(),
+          req.body,
+        );
         const active = await db
           .select({ id: playbackSessions.id })
           .from(playbackSessions)
@@ -1409,7 +1540,7 @@ export function adminRouter({
           action: "TENANT_SESSIONS_REVOKED",
           targetType: "tenant",
           targetId: req.params.tenantId,
-          metadata: { count: active.length },
+          metadata: { count: active.length, reason },
           ip: req.ip,
         });
         res.json({ revoked: active.length });

@@ -5,11 +5,28 @@ import { createApp } from "../src/create-app.js";
 import { loadConfig } from "../src/config.js";
 import { createDatabase } from "@unpirator/db";
 import { eq } from "drizzle-orm";
-import { accounts, siteDomains, subscriptions } from "@unpirator/db/schema";
+import {
+  accounts,
+  accountSessions,
+  auditLogs,
+  siteDomains,
+  subscriptions,
+} from "@unpirator/db/schema";
 
 const url = process.env.TEST_DATABASE_URL;
 describe.skipIf(!url)("PostgreSQL API integration", () => {
-  let app, database, agent, other, tenant, otherTenant, csrf, site, asset, apiKey;
+  let app,
+    database,
+    agent,
+    other,
+    admin,
+    tenant,
+    otherTenant,
+    adminAccountId,
+    csrf,
+    site,
+    asset,
+    apiKey;
   const run = randomUUID().slice(0, 8);
   beforeAll(async () => {
     if (!new URL(url).pathname.endsWith("_test"))
@@ -51,7 +68,9 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
           return this;
         },
         info() {},
-        error() {},
+        error(...args) {
+          if (process.env.DEBUG_INTEGRATION) console.error(...args);
+        },
         warn() {},
       },
     }));
@@ -82,6 +101,24 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
         ).status,
       ).toBe(200);
     }
+    admin = request.agent(app);
+    const adminEmail = `admin-${run}@integration.example`;
+    const adminRegistration = await admin.post("/v1/auth/register").send({
+      tenantName: "Integration admin",
+      email: adminEmail,
+      password: "Local-integration-password1",
+    });
+    expect(adminRegistration.status).toBe(201);
+    adminAccountId = adminRegistration.body.account.id;
+    const mfaNow = new Date();
+    await database.db
+      .update(accounts)
+      .set({ emailVerifiedAt: mfaNow, platformRole: "super_admin", mfaConfirmedAt: mfaNow })
+      .where(eq(accounts.id, adminAccountId));
+    await database.db
+      .update(accountSessions)
+      .set({ mfaVerifiedAt: mfaNow })
+      .where(eq(accountSessions.accountId, adminAccountId));
     csrf = (await agent.get("/v1/auth/csrf")).body.csrfToken;
   }, 30000);
   afterAll(async () => {
@@ -95,6 +132,68 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
   });
   it("denies customer access to Super Admin", async () => {
     expect((await agent.get("/v1/admin/tenants")).status).toBe(403);
+  });
+  it("serves the complete administrator command center", async () => {
+    const startedAt = Date.now();
+    const response = await admin.get("/v1/admin/command-center?range=today");
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(Date.now() - startedAt).toBeLessThan(3000);
+    expect(response.body.serviceHealth).toHaveLength(10);
+    expect(Object.keys(response.body.workspaceRankings)).toEqual(
+      expect.arrayContaining([
+        "egress_bytes",
+        "gateway_requests",
+        "playback_minutes",
+        "sessions",
+        "viewers",
+        "active_devices",
+      ]),
+    );
+    expect(Object.keys(response.body.assetRankings)).toEqual(
+      expect.arrayContaining(["egress_bytes", "plays", "viewers", "errors"]),
+    );
+  });
+  it("serves cursor-paginated workspace operations data", async () => {
+    const response = await admin.get("/v1/admin/tenants?sort=usage");
+    expect(response.status).toBe(200);
+    expect(response.body.items[0]).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        usage_percent: expect.toSatisfy((value) => value === null || value !== undefined),
+        monthly_bandwidth: expect.anything(),
+        security_alerts: expect.any(Number),
+      }),
+    );
+  });
+  it("audits the complete impersonation lifecycle as the administrator", async () => {
+    const adminCsrf = (await admin.get("/v1/auth/csrf")).body.csrfToken;
+    const started = await admin
+      .post(`/v1/admin/tenants/${tenant}/impersonate`)
+      .set("x-csrf-token", adminCsrf)
+      .send({ reason: "Investigating a customer support request" });
+    expect(started.status).toBe(200);
+    const mutation = await admin
+      .patch("/v1/workspace/settings")
+      .set("x-tenant-id", tenant)
+      .set("x-csrf-token", adminCsrf)
+      .send({ timezone: "Asia/Dhaka" });
+    expect(mutation.status).toBe(200);
+    const ended = await admin.delete("/v1/admin/impersonation").set("x-csrf-token", adminCsrf);
+    expect(ended.status).toBe(200);
+    await expect
+      .poll(async () => {
+        const rows = await database.db
+          .select({ action: auditLogs.action, actorAccountId: auditLogs.actorAccountId })
+          .from(auditLogs)
+          .where(eq(auditLogs.tenantId, tenant));
+        const lifecycle = new Set(
+          rows.filter((row) => row.actorAccountId === adminAccountId).map((row) => row.action),
+        );
+        return ["IMPERSONATION_STARTED", "IMPERSONATION_ACTION", "IMPERSONATION_ENDED"].every(
+          (action) => lifecycle.has(action),
+        );
+      })
+      .toBe(true);
   });
   it("requires CSRF for dashboard writes", async () => {
     expect(
