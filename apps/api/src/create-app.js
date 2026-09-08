@@ -175,6 +175,7 @@ export function createApp(overrides = {}) {
       requirePlatformPermission,
       requireRecentMfa,
       gatewayControl,
+      cache,
     }),
   );
 
