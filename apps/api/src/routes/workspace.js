@@ -272,14 +272,15 @@ export function workspaceRouter({
         .select({
           id: auditLogs.id,
           action: auditLogs.action,
-          actorAccountId: auditLogs.actorAccountId,
+          actor: accounts.email,
           targetType: auditLogs.targetType,
           targetId: auditLogs.targetId,
-          metadata: auditLogs.metadata,
+          details: auditLogs.metadata,
           ip: auditLogs.ip,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
+        .leftJoin(accounts, eq(accounts.id, auditLogs.actorAccountId))
         .where(eq(auditLogs.tenantId, req.tenantId))
         .orderBy(desc(auditLogs.createdAt))
         .limit(300);

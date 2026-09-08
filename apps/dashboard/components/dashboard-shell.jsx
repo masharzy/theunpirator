@@ -35,20 +35,17 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth-provider";
 
 const groups = [
-  [
-    "Overview",
-    [[Gauge, "/dashboard", "Overview"]],
-  ],
+  ["Overview", [[Gauge, "/dashboard", "Overview"]]],
   ["Setup", [[BookOpen, "/dashboard/onboarding", "Onboarding"]]],
   [
     "Media",
     [
       [Waypoints, "/dashboard/sites", "Sites"],
-      [PlugZap, "/dashboard/connections", "Connections"],
-      [Clapperboard, "/dashboard/assets", "Assets"],
+      [PlugZap, "/dashboard/connections", "Provider Connections"],
+      [Clapperboard, "/dashboard/assets", "Assets / Videos"],
       [Users, "/dashboard/viewers", "Viewers"],
       [MonitorSmartphone, "/dashboard/devices", "Devices"],
-      [MonitorSmartphone, "/dashboard/sessions", "Sessions"],
+      [MonitorSmartphone, "/dashboard/sessions", "Playback Sessions"],
     ],
   ],
   [
@@ -280,9 +277,15 @@ export function DashboardShell({ children }) {
           <span className="hidden rounded-full bg-[#edf5d8] px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#536b31] sm:inline-flex">
             {planLabel}
           </span>
-          <div className="hidden w-24 md:block" aria-label={`${usagePercent}% of site allowance used`}>
+          <div
+            className="hidden w-24 md:block"
+            aria-label={`${usagePercent}% of site allowance used`}
+          >
             <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
-              <div className="h-full rounded-full bg-[#7d9853]" style={{ width: `${usagePercent}%` }} />
+              <div
+                className="h-full rounded-full bg-[#7d9853]"
+                style={{ width: `${usagePercent}%` }}
+              />
             </div>
             <p className="mt-1 text-[9px] text-[#7d8776]">{usagePercent}% usage</p>
           </div>
