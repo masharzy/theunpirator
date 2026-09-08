@@ -132,7 +132,12 @@ export default {
         throw securityError("NOT_FOUND", 404, "Media route not found");
       const [, assetId, mode, chunkTrack, chunkVariantRaw, chunkSequenceRaw, objectId] = match;
       const token = readToken(request, url);
-      const claims = await verifyPlaybackToken(token, env);
+      const claims = await verifyPlaybackToken(
+        token,
+        env,
+        Math.floor(Date.now() / 1000),
+        mode === "refresh" ? 15 * 60 : 0,
+      );
       currentClaims = claims;
       if (claims.aid !== assetId) throw securityError("ASSET_TOKEN_MISMATCH", 403);
       await assertSession(env, claims);
@@ -167,7 +172,9 @@ export default {
         const manifest = await protectedManifest(env, claims, assetId);
         return Response.json(
           { manifest, wrappedKey: toBase64(wrappedKey), algorithm: "AES-GCM" },
-          { headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) } },
+          {
+            headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+          },
         );
       }
       if (request.method === "GET" && mode === "manifest") {
