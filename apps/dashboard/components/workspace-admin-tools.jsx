@@ -74,6 +74,18 @@ export function WorkspaceAdminTools({ tenantId, section }) {
           body: JSON.stringify({ enabled, reason }),
         });
       }
+      if (kind === "usage") {
+        const metric = prompt(
+          "Quota metric: monthly_gateway_requests, monthly_egress_bytes or monthly_playback_minutes",
+        );
+        const limit = Number(prompt("New limit"));
+        const reason = prompt("Reason (minimum 8 characters)");
+        if (!metric || !limit || !reason) return;
+        await api(`/v1/admin/tenants/${tenantId}/usage-override`, {
+          method: "PUT",
+          body: JSON.stringify({ metric, limit, reason }),
+        });
+      }
       if (kind === "plan") {
         const planId = prompt("Plan: starter, pro or business");
         const reason = prompt("Reason (minimum 8 characters)");
@@ -151,6 +163,14 @@ export function WorkspaceAdminTools({ tenantId, section }) {
               Extend subscription
             </button>
           </>
+        )}
+        {["super_admin", "billing_admin"].includes(role) && (
+          <button
+            onClick={() => action("usage")}
+            className="rounded-xl border bg-white px-4 py-2 text-xs font-bold"
+          >
+            Usage override
+          </button>
         )}
         {["super_admin", "operations_admin", "security_admin"].includes(role) && (
           <button

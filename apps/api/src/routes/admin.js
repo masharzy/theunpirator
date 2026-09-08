@@ -51,6 +51,7 @@ export function adminRouter({
   requirePlatformPermission,
   requireRecentMfa,
   gatewayControl,
+  cache,
 }) {
   const router = Router();
   router.use(dashboardAuth, csrfGuard);
@@ -513,7 +514,30 @@ export function adminRouter({
             Promise.all([
               db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)),
               db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)),
-            ]).then(([subscription, settings]) => ({ tenant, subscription, settings })),
+              db.execute(sql`select
+                (select a.email from tenant_members tm join accounts a on a.id=tm.account_id where tm.tenant_id=${tenantId} and tm.role='owner' limit 1) owner,
+                (select count(*)::int from sites where tenant_id=${tenantId}) sites,
+                (select count(*)::int from assets where tenant_id=${tenantId}) assets,
+                (select count(*)::int from end_users where tenant_id=${tenantId}) viewers,
+                (select count(*)::int from devices where tenant_id=${tenantId} and status='active') devices,
+                (select count(*)::int from playback_sessions where tenant_id=${tenantId} and status='active') active_sessions,
+                (select coalesce(sum(quantity),0)::bigint from usage_rollups where tenant_id=${tenantId} and period=to_char(now(),'YYYY-MM')) usage,
+                (select count(*)::int from security_events where tenant_id=${tenantId} and severity in ('high','critical')) security_risk,
+                (select status from payment_requests where tenant_id=${tenantId} order by created_at desc limit 1) payment_status,
+                (select max(created_at) from usage_events where tenant_id=${tenantId}) last_activity`),
+              db
+                .select()
+                .from(featureFlags)
+                .where(
+                  and(eq(featureFlags.scopeId, tenantId), eq(featureFlags.key, "usage_override")),
+                ),
+            ]).then(([subscription, settings, summary, usageOverride]) => ({
+              tenant,
+              subscription,
+              settings,
+              summary: summary[0],
+              usageOverride,
+            })),
           members: () =>
             db.select().from(tenantMembers).where(eq(tenantMembers.tenantId, tenantId)),
           sites: () => db.select().from(sites).where(eq(sites.tenantId, tenantId)),
@@ -634,6 +658,19 @@ export function adminRouter({
     requirePlatformPermission("tenants.read"),
     async (req, res, next) => {
       try {
+        const databaseStarted = Date.now();
+        await db.execute(sql`select 1`);
+        const databaseLatency = Date.now() - databaseStarted;
+        const cacheStarted = Date.now();
+        const cacheStatus = await cache.ping().catch(() => "ERROR");
+        const cacheLatency = Date.now() - cacheStarted;
+        const gatewayStarted = Date.now();
+        const gatewayHealthy = await fetch(`${config.GATEWAY_PUBLIC_URL}/health`, {
+          signal: AbortSignal.timeout(2500),
+        })
+          .then((response) => response.ok)
+          .catch(() => false);
+        const gatewayLatency = Date.now() - gatewayStarted;
         const range = String(req.query.range || "today");
         const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "billing" ? 31 : 1;
         const parsedFrom = req.query.from ? new Date(String(req.query.from)) : null;
@@ -690,16 +727,31 @@ export function adminRouter({
           ]);
         const serviceHealth = [
           { service: "API", status: "healthy", latencyMs: 0, lastSuccess: new Date() },
-          { service: "Database", status: "healthy", latencyMs: 0, lastSuccess: new Date() },
+          {
+            service: "Database",
+            status: "healthy",
+            latencyMs: databaseLatency,
+            lastSuccess: new Date(),
+          },
           {
             service: "Redis",
-            status: config.REDIS_URL || config.UPSTASH_REDIS_REST_URL ? "healthy" : "degraded",
+            status: cacheStatus === "PONG" ? "healthy" : "degraded",
+            latencyMs: cacheLatency,
+            lastSuccess: cacheStatus === "PONG" ? new Date() : null,
           },
           {
             service: "Cloudflare Gateway",
-            status: config.GATEWAY_CONTROL_URL ? "healthy" : "down",
+            status: gatewayHealthy ? "healthy" : "down",
+            latencyMs: gatewayLatency,
+            lastSuccess: gatewayHealthy ? new Date() : null,
+            lastFailure: gatewayHealthy ? null : new Date(),
           },
-          { service: "Durable Objects", status: config.GATEWAY_CONTROL_URL ? "healthy" : "down" },
+          {
+            service: "Durable Objects",
+            status: gatewayHealthy ? "healthy" : "down",
+            latencyMs: gatewayLatency,
+            lastSuccess: gatewayHealthy ? new Date() : null,
+          },
           {
             service: "Usage job",
             status: "healthy",
@@ -1048,6 +1100,69 @@ export function adminRouter({
           ip: req.ip,
         });
         res.json({ subscription });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.put(
+    "/tenants/:tenantId/usage-override",
+    requirePlatformPermission("subscriptions.manage"),
+    async (req, res, next) => {
+      try {
+        const input = parseOrThrow(
+          z
+            .object({
+              metric: z.enum([
+                "monthly_gateway_requests",
+                "monthly_egress_bytes",
+                "monthly_playback_minutes",
+              ]),
+              limit: z.number().int().positive(),
+              expiresAt: z.coerce.date().optional(),
+              reason: z.string().min(8).max(500),
+            })
+            .strict(),
+          req.body,
+        );
+        const [flag] = await db
+          .insert(featureFlags)
+          .values({
+            key: "usage_override",
+            scopeType: "tenant",
+            scopeId: req.params.tenantId,
+            enabled: true,
+            config: {
+              metric: input.metric,
+              limit: input.limit,
+              expiresAt: input.expiresAt || null,
+            },
+            updatedBy: req.auth.accountId,
+          })
+          .onConflictDoUpdate({
+            target: [featureFlags.key, featureFlags.scopeType, featureFlags.scopeId],
+            set: {
+              enabled: true,
+              config: {
+                metric: input.metric,
+                limit: input.limit,
+                expiresAt: input.expiresAt || null,
+              },
+              updatedBy: req.auth.accountId,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        await writeAudit(db, {
+          tenantId: req.params.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: "USAGE_OVERRIDE_CHANGED",
+          targetType: "feature_flag",
+          targetId: flag.id,
+          metadata: { ...input, reason: input.reason },
+          ip: req.ip,
+        });
+        res.json({ override: flag });
       } catch (e) {
         next(e);
       }

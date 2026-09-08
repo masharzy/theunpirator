@@ -85,6 +85,14 @@ export function WorkspaceSectionView({ data, section }) {
             <span className="rounded-full bg-white/10 px-3 py-1">{data.tenant.id}</span>
           </div>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {Object.entries(data.summary || {}).map(([key, value]) => (
+            <div className="rounded-2xl border bg-white p-4" key={key}>
+              <p className="text-xl font-semibold">{show(value)}</p>
+              <p className="mt-2 text-xs capitalize text-[#778170]">{key.replaceAll("_", " ")}</p>
+            </div>
+          ))}
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Records items={data.subscription} empty="No subscription." />
           <Records items={data.settings} empty="Default workspace settings apply." />
