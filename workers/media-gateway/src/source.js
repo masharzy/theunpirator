@@ -32,7 +32,18 @@ export async function getSource(env, claims, assetId, forceRefresh = false) {
       source = await youtubeCustomProvider.resolve({
         asset: { providerReference: source.providerReference },
       });
-    } catch {
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          component: "youtube-resolver",
+          assetId,
+          sessionId: claims.psid,
+          code: error?.code || "YOUTUBE_RESOLVE_FAILED",
+          status: Number(error?.status || 502),
+          message: error?.message || "YouTube resolution failed",
+        }),
+      );
       throw securityError("SOURCE_RESOLUTION_FAILED", 502, "Media source unavailable");
     }
   }
