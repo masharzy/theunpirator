@@ -190,13 +190,13 @@ export default {
         const mediaKey = crypto.getRandomValues(new Uint8Array(32));
         const wrappedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, mediaKey);
         const stub = await sessionStub(env, claims.psid);
+        const manifest = await protectedManifest(env, claims, assetId, false, body.providerProof);
         const stored = await stub.fetch("https://session/crypto", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ keyBase64: toBase64(mediaKey) }),
         });
         if (!stored.ok) throw securityError("SESSION_UNKNOWN", 403);
-        const manifest = await protectedManifest(env, claims, assetId, false, body.providerProof);
         return Response.json(
           { manifest, wrappedKey: toBase64(wrappedKey), algorithm: "AES-GCM" },
           {
