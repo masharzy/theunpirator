@@ -4,6 +4,8 @@ import gateway from "../src/index.js";
 import { proxyPrimary } from "../src/proxy.js";
 import { rewriteHlsManifest } from "../src/hls.js";
 import { assertSourceUrl } from "../src/origin-policy.js";
+import { parseSidx } from "../src/protected-media.js";
+import { SessionState } from "../src/session-state.js";
 const aid = "12345678-1234-1234-1234-123456789012";
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const env = {
@@ -87,7 +89,78 @@ describe("gateway authorization", () => {
     ).toBe(404);
   });
 });
+describe("protected segment state", () => {
+  it("issues one-time bounded tickets and blocks them after tamper", async () => {
+    const values = new Map();
+    const object = new SessionState({
+      storage: {
+        get: async (key) => values.get(key),
+        put: async (key, value) => values.set(key, value),
+        delete: async (key) => values.delete(key),
+        deleteAll: async () => values.clear(),
+        setAlarm: async () => {},
+      },
+    });
+    const post = (path, body) =>
+      object.fetch(
+        new Request(`https://session${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    expect((await post("/state", { status: "active", ttlSeconds: 300 })).status).toBe(200);
+    expect((await post("/crypto", { keyBase64: "key" })).status).toBe(200);
+    const issued = await post("/ticket", { track: "video", variant: 0, sequence: 1 });
+    expect(issued.status).toBe(200);
+    const { ticket } = await issued.json();
+    const request = { ticket, track: "video", variant: 0, sequence: 1 };
+    expect((await post("/consume", request)).status).toBe(200);
+    expect((await post("/consume", request)).status).toBe(403);
+    expect((await post("/integrity", { tampered: true })).status).toBe(403);
+    expect((await post("/ticket", { track: "video", variant: 0, sequence: 2 })).status).toBe(403);
+  });
+});
 describe("media delivery", () => {
+  it("maps SIDX references to bounded protected byte ranges", () => {
+    const buffer = new ArrayBuffer(44);
+    const view = new DataView(buffer);
+    view.setUint32(0, 44);
+    for (const [index, value] of [..."sidx"].entries()) view.setUint8(4 + index, value.charCodeAt(0));
+    view.setUint32(12, 1);
+    view.setUint32(16, 1000);
+    view.setUint32(20, 0);
+    view.setUint32(24, 5);
+    view.setUint16(28, 0);
+    view.setUint16(30, 1);
+    view.setUint32(32, 100);
+    view.setUint32(36, 2000);
+    view.setUint32(40, 0);
+
+    expect(parseSidx(buffer, 99)).toEqual([
+      { sequence: 1, start: 105, end: 204, durationMs: 2000 },
+    ]);
+  });
+  it("refuses the direct media route for protected segment sources", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      proxyPrimary(
+        new Request("https://gateway.example/media", {
+          headers: { origin: "https://learn.example.com" },
+        }),
+        {
+          REQUIRE_ORIGIN: "true",
+          SOURCE_CACHE: {
+            get: async () => ({ ...source, delivery: { mode: "protected_segments" } }),
+          },
+        },
+        { tid: "t" },
+        aid,
+      ),
+    ).rejects.toMatchObject({ code: "NATIVE_DELIVERY_DISABLED" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("streams Range responses with correct headers", async () => {
     const fetcher = vi.fn(
       async () =>

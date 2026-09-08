@@ -1,9 +1,18 @@
 export { SessionState } from "./session-state.js";
 import { verifyPlaybackToken, securityError } from "./token.js";
 import { proxyHlsObject, proxyPrimary } from "./proxy.js";
+import { assertOrigin } from "./proxy.js";
+import { getSource } from "./source.js";
+import {
+  encryptProtectedChunk,
+  protectedManifest,
+  protectedPlainChunk,
+} from "./protected-media.js";
 import { emitTelemetry } from "./telemetry.js";
 
-function jsonError(error, requestId) {
+const PROTECTED_PLAYER_BUILD = "protected-v1";
+
+function jsonError(error, requestId, request) {
   const status = Number(error.status || 500);
   return Response.json(
     {
@@ -13,7 +22,7 @@ function jsonError(error, requestId) {
         requestId,
       },
     },
-    { status, headers: { "cache-control": "no-store" } },
+    { status, headers: { "cache-control": "no-store", ...corsHeaders(request) } },
   );
 }
 function requestId(request) {
@@ -34,6 +43,15 @@ function playbackCookie(token, assetId, maxAge) {
 async function sessionStub(env, sessionId) {
   return env.SESSION_STATE.get(env.SESSION_STATE.idFromName(sessionId));
 }
+function toBase64(bytes) {
+  let value = "";
+  for (const byte of new Uint8Array(bytes)) value += String.fromCharCode(byte);
+  return btoa(value);
+}
+async function assertProtectedOrigin(request, env, claims, assetId) {
+  const source = await getSource(env, claims, assetId);
+  assertOrigin(request, source.allowedOrigins, env);
+}
 async function assertSession(env, claims) {
   const stub = await sessionStub(env, claims.psid);
   const response = await stub.fetch("https://session/state");
@@ -50,8 +68,17 @@ function corsHeaders(request) {
         "Access-Control-Allow-Origin": origin,
         Vary: "Origin",
         "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Expose-Headers": "x-unpirator-iv,x-unpirator-context,x-request-id",
       }
     : {};
+}
+function assertAllowedProtectedBrowser(request) {
+  const ua = request.headers.get("user-agent") || "";
+  if (
+    !/(Chrome|Chromium|Edg)\/[0-9]+/i.test(ua) ||
+    /(1DM|\bIDM\b|Download Manager|;\s*wv\)|\bWebView\b)/i.test(ua)
+  )
+    throw securityError("BROWSER_NOT_ALLOWED", 403, "Use a supported secure browser");
 }
 function corsPreflight(request) {
   const origin = request.headers.get("origin") || "*";
@@ -97,18 +124,125 @@ export default {
         });
         return new Response(null, { status: 204 });
       }
-      const match = /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|hls\/([a-f0-9]{40}))$/.exec(
-        url.pathname,
-      );
+      const match =
+        /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|bootstrap|manifest|integrity|ticket|chunk\/(video|audio)\/(\d+)\/(\d+)|hls\/([a-f0-9]{40}))$/.exec(
+          url.pathname,
+        );
       if (!match || !["GET", "HEAD", "POST"].includes(request.method))
         throw securityError("NOT_FOUND", 404, "Media route not found");
-      const [, assetId, mode, objectId] = match;
+      const [, assetId, mode, chunkTrack, chunkVariantRaw, chunkSequenceRaw, objectId] = match;
       const token = readToken(request, url);
       const claims = await verifyPlaybackToken(token, env);
       currentClaims = claims;
       if (claims.aid !== assetId) throw securityError("ASSET_TOKEN_MISMATCH", 403);
       await assertSession(env, claims);
+      if (request.method === "POST" && mode === "bootstrap") {
+        assertAllowedProtectedBrowser(request);
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const body = await request.json();
+        if (body?.playerBuild !== PROTECTED_PLAYER_BUILD)
+          throw securityError("PLAYER_INTEGRITY_LOST", 403, "Unsupported player build");
+        if (body?.publicKey?.kty !== "RSA") throw securityError("INVALID_REQUEST", 400);
+        let publicKey;
+        try {
+          publicKey = await crypto.subtle.importKey(
+            "jwk",
+            body.publicKey,
+            { name: "RSA-OAEP", hash: "SHA-256" },
+            false,
+            ["encrypt"],
+          );
+        } catch {
+          throw securityError("INVALID_REQUEST", 400, "Invalid player key");
+        }
+        const mediaKey = crypto.getRandomValues(new Uint8Array(32));
+        const wrappedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, mediaKey);
+        const stub = await sessionStub(env, claims.psid);
+        const stored = await stub.fetch("https://session/crypto", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ keyBase64: toBase64(mediaKey) }),
+        });
+        if (!stored.ok) throw securityError("SESSION_UNKNOWN", 403);
+        const manifest = await protectedManifest(env, claims, assetId);
+        return Response.json(
+          { manifest, wrappedKey: toBase64(wrappedKey), algorithm: "AES-GCM" },
+          { headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) } },
+        );
+      }
+      if (request.method === "GET" && mode === "manifest") {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        return Response.json(await protectedManifest(env, claims, assetId), {
+          headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+        });
+      }
+      if (request.method === "POST" && mode === "integrity") {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const body = await request.json();
+        const stub = await sessionStub(env, claims.psid);
+        const response = await stub.fetch("https://session/integrity", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sequence: body.sequence, tampered: body.tampered === true }),
+        });
+        if (!response.ok) throw securityError("PLAYER_INTEGRITY_LOST", 403);
+        return Response.json(await response.json(), {
+          headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+        });
+      }
+      if (request.method === "POST" && mode === "ticket") {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const body = await request.json();
+        const stub = await sessionStub(env, claims.psid);
+        const response = await stub.fetch("https://session/ticket", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) throw securityError("SEGMENT_TICKET_DENIED", 403);
+        return Response.json(await response.json(), {
+          headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+        });
+      }
+      if (request.method === "GET" && mode.startsWith("chunk/")) {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const variant = Number(chunkVariantRaw);
+        const sequence = Number(chunkSequenceRaw);
+        const ticket = url.searchParams.get("ticket") || "";
+        const stub = await sessionStub(env, claims.psid);
+        const consumed = await stub.fetch("https://session/consume", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ticket, track: chunkTrack, variant, sequence }),
+        });
+        if (!consumed.ok) throw securityError("SEGMENT_TICKET_INVALID", 403);
+        const { keyBase64 } = await consumed.json();
+        const chunk = await protectedPlainChunk(
+          env,
+          claims,
+          assetId,
+          chunkTrack,
+          variant,
+          sequence,
+        );
+        const context = `${claims.psid}:${assetId}:${chunkTrack}:${variant}:${sequence}`;
+        const encrypted = await encryptProtectedChunk(chunk.body, keyBase64, context);
+        return new Response(encrypted.encrypted, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "cache-control": "private, no-store",
+            "x-unpirator-iv": encrypted.iv,
+            "x-unpirator-context": context,
+            "x-content-type-options": "nosniff",
+            "x-request-id": rid,
+            ...corsHeaders(request),
+          },
+        });
+      }
+      if (["bootstrap", "manifest", "integrity", "ticket"].includes(mode))
+        throw securityError("METHOD_NOT_ALLOWED", 405);
       if (request.method === "POST" && mode === "refresh") {
+        await assertProtectedOrigin(request, env, claims, assetId);
         const response = await fetch(`${env.INTERNAL_API_URL}/internal/playback/refresh`, {
           method: "POST",
           headers: {
@@ -144,6 +278,7 @@ export default {
       }
       if (mode === "refresh") throw securityError("METHOD_NOT_ALLOWED", 405);
       if (request.method === "POST" && mode === "media") {
+        await assertProtectedOrigin(request, env, claims, assetId);
         emitTelemetry(ctx, env, [
           {
             kind: "usage",
@@ -185,6 +320,16 @@ export default {
       ]);
       return response;
     } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          requestId: rid,
+          path: url.pathname,
+          code: error?.code || "GATEWAY_ERROR",
+          status: Number(error?.status || 500),
+          message: error?.message || "Media gateway error",
+        }),
+      );
       emitTelemetry(
         ctx,
         env,
@@ -204,7 +349,7 @@ export default {
             ]
           : [],
       );
-      return jsonError(error, rid);
+      return jsonError(error, rid, request);
     }
   },
 };

@@ -35,6 +35,14 @@ customer-managed asset:
 The API creates or reuses an internal managed asset for the site and canonical video ID. The signed
 upstream URL remains inside the Cloudflare gateway and is never returned by the public API.
 
-The response contains the gateway playback URL, short-lived playback grant, refresh URL, session ID, and watermark policy. The customer secret API key must never reach the browser.
+The response contains the gateway playback URL, short-lived playback grant, refresh URL, session ID,
+delivery mode, and watermark policy. YouTube sessions return `mode: "protected_segments"` and must be
+mounted with `@unpirator/player`; loading `playbackUrl` directly is rejected. The player negotiates an
+ephemeral wrapped media key, one-time segment tickets and a continuously renewed integrity lease.
+The customer secret API key must never reach the browser.
+
+Protected playback intentionally fails closed when required WebCrypto, Worker, MediaSource, verified
+origin, browser, session or integrity checks are unavailable. There is no native MP4 fallback for a
+protected YouTube session.
 
 Dashboard APIs use HTTP-only cookie sessions plus CSRF header/cookie validation and tenant context in `x-tenant-id`.
