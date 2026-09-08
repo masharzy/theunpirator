@@ -18,6 +18,9 @@ const numericEntitlements = [
   ["monthly_gateway_requests", "Monthly gateway requests"],
   ["monthly_egress_bytes", "Monthly egress bytes"],
   ["monthly_playback_minutes", "Monthly playback minutes"],
+  ["monthly_gateway_requests", "Monthly gateway requests"],
+  ["monthly_egress_bytes", "Monthly egress bytes"],
+  ["monthly_playback_minutes", "Monthly playback minutes"],
   ["monthly_playback_sessions", "Monthly playback sessions"],
 ];
 
