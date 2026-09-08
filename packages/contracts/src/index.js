@@ -60,7 +60,15 @@ export const assetCreateSchema = z
 export const playbackSessionSchema = z
   .object({
     siteId: idSchema,
-    assetId: idSchema,
+    assetId: idSchema.optional(),
+    source: z
+      .object({
+        provider: z.literal("youtube_custom"),
+        url: z.string().url().max(2048),
+        title: z.string().trim().min(1).max(240).optional(),
+      })
+      .strict()
+      .optional(),
     externalUserId: z.string().min(1).max(180),
     deviceId: z.string().min(8).max(180),
     displayLabel: z.string().max(180).optional(),
@@ -72,7 +80,16 @@ export const playbackSessionSchema = z
       })
       .default({}),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (Boolean(value.assetId) === Boolean(value.source)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Provide either assetId or source",
+        path: ["assetId"],
+      });
+    }
+  });
 export const heartbeatSchema = z
   .object({
     sessionId: idSchema,

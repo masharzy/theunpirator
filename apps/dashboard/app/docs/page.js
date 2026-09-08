@@ -17,9 +17,10 @@ export default function Docs() {
           <li>
             <Link href="/register">Register an account</Link> and open Sites in the dashboard.
           </li>
-          <li>Add your website domain, copy its DNS TXT challenge and verify ownership.</li>
+          <li>Add your website domain and verify it with DNS, a meta tag or a text file.</li>
           <li>
-            Register an authorized asset with its provider, reference and allowed origin host.
+            For YouTube Custom, videos are discovered on demand. Other providers use registered
+            assets and allowed origin hosts.
           </li>
           <li>
             Create an API key with the playback:create scope. Save the secret when it is first
@@ -38,33 +39,28 @@ Idempotency-Key: UNIQUE_REQUEST_ID
 
 {
   "siteId": "YOUR_SITE_UUID",
-  "assetId": "YOUR_ASSET_UUID",
+  "source": {
+    "provider": "youtube_custom",
+    "url": "https://www.youtube.com/watch?v=VIDEO_ID"
+  },
   "externalUserId": "student-123",
   "deviceId": "stable-device-id",
   "displayLabel": "Student 123",
   "client": { "browser": "Chrome", "os": "Windows" }
 }`}</pre>
-        <h2>3. Mount the player</h2>
+        <h2>3. Protect existing YouTube players</h2>
         <p>
-          Use the player workspace package in your application bundle. Your backend endpoint returns
-          the playback grant from step two.
+          Initialize the player plugin once. It finds current and dynamically-added YouTube embeds,
+          requests an authorized session from your backend and replaces them with protected players.
         </p>
-        <pre>{`import { mountProtectedPlayer } from '@unpirator/player';
+        <pre>{`import { protectYoutubeEmbeds } from '@unpirator/player';
 
-const player = await mountProtectedPlayer({
-  element: '#player',
-  bootstrap: async () => {
-    const response = await fetch('/api/course/playback-token', {
-      method: 'POST'
-    });
-    if (!response.ok) throw new Error('Playback unavailable');
-    return response.json();
-  },
-  onError: (error) => console.error(error.message)
+const stop = protectYoutubeEmbeds({
+  endpoint: '/api/unpirator/playback'
 });
 
-// When leaving the page:
-// player.destroy();`}</pre>
+// When your application unmounts:
+// stop();`}</pre>
         <h2>4. Manage access</h2>
         <p>
           The dashboard shows sessions and devices. Revoke a session to reject subsequent gateway
@@ -79,9 +75,9 @@ const player = await mountProtectedPlayer({
         </p>
         <h2>Providers and framework examples</h2>
         <p>
-          Register direct MP4, HLS, S3, Cloudflare R2 or Bunny assets. Server integration examples
-          live in the integrations directory for Next.js, PHP, Django, Laravel and WordPress. Keep
-          provider credentials server-side and encrypted.
+          YouTube Custom sources are resolved when a viewer presses play and reused internally;
+          customers do not register every video. Direct MP4, HLS, S3, Cloudflare R2 and Bunny use
+          explicit assets. Keep provider credentials server-side and encrypted.
         </p>
         <h2>Deployment</h2>
         <p>

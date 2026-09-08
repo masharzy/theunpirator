@@ -167,3 +167,97 @@ export async function mountProtectedPlayer(options) {
   await player.mount();
   return player;
 }
+
+function youtubeUrlFromElement(element) {
+  const value = element.dataset?.youtubeUrl || element.getAttribute("src") || "";
+  try {
+    const url = new URL(value, window.location.href);
+    const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (host !== "youtu.be" && host !== "youtube.com" && !host.endsWith(".youtube.com"))
+      return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function stableDeviceId(storageKey) {
+  try {
+    let id = localStorage.getItem(storageKey);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(storageKey, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+export function protectYoutubeEmbeds({
+  endpoint = "/api/unpirator/playback",
+  selector = 'iframe[src*="youtube.com"], iframe[src*="youtu.be"], [data-youtube-url]',
+  deviceStorageKey = "unpirator_device_id",
+  onError = console.error,
+} = {}) {
+  const mounted = new Map();
+  const deviceId = stableDeviceId(deviceStorageKey);
+
+  async function protect(element) {
+    if (element.dataset?.unpiratorProtected === "true") return;
+    const youtubeUrl = youtubeUrlFromElement(element);
+    if (!youtubeUrl) return;
+    element.dataset.unpiratorProtected = "true";
+    const root = document.createElement("div");
+    root.className = element.className;
+    root.style.cssText = element.style.cssText;
+    root.style.width = element.getAttribute("width") || root.style.width || "100%";
+    const width = Number(element.getAttribute("width"));
+    const height = Number(element.getAttribute("height"));
+    root.style.aspectRatio = width > 0 && height > 0 ? `${width} / ${height}` : "16 / 9";
+    element.replaceWith(root);
+    try {
+      const player = await mountProtectedPlayer({
+        element: root,
+        onError,
+        bootstrap: async () => {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              youtubeUrl,
+              deviceId,
+              client: { browser: navigator.userAgent.slice(0, 100) },
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data?.error?.message || "Playback authorization failed");
+          return data;
+        },
+      });
+      mounted.set(root, player);
+    } catch (error) {
+      root.textContent = "This video is temporarily unavailable.";
+      root.setAttribute("role", "alert");
+      onError(error);
+    }
+  }
+
+  const scan = (scope = document) => {
+    if (scope.matches?.(selector)) protect(scope);
+    scope.querySelectorAll?.(selector).forEach(protect);
+  };
+  scan();
+  const observer = new MutationObserver((records) => {
+    for (const record of records)
+      for (const node of record.addedNodes) if (node.nodeType === 1) scan(node);
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  return () => {
+    observer.disconnect();
+    for (const player of mounted.values()) player.destroy();
+    mounted.clear();
+  };
+}

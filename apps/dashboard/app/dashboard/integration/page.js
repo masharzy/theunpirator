@@ -7,28 +7,51 @@ import { api } from "@/lib/api";
 import { PageHeader, Surface } from "@/components/console-kit";
 
 const frameworks = {
-  nextjs: `import { UnpiratorPlayer } from "@unpirator/player";\n\n<UnpiratorPlayer assetId="YOUR_ASSET_ID" tokenEndpoint="/api/playback" />`,
-  php: `$session = $client->createPlaybackSession([\n  'assetId' => 'YOUR_ASSET_ID',\n  'userId' => $currentUser->id,\n]);`,
-  custom: `POST /v1/playback/sessions\nAuthorization: Bearer YOUR_API_KEY\nIdempotency-Key: UNIQUE_REQUEST_ID`,
+  nextjs: `const session = await client.createYoutubePlaybackSession({
+  siteId: "YOUR_SITE_ID",
+  youtubeUrl,
+  externalUserId: currentUser.id,
+  deviceId,
+});`,
+  php: `$session = $client->createPlaybackSession([
+  'siteId' => 'YOUR_SITE_ID',
+  'source' => ['provider' => 'youtube_custom', 'url' => $youtubeUrl],
+  'externalUserId' => $currentUser->id,
+  'deviceId' => $deviceId,
+]);`,
+  custom: `POST /v1/playback/sessions
+Authorization: Bearer YOUR_API_KEY
+Idempotency-Key: UNIQUE_REQUEST_ID
+
+{
+  "siteId": "YOUR_SITE_ID",
+  "source": { "provider": "youtube_custom", "url": "YOUTUBE_URL" },
+  "externalUserId": "CURRENT_USER_ID",
+  "deviceId": "STABLE_DEVICE_ID"
+}`,
 };
 
 export default function IntegrationPage() {
   const [framework, setFramework] = useState("nextjs");
   const [summary, setSummary] = useState(null);
+  const [youtubeEnabled, setYoutubeEnabled] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    api("/v1/workspace/summary")
-      .then(setSummary)
+    Promise.all([api("/v1/workspace/summary"), api("/v1/assets/providers")])
+      .then(([workspace, providers]) => {
+        setSummary(workspace);
+        setYoutubeEnabled((providers.items || []).includes("youtube_custom"));
+      })
       .catch(() => setSummary({ counts: {} }));
   }, []);
   const readiness = useMemo(
     () => [
       ["Verified site", Number(summary?.counts?.verifiedSites || 0) > 0],
-      ["Provider connection", Number(summary?.counts?.connections || 0) > 0],
-      ["Registered asset", Number(summary?.counts?.assets || 0) > 0],
+      ["YouTube access", youtubeEnabled],
+      ["Video source", Number(summary?.counts?.assets || 0) > 0 ? true : "automatic"],
       ["Active API key", Number(summary?.counts?.apiKeys || 0) > 0],
     ],
-    [summary],
+    [summary, youtubeEnabled],
   );
   async function copySample() {
     await navigator.clipboard.writeText(frameworks[framework]);
@@ -60,7 +83,14 @@ export default function IntegrationPage() {
                 key={label}
               >
                 <span>{label}</span>
-                <CheckCircle2 size={18} className={done ? "text-emerald-600" : "text-[#c2c9ba]"} />
+                {done === "automatic" ? (
+                  <span className="text-[10px] font-bold uppercase text-[#718151]">On demand</span>
+                ) : (
+                  <CheckCircle2
+                    size={18}
+                    className={done ? "text-emerald-600" : "text-[#c2c9ba]"}
+                  />
+                )}
               </div>
             ))}
           </div>

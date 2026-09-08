@@ -46,7 +46,15 @@ function assertResolvedSource(asset, source) {
       code: "SOURCE_INVALID",
       status: 502,
     });
-  const allowed = Array.isArray(asset.allowedHosts) ? asset.allowedHosts : [];
+  const youtubeHost =
+    asset.provider === "youtube_custom" &&
+    (url.hostname === "googlevideo.com" || url.hostname.endsWith(".googlevideo.com"));
+  const allowed =
+    youtubeHost && Array.isArray(source.allowedHosts)
+      ? source.allowedHosts
+      : Array.isArray(asset.allowedHosts)
+        ? asset.allowedHosts
+        : [];
   if (!allowed.some((host) => url.hostname === host.toLowerCase())) {
     throw Object.assign(new Error("Resolved source host is not allowed for this asset"), {
       code: "SOURCE_HOST_BLOCKED",
