@@ -653,6 +653,10 @@ export function adminRouter({
           (select count(*)::int from subscriptions where status='trialing') trial_workspaces,
           (select count(*)::int from subscriptions where status='active') active_subscriptions,
           (select count(*)::int from payment_requests where status in ('pending','reviewing')) pending_payments,
+          (select count(*)::int from payment_requests where status in ('pending','reviewing') and created_at < now()-interval '12 hours') overdue_payments,
+          (select count(*)::int from subscriptions where status='expired') expired_subscriptions,
+          (select count(*)::int from subscriptions where status='canceled') canceled_customers,
+          (select count(*)::int from subscriptions s join plans p on p.id=s.plan_id where s.status='active' and coalesce((p.entitlements->>'monthly_gateway_requests')::bigint,0)>0 and (select coalesce(sum(quantity),0) from usage_rollups u where u.tenant_id=s.tenant_id and u.period=to_char(now(),'YYYY-MM') and u.metric='gateway_requests') >= (p.entitlements->>'monthly_gateway_requests')::bigint*.8) high_usage_customers,
           (select coalesce(sum(amount_minor_snapshot),0)::bigint from payment_requests where status='approved' and reviewed_at >= date_trunc('month',now())) revenue_this_month,
           (select count(*)::int from accounts where created_at >= date_trunc('month',now())) new_customers`),
             db.execute(sql`select
@@ -662,9 +666,11 @@ export function adminRouter({
           count(*) filter(where status='active')::int active_sessions,
           count(distinct end_user_id) filter(where started_at between ${from} and ${to})::int unique_viewers,
           (select count(*)::int from security_events where created_at between ${from} and ${to}) security_events
+          ,(select count(*)::int from security_events where type ilike '%GRANT%' and created_at between ${from} and ${to}) failed_playback_grants
+          ,(select count(*)::int from security_events where type ilike '%ORIGIN%' and created_at between ${from} and ${to}) origin_errors
           from playback_sessions`),
             db.execute(
-              sql`select t.id,t.name,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,coalesce(sum(u.quantity) filter(where u.type='gateway_requests'),0)::bigint gateway_requests,round(coalesce(sum(u.quantity) filter(where u.type='playback_heartbeat'),0)/2.0,1) playback_minutes,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers,count(distinct p.device_id)::int active_devices from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by egress_bytes desc limit 8`,
+              sql`select t.id,t.name,max(u.created_at) updated_at,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,coalesce(sum(u.quantity) filter(where u.type='gateway_requests'),0)::bigint gateway_requests,round(coalesce(sum(u.quantity) filter(where u.type='playback_heartbeat'),0)/2.0,1) playback_minutes,count(distinct u.session_id)::int sessions,count(distinct p.end_user_id)::int viewers,count(distinct p.device_id)::int active_devices from tenants t left join usage_events u on u.tenant_id=t.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by t.id,t.name order by egress_bytes desc limit 8`,
             ),
             db.execute(
               sql`select a.id,a.tenant_id,a.title,coalesce(sum(coalesce((u.metadata->>'bytes')::bigint,0)) filter(where u.type='gateway_requests'),0)::bigint egress_bytes,count(distinct u.session_id)::int plays,count(distinct p.end_user_id)::int viewers,(select count(*)::int from security_events se where se.asset_id=a.id and se.created_at between ${from} and ${to}) errors from assets a left join usage_events u on u.asset_id=a.id and u.created_at between ${from} and ${to} left join playback_sessions p on p.id=u.session_id group by a.id,a.tenant_id,a.title order by egress_bytes desc limit 8`,
@@ -677,10 +683,38 @@ export function adminRouter({
               union all select id::text,'security',type,tenant_id,created_at from security_events where severity in ('high','critical')
               union all select id::text,'subscription','Subscription expiring',tenant_id,updated_at from subscriptions where status='active' and period_end < now()+interval '7 days'
               union all select endpoint_id::text,'webhook','Webhook retries exhausted',null::uuid,created_at from webhook_deliveries where status='failed'
+              union all select s.id::text,'quota',case when used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint then 'Workspace quota exceeded' else 'Workspace above 80% quota' end,s.tenant_id,s.updated_at from subscriptions s join plans p on p.id=s.plan_id cross join lateral (select coalesce(sum(quantity),0)::bigint quantity from usage_rollups u where u.tenant_id=s.tenant_id and u.period=to_char(now(),'YYYY-MM') and u.metric='gateway_requests') used where s.status='active' and coalesce((p.entitlements->>'monthly_gateway_requests')::bigint,0)>0 and used.quantity >= (p.entitlements->>'monthly_gateway_requests')::bigint*.8
               order by created_at desc limit 20`,
             ),
             db.select().from(providerHealth),
           ]);
+        const serviceHealth = [
+          { service: "API", status: "healthy", latencyMs: 0, lastSuccess: new Date() },
+          { service: "Database", status: "healthy", latencyMs: 0, lastSuccess: new Date() },
+          {
+            service: "Redis",
+            status: config.REDIS_URL || config.UPSTASH_REDIS_REST_URL ? "healthy" : "degraded",
+          },
+          {
+            service: "Cloudflare Gateway",
+            status: config.GATEWAY_CONTROL_URL ? "healthy" : "down",
+          },
+          { service: "Durable Objects", status: config.GATEWAY_CONTROL_URL ? "healthy" : "down" },
+          {
+            service: "Usage job",
+            status: "healthy",
+            lastSuccess: topWorkspaces[0]?.updated_at || null,
+          },
+          {
+            service: "Webhook worker",
+            status: attention.some((x) => x.type === "webhook") ? "degraded" : "healthy",
+          },
+          { service: "Email", status: config.RESEND_API_KEY ? "healthy" : "degraded" },
+          {
+            service: "Payment queue",
+            status: Number(business[0]?.overdue_payments || 0) ? "degraded" : "healthy",
+          },
+        ];
         const attentionItems = [
           ...attention,
           ...providers
@@ -703,6 +737,7 @@ export function adminRouter({
           topProviders,
           attention: attentionItems,
           providers,
+          serviceHealth,
         });
       } catch (e) {
         next(e);

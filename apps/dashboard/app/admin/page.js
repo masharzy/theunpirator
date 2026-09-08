@@ -69,13 +69,13 @@ export default function AdminCommandCenter() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">Platform health</h2>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              {data.providers.map((x) => (
-                <div className="rounded-2xl border bg-white p-4" key={x.provider}>
-                  <p className="font-semibold uppercase">{x.provider}</p>
+              {data.serviceHealth.map((x) => (
+                <div className="rounded-2xl border bg-white p-4" key={x.service}>
+                  <p className="font-semibold">{x.service}</p>
                   <p className="mt-2 text-xs font-bold uppercase text-[#607a39]">{x.status}</p>
                   <p className="mt-2 text-[10px] text-[#818a7a]">
-                    {x.lastSuccessAt
-                      ? `Last success ${new Date(x.lastSuccessAt).toLocaleString()}`
+                    {x.lastSuccess
+                      ? `Last success ${new Date(x.lastSuccess).toLocaleString()}`
                       : "No success recorded"}
                   </p>
                 </div>
@@ -134,7 +134,7 @@ export default function AdminCommandCenter() {
                           ? "/admin/providers"
                           : x.type === "webhook"
                             ? "/admin/system/jobs"
-                            : `/admin/workspaces/${x.tenant_id}/${x.type === "subscription" ? "subscription" : "security"}`
+                            : `/admin/workspaces/${x.tenant_id}/${x.type === "subscription" ? "subscription" : x.type === "quota" ? "usage" : "security"}`
                     }
                     key={`${x.type}-${x.id}`}
                   >
