@@ -57,6 +57,10 @@ export const assetCreateSchema = z
     securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
   })
   .strict();
+const clientMetadataSchema = z
+  .string()
+  .max(2048)
+  .transform((value) => value.trim().slice(0, 100));
 export const playbackSessionSchema = z
   .object({
     siteId: idSchema,
@@ -74,9 +78,9 @@ export const playbackSessionSchema = z
     displayLabel: z.string().max(180).optional(),
     client: z
       .object({
-        browser: z.string().max(100).optional(),
-        os: z.string().max(100).optional(),
-        deviceName: z.string().max(100).optional(),
+        browser: clientMetadataSchema.optional(),
+        os: clientMetadataSchema.optional(),
+        deviceName: clientMetadataSchema.optional(),
       })
       .default({}),
   })
