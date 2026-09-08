@@ -215,7 +215,8 @@ function segmentWorkerRuntime() {
   const auth = () => ({ Authorization: `Bearer ${token}`, "content-type": "application/json" });
   async function json(response) {
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.error?.message || `Protected request failed (${response.status})`);
+    if (!response.ok)
+      throw new Error(data?.error?.message || `Protected request failed (${response.status})`);
     return data;
   }
   self.onmessage = async ({ data }) => {
@@ -224,7 +225,12 @@ function segmentWorkerRuntime() {
         token = data.token;
         baseUrl = data.baseUrl;
         const pair = await crypto.subtle.generateKey(
-          { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+          {
+            name: "RSA-OAEP",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: "SHA-256",
+          },
           false,
           ["encrypt", "decrypt"],
         );
@@ -269,7 +275,11 @@ function segmentWorkerRuntime() {
             method: "POST",
             credentials: "include",
             headers: auth(),
-            body: JSON.stringify({ track: data.track, variant: data.variant, sequence: data.sequence }),
+            body: JSON.stringify({
+              track: data.track,
+              variant: data.variant,
+              sequence: data.sequence,
+            }),
           }),
         );
         const response = await fetch(
@@ -288,12 +298,22 @@ function segmentWorkerRuntime() {
           await response.arrayBuffer(),
         );
         self.postMessage(
-          { type: "segment", id: data.id, track: data.track, sequence: data.sequence, buffer: decrypted },
+          {
+            type: "segment",
+            id: data.id,
+            track: data.track,
+            sequence: data.sequence,
+            buffer: decrypted,
+          },
           [decrypted],
         );
       }
     } catch (error) {
-      self.postMessage({ type: "error", id: data.id, message: error.message || "Protected playback failed" });
+      self.postMessage({
+        type: "error",
+        id: data.id,
+        message: error.message || "Protected playback failed",
+      });
     }
   };
 }
@@ -472,7 +492,8 @@ function chooseVideoVariant(variants) {
   const candidates = variants
     .map((item, index) => ({ item, index }))
     .sort((a, b) => Number(a.item.height) - Number(b.item.height));
-  return (candidates.filter(({ item }) => Number(item.height) <= target).pop() || candidates[0]).index;
+  return (candidates.filter(({ item }) => Number(item.height) <= target).pop() || candidates[0])
+    .index;
 }
 
 function appendBuffer(sourceBuffer, buffer) {
@@ -497,7 +518,10 @@ function appendBuffer(sourceBuffer, buffer) {
 
 function bufferedAhead(video) {
   for (let index = 0; index < video.buffered.length; index += 1)
-    if (video.buffered.start(index) <= video.currentTime && video.buffered.end(index) >= video.currentTime)
+    if (
+      video.buffered.start(index) <= video.currentTime &&
+      video.buffered.end(index) >= video.currentTime
+    )
       return video.buffered.end(index) - video.currentTime;
   return 0;
 }

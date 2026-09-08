@@ -161,7 +161,9 @@ function protectedAdaptiveStreams(player, profile) {
     profile: profile.name,
   });
   const video = formats
-    .filter((item) => /^\s*video\/mp4/i.test(item.mimeType || "") && /avc1/i.test(item.mimeType || ""))
+    .filter(
+      (item) => /^\s*video\/mp4/i.test(item.mimeType || "") && /avc1/i.test(item.mimeType || ""),
+    )
     .sort((a, b) => Number(b.height) - Number(a.height) || Number(b.bitrate) - Number(a.bitrate))
     .slice(0, 4)
     .map((item) => ({
@@ -172,7 +174,9 @@ function protectedAdaptiveStreams(player, profile) {
       qualityLabel: item.qualityLabel || `${Number(item.height || 0)}p`,
     }));
   const audio = formats
-    .filter((item) => /^\s*audio\/mp4/i.test(item.mimeType || "") && /mp4a/i.test(item.mimeType || ""))
+    .filter(
+      (item) => /^\s*audio\/mp4/i.test(item.mimeType || "") && /mp4a/i.test(item.mimeType || ""),
+    )
     .sort((a, b) => Number(b.bitrate) - Number(a.bitrate))
     .slice(0, 2)
     .map((item) => ({ ...normalize(item), audioQuality: item.audioQuality || null }));

@@ -11,7 +11,12 @@ function decodeB64(value) {
   return JSON.parse(atob(value));
 }
 
-export async function verifyPlaybackToken(token, env, nowSeconds = Math.floor(Date.now() / 1000)) {
+export async function verifyPlaybackToken(
+  token,
+  env,
+  nowSeconds = Math.floor(Date.now() / 1000),
+  allowExpiredSeconds = 0,
+) {
   const [kid, body, signature, extra] = String(token || "").split(".");
   if (!kid || !body || !signature || extra) throw securityError("INVALID_TOKEN", 401);
   const ring = decodeB64(env.PLAYBACK_PUBLIC_KEYS_B64 || "W10=");
@@ -28,7 +33,10 @@ export async function verifyPlaybackToken(token, env, nowSeconds = Math.floor(Da
   );
   if (!valid) throw securityError("INVALID_TOKEN", 401);
   const payload = decodeJsonB64Url(body);
-  if (!Number.isFinite(payload.exp) || payload.exp <= nowSeconds)
+  if (
+    !Number.isFinite(payload.exp) ||
+    payload.exp + Math.max(0, Number(allowExpiredSeconds || 0)) <= nowSeconds
+  )
     throw securityError("TOKEN_EXPIRED", 401);
   if (
     payload.iss !== "the-unpirator" ||

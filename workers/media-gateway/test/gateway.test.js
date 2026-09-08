@@ -6,6 +6,7 @@ import { rewriteHlsManifest } from "../src/hls.js";
 import { assertSourceUrl } from "../src/origin-policy.js";
 import { parseSidx } from "../src/protected-media.js";
 import { SessionState } from "../src/session-state.js";
+import { verifyPlaybackToken } from "../src/token.js";
 const aid = "12345678-1234-1234-1234-123456789012";
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const env = {
@@ -60,6 +61,14 @@ describe("gateway authorization", () => {
       ctx,
     );
     expect(r.status).toBe(401);
+  });
+  it("permits a recently expired signed token only when refresh grace is explicit", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const value = token({ iat: now - 100, exp: now - 10 });
+    await expect(verifyPlaybackToken(value, env, now)).rejects.toMatchObject({
+      code: "TOKEN_EXPIRED",
+    });
+    await expect(verifyPlaybackToken(value, env, now, 15 * 60)).resolves.toMatchObject({ aid });
   });
   it("rejects a token for another asset", async () => {
     const r = await gateway.fetch(
@@ -126,7 +135,8 @@ describe("media delivery", () => {
     const buffer = new ArrayBuffer(44);
     const view = new DataView(buffer);
     view.setUint32(0, 44);
-    for (const [index, value] of [..."sidx"].entries()) view.setUint8(4 + index, value.charCodeAt(0));
+    for (const [index, value] of [..."sidx"].entries())
+      view.setUint8(4 + index, value.charCodeAt(0));
     view.setUint32(12, 1);
     view.setUint32(16, 1000);
     view.setUint32(20, 0);

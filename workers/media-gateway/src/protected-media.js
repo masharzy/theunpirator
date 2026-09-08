@@ -14,7 +14,7 @@ export function parseSidx(buffer, indexEnd) {
   const view = new DataView(buffer);
   let boxStart = -1;
   let boxSize = 0;
-  for (let offset = 0; offset + 8 <= view.byteLength; ) {
+  for (let offset = 0; offset + 8 <= view.byteLength;) {
     const size = view.getUint32(offset);
     const type = String.fromCharCode(...new Uint8Array(buffer, offset + 4, 4));
     if (type === "sidx") {
@@ -133,7 +133,9 @@ export async function protectedManifest(env, claims, assetId, forceRefresh = fal
     video: videos,
     audio: audios,
   };
-  await env.SOURCE_CACHE.put(key, JSON.stringify(manifest), { expirationTtl: MANIFEST_TTL_SECONDS });
+  await env.SOURCE_CACHE.put(key, JSON.stringify(manifest), {
+    expirationTtl: MANIFEST_TTL_SECONDS,
+  });
   return manifest;
 }
 
@@ -150,8 +152,7 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
   const response = await fetchRange(stream, source, range);
   const body = await response.arrayBuffer();
-  if (body.byteLength > 16 * 1024 * 1024)
-    throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
+  if (body.byteLength > 16 * 1024 * 1024) throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
   return { body, contentType: stream.mimeType || "application/octet-stream" };
 }
 
@@ -169,10 +170,6 @@ export async function encryptProtectedChunk(body, keyBase64, context) {
   );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const additionalData = new TextEncoder().encode(context);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, additionalData },
-    key,
-    body,
-  );
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData }, key, body);
   return { encrypted, iv: btoa(String.fromCharCode(...iv)) };
 }
