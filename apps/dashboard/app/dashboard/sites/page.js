@@ -4,6 +4,104 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const METHODS = [
+  { id: "dns", label: "DNS record", note: "Best for custom domains" },
+  { id: "meta", label: "Secret code", note: "Paste one line into your homepage" },
+  { id: "file", label: "Text file", note: "Best for Vercel and simple hosting" },
+];
+
+function VerificationPanel({ siteId, domain, busy, onVerify }) {
+  const [method, setMethod] = useState("file");
+  const [copied, setCopied] = useState("");
+  const copy = async (value, field) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(field);
+    window.setTimeout(() => setCopied(""), 1600);
+  };
+  const details = {
+    dns: [
+      ["Name", domain.dns.name],
+      ["Value", domain.dns.value],
+    ],
+    meta: [["Paste inside your homepage <head>", domain.meta.value]],
+    file: [
+      ["Create", `public/${domain.file.name}`],
+      ["Put this inside", domain.file.value],
+    ],
+  };
+  return (
+    <div className="mt-5 overflow-hidden rounded-xl border bg-background">
+      <div className="border-b bg-[#f8f9f4] p-4">
+        <p className="text-sm font-semibold">Choose one easy verification method</p>
+        <p className="mt-1 text-xs text-muted-foreground">Only one method is required.</p>
+        <div
+          className="mt-4 grid gap-2 sm:grid-cols-3"
+          role="tablist"
+          aria-label="Verification method"
+        >
+          {METHODS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={method === item.id}
+              onClick={() => setMethod(item.id)}
+              className={`rounded-lg border p-3 text-left transition ${
+                method === item.id
+                  ? "border-[#779736] bg-[#eff7d9] shadow-sm"
+                  : "bg-white hover:border-[#a8b58b]"
+              }`}
+            >
+              <span className="block text-sm font-medium">{item.label}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{item.note}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-4" role="tabpanel">
+        {method === "file" && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            In Next.js, create the file inside the <strong>public</strong> folder. No route or
+            environment variable is needed.
+          </p>
+        )}
+        <dl className="space-y-3">
+          {details[method].map(([label, value], index) => {
+            const field = `${method}-${index}`;
+            return (
+              <div key={label}>
+                <dt className="mb-1 text-xs font-medium text-muted-foreground">{label}</dt>
+                <dd className="flex items-start gap-2">
+                  <code className="min-w-0 flex-1 break-all rounded-md bg-muted px-3 py-2 text-xs">
+                    {value}
+                  </code>
+                  <Button size="sm" variant="outline" onClick={() => copy(value, field)}>
+                    {copied === field ? "Copied" : "Copy"}
+                  </Button>
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+        {method === "file" && (
+          <p className="mt-3 break-all text-xs text-muted-foreground">
+            We will check: <span className="font-medium text-foreground">{domain.file.url}</span>
+          </p>
+        )}
+        <Button
+          className="mt-4"
+          size="sm"
+          disabled={busy}
+          onClick={() => onVerify(siteId, domain.id, method)}
+        >
+          {busy ? "Checking..." : `Verify with ${METHODS.find((item) => item.id === method).label}`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
   const [items, setItems] = useState([]),
     [name, setName] = useState(""),
@@ -44,11 +142,14 @@ export default function Page() {
       setError(e.message);
     }
   }
-  async function verify(siteId, id) {
+  async function verify(siteId, id, method) {
     setBusy(true);
     setError("");
     try {
-      await api(`/v1/sites/${siteId}/domains/${id}/verify`, { method: "POST" });
+      await api(`/v1/sites/${siteId}/domains/${id}/verify`, {
+        method: "POST",
+        body: JSON.stringify({ method }),
+      });
       await showDomains(siteId);
     } catch (e) {
       setError(e.message);
@@ -87,7 +188,7 @@ export default function Page() {
                 required
               />
             </label>
-            <Button disabled={busy}>{busy ? "Saving…" : "Add site"}</Button>
+            <Button disabled={busy}>{busy ? "Saving..." : "Add site"}</Button>
           </form>
         </CardContent>
       </Card>
@@ -127,29 +228,12 @@ export default function Page() {
                       </span>
                     </div>
                     {!d.verifiedAt && (
-                      <>
-                        <p className="mt-3 text-xs text-muted-foreground">
-                          Add this TXT record with your DNS provider, then check verification.
-                        </p>
-                        <dl className="mt-3 space-y-2 break-all text-xs">
-                          <div>
-                            <dt className="font-medium">Name</dt>
-                            <dd>{d.dns.name}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium">Value</dt>
-                            <dd>{d.dns.value}</dd>
-                          </div>
-                        </dl>
-                        <Button
-                          className="mt-4"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => verify(s.id, d.id)}
-                        >
-                          Check DNS verification
-                        </Button>
-                      </>
+                      <VerificationPanel
+                        siteId={s.id}
+                        domain={d}
+                        busy={busy}
+                        onVerify={verify}
+                      />
                     )}
                   </div>
                 ))}
