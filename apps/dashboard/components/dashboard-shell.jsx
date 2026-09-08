@@ -4,12 +4,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
+  BookMarked,
   Bell,
   BookOpen,
   ChevronDown,
   Clapperboard,
   CreditCard,
   Gauge,
+  FileClock,
+  FileSearch,
+  Headphones,
   KeyRound,
   LogOut,
   Menu,
@@ -18,6 +22,7 @@ import {
   ReceiptText,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Users,
   WalletCards,
   Waypoints,
@@ -31,12 +36,10 @@ import { useAuth } from "@/components/auth-provider";
 
 const groups = [
   [
-    "Workspace",
-    [
-      [Gauge, "/dashboard", "Overview"],
-      [BookOpen, "/dashboard/onboarding", "Onboarding"],
-    ],
+    "Overview",
+    [[Gauge, "/dashboard", "Overview"]],
   ],
+  ["Setup", [[BookOpen, "/dashboard/onboarding", "Onboarding"]]],
   [
     "Media",
     [
@@ -44,31 +47,49 @@ const groups = [
       [PlugZap, "/dashboard/connections", "Connections"],
       [Clapperboard, "/dashboard/assets", "Assets"],
       [Users, "/dashboard/viewers", "Viewers"],
+      [MonitorSmartphone, "/dashboard/devices", "Devices"],
       [MonitorSmartphone, "/dashboard/sessions", "Sessions"],
     ],
   ],
-  ["Security", [[ShieldAlert, "/dashboard/security", "Security Center"]]],
+  [
+    "Security",
+    [
+      [ShieldAlert, "/dashboard/security", "Security Center"],
+      [ShieldCheck, "/dashboard/policies", "Policies"],
+    ],
+  ],
   [
     "Developer",
     [
       [KeyRound, "/dashboard/api-keys", "API Keys"],
       [Webhook, "/dashboard/webhooks", "Webhooks"],
+      [PlugZap, "/dashboard/integration", "Integration"],
+      [FileSearch, "/dashboard/logs", "Logs"],
     ],
   ],
   [
     "Business",
     [
-      [WalletCards, "/dashboard/plans", "Plans"],
-      [Activity, "/dashboard/usage", "Usage"],
+      [WalletCards, "/dashboard/plans", "Plan"],
+      [Activity, "/dashboard/usage", "Usage & Analytics"],
       [ReceiptText, "/dashboard/payments", "Payments"],
+      [FileClock, "/dashboard/billing-history", "Billing History"],
     ],
   ],
   [
-    "Manage",
+    "Workspace",
     [
       [Users, "/dashboard/team", "Team"],
+      [FileSearch, "/dashboard/audit", "Audit Log"],
       [Settings, "/dashboard/settings", "Settings"],
       [CreditCard, "/dashboard/account", "Account"],
+    ],
+  ],
+  [
+    "Help",
+    [
+      [BookMarked, "/docs", "Documentation"],
+      [Headphones, "/dashboard/support", "Support"],
     ],
   ],
 ];
@@ -127,6 +148,7 @@ export function DashboardShell({ children }) {
   const planLabel = billing?.subscription?.planName || "No active plan";
   const sitesUsed = summary?.counts?.sites ?? 0;
   const sitesLimit = billing?.entitlements?.max_sites;
+  const usagePercent = sitesLimit ? Math.min(100, Math.round((sitesUsed / sitesLimit) * 100)) : 0;
 
   const nav = (
     <>
@@ -238,12 +260,35 @@ export function DashboardShell({ children }) {
           >
             <Menu size={18} />
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-[#2e3929]">
-              {activeMembership?.tenantName || "Workspace"}
-            </p>
-            <p className="text-[10px] uppercase tracking-[.14em] text-[#8c9586]">{planLabel}</p>
+          <div className="min-w-0 flex-1 sm:max-w-56">
+            <label className="sr-only" htmlFor="top-workspace-switcher">
+              Switch workspace
+            </label>
+            <select
+              id="top-workspace-switcher"
+              className="w-full truncate bg-transparent text-sm font-semibold text-[#2e3929] outline-none"
+              value={auth?.activeTenantId || ""}
+              onChange={(event) => switchWorkspace(event.target.value)}
+            >
+              {(auth?.memberships || []).map((membership) => (
+                <option key={membership.tenantId} value={membership.tenantId}>
+                  {membership.tenantName}
+                </option>
+              ))}
+            </select>
           </div>
+          <span className="hidden rounded-full bg-[#edf5d8] px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#536b31] sm:inline-flex">
+            {planLabel}
+          </span>
+          <div className="hidden w-24 md:block" aria-label={`${usagePercent}% of site allowance used`}>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
+              <div className="h-full rounded-full bg-[#7d9853]" style={{ width: `${usagePercent}%` }} />
+            </div>
+            <p className="mt-1 text-[9px] text-[#7d8776]">{usagePercent}% usage</p>
+          </div>
+          <Link href="/docs" className="hidden text-xs font-semibold text-[#5f6b58] sm:inline-flex">
+            Docs
+          </Link>
           <Link
             href="/dashboard/notifications"
             className="relative rounded-xl border border-[#dce2d4] bg-white p-2.5 text-[#56634e]"
@@ -264,6 +309,13 @@ export function DashboardShell({ children }) {
               Admin Console
             </Link>
           )}
+          <Link
+            href="/dashboard/account"
+            className="grid size-9 place-items-center rounded-full bg-[#172014] text-xs font-bold uppercase text-white"
+            aria-label="Open account settings"
+          >
+            {auth?.account?.email?.slice(0, 1) || "A"}
+          </Link>
         </header>
         <main className="p-4 md:p-8 lg:p-10">
           {auth?.account && !auth.account.emailVerified && (
