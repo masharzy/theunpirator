@@ -2,13 +2,17 @@ export { SessionState } from "./session-state.js";
 import { verifyPlaybackToken, securityError } from "./token.js";
 import { proxyHlsObject, proxyPrimary } from "./proxy.js";
 import { assertOrigin } from "./proxy.js";
-import { getSource } from "./source.js";
+import { getAllowedOrigins } from "./source.js";
 import {
   encryptProtectedChunk,
   protectedManifest,
   protectedPlainChunk,
 } from "./protected-media.js";
 import { emitTelemetry } from "./telemetry.js";
+import {
+  createYoutubeAttestation,
+  createYoutubeIntegrityToken,
+} from "./youtube-attestation.js";
 
 const PROTECTED_PLAYER_BUILD = "protected-v1";
 
@@ -49,8 +53,7 @@ function toBase64(bytes) {
   return btoa(value);
 }
 async function assertProtectedOrigin(request, env, claims, assetId) {
-  const source = await getSource(env, claims, assetId);
-  assertOrigin(request, source.allowedOrigins, env);
+  assertOrigin(request, await getAllowedOrigins(env, claims, assetId), env);
 }
 async function assertSession(env, claims) {
   const stub = await sessionStub(env, claims.psid);
@@ -125,7 +128,7 @@ export default {
         return new Response(null, { status: 204 });
       }
       const match =
-        /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|bootstrap|manifest|integrity|ticket|chunk\/(video|audio)\/(\d+)\/(\d+)|hls\/([a-f0-9]{40}))$/.exec(
+        /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|bootstrap|manifest|integrity|ticket|attestation\/create|attestation\/integrity|chunk\/(video|audio)\/(\d+)\/(\d+)|hls\/([a-f0-9]{40}))$/.exec(
           url.pathname,
         );
       if (!match || !["GET", "HEAD", "POST"].includes(request.method))
@@ -141,6 +144,30 @@ export default {
       currentClaims = claims;
       if (claims.aid !== assetId) throw securityError("ASSET_TOKEN_MISMATCH", 403);
       await assertSession(env, claims);
+      if (request.method === "POST" && mode === "attestation/create") {
+        assertAllowedProtectedBrowser(request);
+        await assertProtectedOrigin(request, env, claims, assetId);
+        return Response.json(
+          { challenge: await createYoutubeAttestation(request.headers.get("user-agent") || "") },
+          {
+            headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+          },
+        );
+      }
+      if (request.method === "POST" && mode === "attestation/integrity") {
+        assertAllowedProtectedBrowser(request);
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const body = await request.json();
+        return Response.json(
+          await createYoutubeIntegrityToken(
+            request.headers.get("user-agent") || "",
+            body?.botguardResponse,
+          ),
+          {
+            headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+          },
+        );
+      }
       if (request.method === "POST" && mode === "bootstrap") {
         assertAllowedProtectedBrowser(request);
         await assertProtectedOrigin(request, env, claims, assetId);
@@ -169,7 +196,7 @@ export default {
           body: JSON.stringify({ keyBase64: toBase64(mediaKey) }),
         });
         if (!stored.ok) throw securityError("SESSION_UNKNOWN", 403);
-        const manifest = await protectedManifest(env, claims, assetId);
+        const manifest = await protectedManifest(env, claims, assetId, false, body.providerProof);
         return Response.json(
           { manifest, wrappedKey: toBase64(wrappedKey), algorithm: "AES-GCM" },
           {
@@ -246,7 +273,16 @@ export default {
           },
         });
       }
-      if (["bootstrap", "manifest", "integrity", "ticket"].includes(mode))
+      if (
+        [
+          "bootstrap",
+          "manifest",
+          "integrity",
+          "ticket",
+          "attestation/create",
+          "attestation/integrity",
+        ].includes(mode)
+      )
         throw securityError("METHOD_NOT_ALLOWED", 405);
       if (request.method === "POST" && mode === "refresh") {
         await assertProtectedOrigin(request, env, claims, assetId);

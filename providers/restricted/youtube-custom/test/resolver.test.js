@@ -17,7 +17,11 @@ describe("YouTube custom resolver", () => {
       "fetch",
       vi
         .fn()
-        .mockResolvedValueOnce(new Response('{"visitorData":"visitor-1"}'))
+        .mockResolvedValueOnce(
+          new Response(
+            '{"visitorData":"visitor-1","INNERTUBE_API_KEY":"test-key","STS":20697}',
+          ),
+        )
         .mockResolvedValueOnce(
           Response.json({
             playabilityStatus: { status: "OK" },
@@ -67,10 +71,18 @@ describe("YouTube custom resolver", () => {
 
     const source = await youtubeCustomProvider.resolve({
       asset: { providerReference: "https://www.youtube.com/watch?v=abc123DEF45" },
+      context: {
+        providerProof: {
+          type: "youtube_web",
+          contentBinding: "abc123DEF45",
+          token: "A".repeat(80),
+        },
+      },
     });
     expect(source.url).toBeNull();
     expect(source.allowedHosts).toEqual(["r1---sn-test.googlevideo.com"]);
     expect(source.delivery.mode).toBe("protected_segments");
+    expect(source.delivery.streams.video[0].url).toMatch(/[?&]cpn=[A-Za-z0-9_-]{16}/);
     expect(source.delivery.streams.video[0]).toMatchObject({ height: 720, codec: "avc1.42001E" });
     expect(source.delivery.streams.audio[0]).toMatchObject({ codec: "mp4a.40.2" });
     expect(source.metadata).toMatchObject({ title: "Authorized lesson", height: 720 });

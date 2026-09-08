@@ -287,6 +287,10 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           : asset.provider === "hls"
             ? "hls"
             : "native",
+      attestation:
+        asset.provider === "youtube_custom"
+          ? { provider: "youtube", contentBinding: youtubeVideoId(asset.providerReference) }
+          : null,
       sessionExpiresAt: expiresAt,
       watermark: (await featureEnabled(db, "dynamic_watermark", tenantId, true))
         ? {

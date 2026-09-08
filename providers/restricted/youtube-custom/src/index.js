@@ -1,28 +1,52 @@
 const WATCH_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0";
+  "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)";
 const PROFILES = [
   {
     name: "IOS",
-    version: "21.03.2",
-    userAgent:
-      "com.google.ios.youtube/21.03.2 (iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; en_US)",
+    version: "20.11.6",
+    userAgent: "com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)",
     extra: {
-      deviceMake: "Apple",
-      deviceModel: "iPhone16,2",
+      deviceModel: "iPhone10,4",
       osName: "iOS",
-      osVersion: "18.7.2.22H124",
+      osVersion: "16.7.7.20H330",
     },
   },
   {
-    name: "ANDROID",
-    version: "21.03.36",
-    userAgent: "com.google.android.youtube/21.03.36 (Linux; U; Android 16; en_US) gzip",
-    extra: { androidSdkVersion: 36, osName: "Android", osVersion: "16" },
+    name: "VISIONOS",
+    version: "1.02",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+    extra: {
+      deviceMake: "Apple",
+      deviceModel: "RealityDevice17,1",
+      osName: "visionOS",
+      osVersion: "26.5.23O471",
+    },
+  },
+  {
+    name: "MWEB",
+    version: "2.20260205.04.01",
+    userAgent: WATCH_USER_AGENT,
+    webPo: true,
+    extra: {
+      osName: "iPad",
+      osVersion: "16_7_10",
+      browserName: "Safari",
+      browserVersion: "16.6",
+      platform: "MOBILE",
+      clientFormFactor: "UNKNOWN_FORM_FACTOR",
+    },
   },
 ];
 
 function providerError(message, code = "YOUTUBE_RESOLVE_FAILED", status = 502) {
   return Object.assign(new Error(message), { code, status });
+}
+
+function createPlaybackNonce() {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => alphabet[byte & 63]).join("");
 }
 
 export function extractYoutubeVideoId(value) {
@@ -77,17 +101,27 @@ async function readTextLimited(response, maxBytes) {
   return text + decoder.decode();
 }
 
-async function fetchVisitorData(videoId) {
+function watchConfigFrom(html) {
+  const visitorData = visitorDataFrom(html);
+  const apiKey = /"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/.exec(html)?.[1] || null;
+  const signatureTimestamp = Number(/"STS"\s*:\s*(\d+)/.exec(html)?.[1] || 0);
+  if (!apiKey || !signatureTimestamp)
+    throw providerError("YouTube watch configuration was unavailable");
+  return { visitorData, apiKey, signatureTimestamp };
+}
+
+async function fetchWatchConfig(videoId) {
   const response = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=en`, {
     headers: { "user-agent": WATCH_USER_AGENT, "accept-language": "en-US,en;q=0.9" },
     redirect: "follow",
     signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) return null;
-  return visitorDataFrom(await readTextLimited(response, 2_000_000));
+  if (!response.ok) throw providerError(`YouTube watch page returned HTTP ${response.status}`);
+  return watchConfigFrom(await readTextLimited(response, 2_000_000));
 }
 
-async function requestPlayer(videoId, visitorData, region, profile) {
+async function requestPlayer(videoId, watchConfig, region, profile, proofToken) {
+  const { visitorData, apiKey, signatureTimestamp } = watchConfig;
   const client = {
     clientName: profile.name,
     clientVersion: profile.version,
@@ -97,8 +131,9 @@ async function requestPlayer(videoId, visitorData, region, profile) {
     ...profile.extra,
     ...(visitorData ? { visitorData } : {}),
   };
+  const cpn = createPlaybackNonce();
   const response = await fetch(
-    `https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&t=${crypto.randomUUID()}&id=${videoId}`,
+    `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(apiKey)}&prettyPrint=false&t=${crypto.randomUUID()}&id=${videoId}`,
     {
       method: "POST",
       headers: {
@@ -106,20 +141,35 @@ async function requestPlayer(videoId, visitorData, region, profile) {
         "user-agent": profile.userAgent,
         "accept-language": "en-US,en;q=0.9",
         "x-goog-api-format-version": "2",
+        origin: "https://m.youtube.com",
+        referer: "https://m.youtube.com/",
         ...(visitorData ? { "x-goog-visitor-id": visitorData } : {}),
       },
       body: JSON.stringify({
-        context: { client },
+        context: {
+          client,
+          user: { lockedSafetyMode: false },
+          request: { useSsl: true },
+        },
         videoId,
+        cpn,
         contentCheckOk: true,
         racyCheckOk: true,
-        playbackContext: { contentPlaybackContext: { html5Preference: "HTML5_PREF_WANTS" } },
+        ...(profile.webPo
+          ? { serviceIntegrityDimensions: { poToken: proofToken } }
+          : {}),
+        playbackContext: {
+          contentPlaybackContext: {
+            html5Preference: "HTML5_PREF_WANTS",
+            signatureTimestamp,
+          },
+        },
       }),
       signal: AbortSignal.timeout(12_000),
     },
   );
   if (!response.ok) throw providerError(`YouTube player returned HTTP ${response.status}`);
-  return JSON.parse(await readTextLimited(response, 4_000_000));
+  return { player: JSON.parse(await readTextLimited(response, 4_000_000)), cpn };
 }
 
 function isAllowedMediaUrl(value) {
@@ -138,18 +188,57 @@ function codecFrom(mimeType = "") {
   return /codecs="([^"]+)"/i.exec(mimeType)?.[1] || "";
 }
 
-function protectedAdaptiveStreams(player, profile) {
-  const formats = (player.streamingData?.adaptiveFormats || []).filter(
+function urlWithProof(value, proofToken, cpn) {
+  const url = new URL(value);
+  url.searchParams.set("cpn", cpn);
+  if (proofToken) url.searchParams.set("pot", proofToken);
+  return url.toString();
+}
+
+let cachedPlayer;
+let cachedPlayerExpiresAt = 0;
+
+async function getYoutubePlayer() {
+  if (cachedPlayer && Date.now() < cachedPlayerExpiresAt) return cachedPlayer;
+  cachedPlayer = await Player.create(undefined, fetch);
+  cachedPlayerExpiresAt = Date.now() + 30 * 60 * 1000;
+  return cachedPlayer;
+}
+
+async function protectedAdaptiveStreams(response, profile, proofToken, cpn) {
+  const candidates = (response.streamingData?.adaptiveFormats || []).filter(
     (item) =>
-      isAllowedMediaUrl(item.url) &&
       /^\s*(video|audio)\/mp4/i.test(item.mimeType || "") &&
       item.initRange?.start != null &&
       item.initRange?.end != null &&
       item.indexRange?.start != null &&
       item.indexRange?.end != null,
   );
+  const requiresDecipher = candidates.some((item) => {
+    if (!item.url) return true;
+    try {
+      return new URL(item.url).searchParams.has("n");
+    } catch {
+      return true;
+    }
+  });
+  const decipherer = requiresDecipher ? await getYoutubePlayer() : null;
+  const formats = (
+    await Promise.all(
+      candidates.map(async (item) => {
+        try {
+          const url = decipherer
+            ? await decipherer.decipher(item.url, item.signatureCipher, item.cipher)
+            : item.url;
+          return isAllowedMediaUrl(url) ? { ...item, url } : null;
+        } catch {
+          return null;
+        }
+      }),
+    )
+  ).filter(Boolean);
   const normalize = (item) => ({
-    url: item.url,
+    url: urlWithProof(item.url, profile.webPo ? proofToken : null, cpn),
     hostname: new URL(item.url).hostname,
     mimeType: (item.mimeType || "application/octet-stream").split(";")[0],
     codec: codecFrom(item.mimeType),
@@ -188,30 +277,42 @@ function expiryFrom(url) {
   return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null;
 }
 
-async function resolveYoutube(sourceUrl) {
+async function resolveYoutube(sourceUrl, proof) {
   const videoId = extractYoutubeVideoId(sourceUrl);
   if (!videoId) throw providerError("Invalid YouTube video URL", "INVALID_YOUTUBE_URL", 400);
-  const visitorData = await fetchVisitorData(videoId).catch(() => null);
-  const attempts = [
-    [visitorData, "US"],
-    [null, "US"],
-    [visitorData, "BD"],
-    [null, "BD"],
-  ].filter(
-    ([visitor], index, all) =>
-      all.findIndex(([v, r]) => v === visitor && r === all[index][1]) === index,
-  );
+  if (
+    proof?.type !== "youtube_web" ||
+    proof.contentBinding !== videoId ||
+    typeof proof.token !== "string" ||
+    proof.token.length < 40 ||
+    proof.token.length > 4096 ||
+    !/^[A-Za-z0-9_.=-]+$/.test(proof.token)
+  )
+    throw providerError("YouTube browser attestation is required", "ATTESTATION_REQUIRED", 403);
+  const watchConfig = await fetchWatchConfig(videoId);
+  const attempts = ["US", "BD"];
   let lastReason = "No compatible protected MP4 streams were returned";
-  for (const [visitor, region] of attempts) {
+  for (const region of attempts) {
     for (const profile of PROFILES) {
       try {
-        const player = await requestPlayer(videoId, visitor, region, profile);
+        const { player, cpn } = await requestPlayer(
+          videoId,
+          watchConfig,
+          region,
+          profile,
+          proof.token,
+        );
         const status = player.playabilityStatus?.status;
         if (status !== "OK") {
           lastReason = player.playabilityStatus?.reason || lastReason;
           continue;
         }
-        const protectedStreams = protectedAdaptiveStreams(player, profile);
+        const protectedStreams = await protectedAdaptiveStreams(
+          player,
+          profile,
+          proof.token,
+          cpn,
+        );
         if (!protectedStreams) continue;
         const primary = protectedStreams.video[0];
         const allowedHosts = [
@@ -245,7 +346,19 @@ async function resolveYoutube(sourceUrl) {
 
 export const youtubeCustomProvider = {
   name: "youtube_custom",
-  async resolve({ asset }) {
-    return resolveYoutube(asset.providerReference);
+  async resolve({ asset, context }) {
+    return resolveYoutube(asset.providerReference, context?.providerProof);
   },
+};
+import { getQuickJSWASMModule, shouldInterruptAfterDeadline } from "@cf-wasm/quickjs";
+import { Platform, Player } from "youtubei.js/cf-worker";
+
+let quickJsModule;
+Platform.shim.eval = async (data) => {
+  quickJsModule ||= getQuickJSWASMModule();
+  const runtime = await quickJsModule;
+  return runtime.evalCode(`(function(){${data.output}\n})()`, {
+    memoryLimitBytes: 8 * 1024 * 1024,
+    shouldInterrupt: shouldInterruptAfterDeadline(Date.now() + 2_000),
+  });
 };

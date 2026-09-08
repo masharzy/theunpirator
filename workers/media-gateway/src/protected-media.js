@@ -1,5 +1,5 @@
 import { assertSourceUrl } from "./origin-policy.js";
-import { getSource } from "./source.js";
+import { getSource, invalidateSource } from "./source.js";
 import { securityError } from "./token.js";
 
 const MANIFEST_TTL_SECONDS = 300;
@@ -93,8 +93,37 @@ async function fetchRange(stream, source, range) {
   return response;
 }
 
-async function trackManifest(stream, source) {
-  const response = await fetchRange(stream, source, stream.indexRange);
+async function fetchTrackRange(env, claims, assetId, track, variant, range, initialSource) {
+  let source = initialSource;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const streams =
+      track === "video" ? source.delivery?.streams?.video : source.delivery?.streams?.audio;
+    const stream = streams?.[variant];
+    if (!stream) throw securityError("MEDIA_SEGMENT_INVALID", 404);
+    try {
+      return { response: await fetchRange(stream, source, range), stream, source };
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) break;
+      await invalidateSource(env, claims, assetId);
+      source = await getSource(env, claims, assetId, true);
+    }
+  }
+  throw lastError;
+}
+
+async function trackManifest(env, claims, assetId, track, variant, source) {
+  const initialStream = source.delivery.streams[track][variant];
+  const { response, stream } = await fetchTrackRange(
+    env,
+    claims,
+    assetId,
+    track,
+    variant,
+    initialStream.indexRange,
+    source,
+  );
   const index = await response.arrayBuffer();
   if (index.byteLength > 1024 * 1024) throw securityError("MEDIA_INDEX_INVALID", 502);
   return {
@@ -111,21 +140,27 @@ async function trackManifest(stream, source) {
   };
 }
 
-export async function protectedManifest(env, claims, assetId, forceRefresh = false) {
+export async function protectedManifest(
+  env,
+  claims,
+  assetId,
+  forceRefresh = false,
+  providerProof = null,
+) {
   const key = `protected:manifest:${claims.psid}:${assetId}`;
   if (!forceRefresh) {
     const cached = await env.SOURCE_CACHE.get(key, "json");
     if (cached) return cached;
   }
-  const source = await getSource(env, claims, assetId, forceRefresh);
+  const source = await getSource(env, claims, assetId, forceRefresh, providerProof);
   if (source.delivery?.mode !== "protected_segments")
     throw securityError("PROTECTED_DELIVERY_UNAVAILABLE", 409, "Protected playback unavailable");
-  const videos = await Promise.all(
-    source.delivery.streams.video.map((stream) => trackManifest(stream, source)),
-  );
-  const audios = await Promise.all(
-    source.delivery.streams.audio.map((stream) => trackManifest(stream, source)),
-  );
+  const videos = [];
+  for (let variant = 0; variant < source.delivery.streams.video.length; variant += 1)
+    videos.push(await trackManifest(env, claims, assetId, "video", variant, source));
+  const audios = [];
+  for (let variant = 0; variant < source.delivery.streams.audio.length; variant += 1)
+    audios.push(await trackManifest(env, claims, assetId, "audio", variant, source));
   const manifest = {
     version: 1,
     assetId,
@@ -150,7 +185,15 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   const descriptor = manifest[track]?.[variant];
   const range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
-  const response = await fetchRange(stream, source, range);
+  const { response } = await fetchTrackRange(
+    env,
+    claims,
+    assetId,
+    track,
+    variant,
+    range,
+    source,
+  );
   const body = await response.arrayBuffer();
   if (body.byteLength > 16 * 1024 * 1024) throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
   return { body, contentType: stream.mimeType || "application/octet-stream" };

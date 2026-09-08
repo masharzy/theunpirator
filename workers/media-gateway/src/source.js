@@ -1,13 +1,17 @@
 import { securityError } from "./token.js";
 import { youtubeCustomProvider } from "../../../providers/restricted/youtube-custom/src/index.js";
 
-export async function getSource(env, claims, assetId, forceRefresh = false) {
-  const key = `source:${claims.tid}:${assetId}`;
-  if (!forceRefresh) {
-    const cached = await env.SOURCE_CACHE.get(key, "json");
-    if (cached && (!cached.expiresAt || Date.parse(cached.expiresAt) > Date.now() + 5000))
-      return cached;
-  }
+const SOURCE_CACHE_VERSION = "v2";
+
+function sourceKey(claims, assetId) {
+  return `source:${SOURCE_CACHE_VERSION}:${claims.tid}:${assetId}:${claims.psid}`;
+}
+
+function proofKey(claims, assetId) {
+  return `provider-proof:${SOURCE_CACHE_VERSION}:${claims.psid}:${assetId}`;
+}
+
+async function fetchSourceDescriptor(env, claims, assetId) {
   const response = await fetch(
     `${env.INTERNAL_API_URL}/internal/media/resolve/${encodeURIComponent(assetId)}`,
     {
@@ -25,12 +29,45 @@ export async function getSource(env, claims, assetId, forceRefresh = false) {
       response.status >= 500 ? 502 : 403,
       "Media source unavailable",
     );
-  const data = await response.json();
+  return response.json();
+}
+
+export async function getAllowedOrigins(env, claims, assetId) {
+  const key = `source-origins:${SOURCE_CACHE_VERSION}:${claims.tid}:${assetId}`;
+  const cached = await env.SOURCE_CACHE.get(key, "json");
+  if (cached) return cached;
+  const data = await fetchSourceDescriptor(env, claims, assetId);
+  const origins = data.allowedOrigins || [];
+  await env.SOURCE_CACHE.put(key, JSON.stringify(origins), { expirationTtl: 300 });
+  return origins;
+}
+
+export async function getSource(
+  env,
+  claims,
+  assetId,
+  forceRefresh = false,
+  providerProof = null,
+) {
+  const key = sourceKey(claims, assetId);
+  if (providerProof)
+    await env.SOURCE_CACHE.put(proofKey(claims, assetId), JSON.stringify(providerProof), {
+      expirationTtl: 8 * 3600,
+    });
+  if (!forceRefresh) {
+    const cached = await env.SOURCE_CACHE.get(key, "json");
+    if (cached && (!cached.expiresAt || Date.parse(cached.expiresAt) > Date.now() + 5000))
+      return cached;
+  }
+  const data = await fetchSourceDescriptor(env, claims, assetId);
   let source = data.source;
   if (source?.resolver === "youtube_custom") {
     try {
+      const proof =
+        providerProof || (await env.SOURCE_CACHE.get(proofKey(claims, assetId), "json"));
       source = await youtubeCustomProvider.resolve({
         asset: { providerReference: source.providerReference },
+        context: { providerProof: proof },
       });
     } catch (error) {
       console.error(
@@ -54,7 +91,10 @@ export async function getSource(env, claims, assetId, forceRefresh = false) {
 }
 
 export async function invalidateSource(env, claims, assetId) {
-  await env.SOURCE_CACHE.delete(`source:${claims.tid}:${assetId}`);
+  await Promise.all([
+    env.SOURCE_CACHE.delete(sourceKey(claims, assetId)),
+    env.SOURCE_CACHE.delete(`source:${claims.tid}:${assetId}`),
+  ]);
 }
 
 export async function getHlsObject(env, assetId, objectId) {
