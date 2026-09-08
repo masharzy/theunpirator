@@ -61,6 +61,16 @@ const clientMetadataSchema = z
   .string()
   .max(2048)
   .transform((value) => value.trim().slice(0, 100));
+const playbackClientSchema = z.union([
+  z
+    .object({
+      browser: clientMetadataSchema.optional(),
+      os: clientMetadataSchema.optional(),
+      deviceName: clientMetadataSchema.optional(),
+    })
+    .strict(),
+  clientMetadataSchema.transform((browser) => ({ browser })),
+]);
 export const playbackSessionSchema = z
   .object({
     siteId: idSchema,
@@ -76,13 +86,7 @@ export const playbackSessionSchema = z
     externalUserId: z.string().min(1).max(180),
     deviceId: z.string().min(8).max(180),
     displayLabel: z.string().max(180).optional(),
-    client: z
-      .object({
-        browser: clientMetadataSchema.optional(),
-        os: clientMetadataSchema.optional(),
-        deviceName: clientMetadataSchema.optional(),
-      })
-      .default({}),
+    client: playbackClientSchema.default({}),
   })
   .strict()
   .superRefine((value, ctx) => {

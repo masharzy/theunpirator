@@ -50,6 +50,17 @@ describe("public input validation", () => {
 
     expect(result.client.browser).toBe(browser.slice(0, 100));
   });
+  it("accepts a simple client identifier", () => {
+    const result = playbackSessionSchema.parse({
+      siteId: "site",
+      assetId: "asset",
+      deviceId: "device123",
+      externalUserId: "user",
+      client: "easy-education-web",
+    });
+
+    expect(result.client).toEqual({ browser: "easy-education-web" });
+  });
   it("normalizes email addresses and rejects weak passwords", () => {
     expect(
       registerSchema.parse({
