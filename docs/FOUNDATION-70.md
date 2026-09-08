@@ -51,7 +51,7 @@ All 70 foundation requirements are represented in code, configuration, tests, or
 47. **Security tests** — signing/encryption, source allowlist, risk engine, open-proxy contract tests.
 48. **Open-proxy prevention** — Worker routes accept UUID asset IDs only; no `?url=` route exists.
 49. **Origin allowlisting** — source manager rejects resolved hosts not registered on the asset.
-50. **Domain verification** — DNS TXT challenge/verify API; only verified extra domains reach gateway allowlist.
+50. **Domain verification** — DNS TXT, homepage meta tag and fixed text-file verification; only verified domains reach the gateway allowlist.
 51. **SDK strategy** — universal JS SDK plus Next.js/PHP/Django/Laravel/WordPress thin integrations.
 52. **Public player contract** — customer backend bootstrap pattern; browser never receives customer secret API key.
 53. **Emergency controls** — global feature kill, tenant/site/asset/provider status controls, revoke-all-tenant-sessions.
@@ -65,12 +65,12 @@ All 70 foundation requirements are represented in code, configuration, tests, or
 61. **Subscription milestone 5** — plan/entitlement/subscription/usage primitives and billing dashboard API.
 62. **Security milestone 6** — devices, concurrency, risk, revoke, rate limits and security events.
 63. **Framework milestone 7** — integration samples for Next.js, PHP, Django, Laravel and WordPress.
-64. **Restricted-provider stage** — custom YouTube adapter remains isolated/non-functional until an independently authorized integration exists.
+64. **Restricted-provider stage** — custom YouTube is isolated, disabled by default, tenant-approved and resolved on demand at the gateway edge.
 65. **Foundation definition-of-done assets** — local startup docs, env template, migrations, RBAC, flags, keys, audit, CI and health supplied.
 66. **Media definition-of-done assets** — our-domain routes, source isolation, Range/HLS, revocation, allowlist and streaming implementation supplied.
 67. **Commit strategy** — logical commit plan documented in architecture history guidance; generated project is ready to initialize as a repo.
 68. **Production trust principle** — browser/front-end untrusted; authorization/signatures/state enforced server/edge-side.
-69. **Explicit non-goals** — no inspect-disable tricks, no JS URL encryption, no open proxy, no plaintext credentials, no unofficial YouTube resolver.
+69. **Explicit non-goals** — no inspect-disable tricks, no JS URL encryption, no open proxy, no plaintext credentials and no unrestricted YouTube access.
 70. **Target final architecture** — customer site → control API → signed grant → universal player → Cloudflare gateway → registered authorized origin.
 
 ## Deployment-only external work

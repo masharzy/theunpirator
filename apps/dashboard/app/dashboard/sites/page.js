@@ -228,12 +228,7 @@ export default function Page() {
                       </span>
                     </div>
                     {!d.verifiedAt && (
-                      <VerificationPanel
-                        siteId={s.id}
-                        domain={d}
-                        busy={busy}
-                        onVerify={verify}
-                      />
+                      <VerificationPanel siteId={s.id} domain={d} busy={busy} onVerify={verify} />
                     )}
                   </div>
                 ))}

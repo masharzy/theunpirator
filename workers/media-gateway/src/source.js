@@ -1,4 +1,5 @@
 import { securityError } from "./token.js";
+import { youtubeCustomProvider } from "../../../providers/restricted/youtube-custom/src/index.js";
 
 export async function getSource(env, claims, assetId, forceRefresh = false) {
   const key = `source:${claims.tid}:${assetId}`;
@@ -25,8 +26,18 @@ export async function getSource(env, claims, assetId, forceRefresh = false) {
       "Media source unavailable",
     );
   const data = await response.json();
-  const ttl = Math.max(10, Math.min(Number(data.source?.cacheTtlSeconds || 60), 300));
-  const result = { ...data.source, allowedOrigins: data.allowedOrigins || [] };
+  let source = data.source;
+  if (source?.resolver === "youtube_custom") {
+    try {
+      source = await youtubeCustomProvider.resolve({
+        asset: { providerReference: source.providerReference },
+      });
+    } catch {
+      throw securityError("SOURCE_RESOLUTION_FAILED", 502, "Media source unavailable");
+    }
+  }
+  const ttl = Math.max(10, Math.min(Number(source?.cacheTtlSeconds || 60), 300));
+  const result = { ...source, allowedOrigins: data.allowedOrigins || [] };
   await env.SOURCE_CACHE.put(key, JSON.stringify(result), { expirationTtl: Math.max(60, ttl) });
   return result;
 }

@@ -8,7 +8,9 @@ import { eq } from "drizzle-orm";
 import {
   accounts,
   accountSessions,
+  assets,
   auditLogs,
+  featureFlags,
   siteDomains,
   subscriptions,
 } from "@unpirator/db/schema";
@@ -49,6 +51,7 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
       ACTIVE_SIGNING_KID: "test",
       GATEWAY_CONTROL_SECRET: "test-control-secret",
       GATEWAY_INTERNAL_SECRET: "test-internal-secret",
+      YOUTUBE_CUSTOM_GLOBAL: "true",
     });
     const values = new Map();
     const cache = {
@@ -278,6 +281,41 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     expect(b.status).toBe(201);
     expect(a.body.sessionId).toBe(b.body.sessionId);
     expect(a.body.playbackUrl).not.toContain("media.example.com");
+  });
+  it("creates and reuses an internal YouTube asset on demand", async () => {
+    for (const [scopeType, scopeId] of [
+      ["global", "global"],
+      ["tenant", tenant],
+    ]) {
+      await database.db
+        .insert(featureFlags)
+        .values({ key: "youtube_custom", scopeType, scopeId, enabled: true })
+        .onConflictDoUpdate({
+          target: [featureFlags.key, featureFlags.scopeType, featureFlags.scopeId],
+          set: { enabled: true },
+        });
+    }
+    const youtubeInput = {
+      siteId: site,
+      source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
+      externalUserId: `youtube-viewer-${run}`,
+      deviceId: "youtube-device-integration",
+    };
+    const first = await request(app)
+      .post("/v1/playback/sessions")
+      .set("authorization", `Bearer ${apiKey.secret}`)
+      .send(youtubeInput);
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const second = await request(app)
+      .post("/v1/playback/sessions")
+      .set("authorization", `Bearer ${apiKey.secret}`)
+      .send({ ...youtubeInput, externalUserId: `youtube-viewer-2-${run}` });
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    const managed = await database.db
+      .select()
+      .from(assets)
+      .where(eq(assets.providerReference, "https://www.youtube.com/watch?v=abc123DEF45"));
+    expect(managed).toHaveLength(1);
   });
   it("enforces concurrency for new requests", async () => {
     expect((await play("new-request")).status).toBe(409);

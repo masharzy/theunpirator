@@ -83,7 +83,14 @@ export function internalRouter({
       }
       let source;
       try {
-        source = await resolveAssetSource(asset, { sessionId, tenantId }, config);
+        source =
+          asset.provider === "youtube_custom"
+            ? {
+                resolver: "youtube_custom",
+                providerReference: asset.providerReference,
+                cacheTtlSeconds: 60,
+              }
+            : await resolveAssetSource(asset, { sessionId, tenantId }, config);
         await db
           .insert(providerHealth)
           .values({
@@ -132,8 +139,10 @@ export function internalRouter({
       res.json({
         allowedOrigins,
         source: {
-          url: source.url,
-          allowedHosts: asset.allowedHosts,
+          url: source.url || null,
+          resolver: source.resolver || null,
+          providerReference: source.providerReference || null,
+          allowedHosts: source.allowedHosts || asset.allowedHosts,
           headers: source.headers || {},
           expiresAt: source.expiresAt || null,
           contentType: source.contentType || null,

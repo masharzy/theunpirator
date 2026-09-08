@@ -31,20 +31,6 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     });
   }
   async function createUnlocked({ tenantId, input, ip, userAgent }) {
-    const [asset] = await db
-      .select()
-      .from(assets)
-      .where(
-        and(
-          eq(assets.id, input.assetId),
-          eq(assets.tenantId, tenantId),
-          eq(assets.status, "active"),
-        ),
-      )
-      .limit(1);
-    if (!asset) throw notFound("Asset not found");
-    if (asset.siteId !== input.siteId)
-      throw new AppError("ASSET_SITE_MISMATCH", "Asset does not belong to this site", 403);
     const [site] = await db
       .select()
       .from(sites)
@@ -64,6 +50,62 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         "Verify at least one site domain before playback",
         409,
       );
+    let asset;
+    if (input.source) {
+      if (input.source.provider !== "youtube_custom")
+        throw new AppError("SOURCE_INVALID", "Unsupported on-demand provider", 400);
+      const enabled =
+        config.YOUTUBE_CUSTOM_GLOBAL &&
+        (await restrictedFeatureEnabled(db, "youtube_custom", tenantId));
+      if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
+      const reference = canonicalYoutubeUrl(input.source.url);
+      await db.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${site.id}:youtube:${reference}`}, 2))`,
+      );
+      [asset] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.tenantId, tenantId),
+            eq(assets.siteId, site.id),
+            eq(assets.provider, "youtube_custom"),
+            eq(assets.providerReference, reference),
+            eq(assets.status, "active"),
+          ),
+        )
+        .limit(1);
+      if (!asset) {
+        [asset] = await db
+          .insert(assets)
+          .values({
+            tenantId,
+            siteId: site.id,
+            title: input.source.title || `YouTube ${youtubeVideoId(reference)}`,
+            provider: "youtube_custom",
+            providerReference: reference,
+            allowedHosts: [],
+            securityPolicy: "strict",
+            status: "active",
+          })
+          .returning();
+      }
+    } else {
+      [asset] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, input.assetId),
+            eq(assets.tenantId, tenantId),
+            eq(assets.status, "active"),
+          ),
+        )
+        .limit(1);
+      if (!asset) throw notFound("Asset not found");
+      if (asset.siteId !== input.siteId)
+        throw new AppError("ASSET_SITE_MISMATCH", "Asset does not belong to this site", 403);
+    }
     const secure = await featureEnabled(db, "secure_gateway", tenantId, true);
     if (!secure) throw new AppError("FEATURE_DISABLED", "Secure gateway is disabled", 403);
     if (asset.provider === "youtube_custom") {
@@ -268,4 +310,31 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     return session;
   }
   return { create, createUnlocked, revoke };
+}
+
+function youtubeVideoId(value) {
+  const url = new URL(value);
+  if (url.hostname === "youtu.be") return url.pathname.split("/").filter(Boolean)[0];
+  return (
+    url.searchParams.get("v") ||
+    (["shorts", "embed", "live"].includes(url.pathname.split("/")[1])
+      ? url.pathname.split("/")[2]
+      : null)
+  );
+}
+
+function canonicalYoutubeUrl(value) {
+  let id;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (host !== "youtu.be" && host !== "youtube.com" && !host.endsWith(".youtube.com"))
+      throw new Error();
+    id = youtubeVideoId(url.toString());
+  } catch {
+    throw new AppError("INVALID_YOUTUBE_URL", "Enter a valid YouTube video URL", 400);
+  }
+  if (!/^[A-Za-z0-9_-]{6,20}$/.test(id || ""))
+    throw new AppError("INVALID_YOUTUBE_URL", "Enter a valid YouTube video URL", 400);
+  return `https://www.youtube.com/watch?v=${id}`;
 }

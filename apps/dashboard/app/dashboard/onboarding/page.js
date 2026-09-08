@@ -20,6 +20,7 @@ export default function OnboardingPage() {
   const [summary, setSummary] = useState(null);
   const [connections, setConnections] = useState([]);
   const [keys, setKeys] = useState([]);
+  const [youtubeEnabled, setYoutubeEnabled] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -27,11 +28,13 @@ export default function OnboardingPage() {
       api("/v1/workspace/summary"),
       api("/v1/workspace/connections").catch(() => ({ items: [] })),
       api("/v1/api-keys").catch(() => ({ items: [] })),
+      api("/v1/assets/providers").catch(() => ({ items: [] })),
     ])
-      .then(([summaryData, connectionData, keyData]) => {
+      .then(([summaryData, connectionData, keyData, providerData]) => {
         setSummary(summaryData);
         setConnections(connectionData.items || []);
         setKeys(keyData.items || []);
+        setYoutubeEnabled((providerData.items || []).includes("youtube_custom"));
       })
       .catch((e) => setMessage(e.message));
   }, []);
@@ -55,16 +58,16 @@ export default function OnboardingPage() {
     [
       PlugZap,
       "Save a provider connection",
-      "Encrypt reusable R2, S3, Bunny or origin credentials.",
+      "YouTube Custom needs approved access; R2, S3 and Bunny use saved credentials.",
       "/dashboard/connections",
-      connections.length > 0,
+      youtubeEnabled || connections.length > 0,
     ],
     [
       Clapperboard,
-      "Register an asset",
-      "Connect an authorized source to the protected gateway.",
+      "Connect a video source",
+      "YouTube videos are discovered automatically; other providers use registered assets.",
       "/dashboard/assets",
-      counts.assets > 0,
+      youtubeEnabled || counts.assets > 0,
     ],
     [
       KeyRound,

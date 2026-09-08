@@ -17,6 +17,25 @@ describe("public input validation", () => {
       }).success,
     ).toBe(false);
   });
+  it("accepts one on-demand YouTube source without an asset id", () => {
+    expect(
+      playbackSessionSchema.safeParse({
+        siteId: "site",
+        source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
+        deviceId: "device123",
+        externalUserId: "user",
+      }).success,
+    ).toBe(true);
+    expect(
+      playbackSessionSchema.safeParse({
+        siteId: "site",
+        assetId: "asset",
+        source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
+        deviceId: "device123",
+        externalUserId: "user",
+      }).success,
+    ).toBe(false);
+  });
   it("normalizes email addresses and rejects weak passwords", () => {
     expect(
       registerSchema.parse({

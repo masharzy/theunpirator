@@ -212,7 +212,11 @@ importers:
 
   providers/hls: {}
 
-  providers/restricted/youtube-custom: {}
+  providers/restricted/youtube-custom:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
 
   providers/s3:
     dependencies:
