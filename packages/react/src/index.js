@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useRef } from "react";
-import { mountProtectedPlayer } from "@unpirator/player";
+import { mountDirectYoutubePlayer, mountProtectedPlayer } from "@unpirator/player";
 import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 
 export function UnpiratorPlayer({
@@ -17,6 +17,7 @@ export function UnpiratorPlayer({
   headers,
   getHeaders,
   getAccessToken,
+  youtubeDirect = false,
   onReady,
   onError,
 }) {
@@ -26,6 +27,15 @@ export function UnpiratorPlayer({
   useEffect(() => {
     let disposed = false;
     let player;
+    if (youtubeDirect) {
+      try {
+        player = mountDirectYoutubePlayer({ element: root.current, src, title });
+        onReady?.(player);
+      } catch (error) {
+        onError?.(error);
+      }
+      return () => player?.destroy();
+    }
     mountProtectedPlayer({
       element: root.current,
       bootstrap: createPlaybackBootstrap({
@@ -63,6 +73,7 @@ export function UnpiratorPlayer({
     headers,
     getHeaders,
     getAccessToken,
+    youtubeDirect,
   ]);
 
   return createElement("div", {
