@@ -391,7 +391,12 @@ export default {
                 type: error.code,
                 severity: Number(error.status || 500) >= 500 ? "error" : "warning",
                 riskScore: error.code === "INVALID_TOKEN" ? 25 : 10,
-                metadata: { path: url.pathname },
+                metadata: {
+                  path: url.pathname,
+                  ...(Number.isInteger(error.upstreamStatus)
+                    ? { upstreamStatus: error.upstreamStatus }
+                    : {}),
+                },
               },
             ]
           : [],

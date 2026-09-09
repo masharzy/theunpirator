@@ -1,7 +1,7 @@
 import { securityError } from "./token.js";
 import { youtubeCustomProvider } from "../../../providers/restricted/youtube-custom/src/index.js";
 
-const SOURCE_CACHE_VERSION = "v2";
+const SOURCE_CACHE_VERSION = "v3";
 
 function sourceKey(claims, assetId) {
   return `source:${SOURCE_CACHE_VERSION}:${claims.tid}:${assetId}:${claims.psid}`;

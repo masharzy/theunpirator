@@ -66,6 +66,8 @@ describe("YouTube custom resolver", () => {
           }),
         )
         .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 }))
+        .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 }))
+        .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 }))
         .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 })),
     );
 
@@ -86,5 +88,58 @@ describe("YouTube custom resolver", () => {
     expect(source.delivery.streams.video[0]).toMatchObject({ height: 720, codec: "avc1.42001E" });
     expect(source.delivery.streams.audio[0]).toMatchObject({ codec: "mp4a.40.2" });
     expect(source.metadata).toMatchObject({ title: "Authorized lesson", height: 720 });
+  });
+
+  it("rejects a client that serves index bytes but denies later media", async () => {
+    const probes = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input, init) => {
+        const url = new URL(input);
+        if (url.pathname === "/watch")
+          return new Response(
+            '{"visitorData":"visitor-1","INNERTUBE_API_KEY":"test-key","STS":20697}',
+          );
+        if (url.pathname.endsWith("/player")) {
+          const profile = JSON.parse(init.body).context.client.clientName;
+          return Response.json({
+            playabilityStatus: { status: "OK" },
+            streamingData: {
+              adaptiveFormats: ["video", "audio"].map((track) => ({
+                url: `https://r1.googlevideo.com/videoplayback?profile=${profile}&track=${track}`,
+                mimeType:
+                  track === "video"
+                    ? 'video/mp4; codecs="avc1.42001E"'
+                    : 'audio/mp4; codecs="mp4a.40.2"',
+                contentLength: "20000000",
+                height: track === "video" ? 720 : undefined,
+                initRange: { start: "0", end: "739" },
+                indexRange: { start: "740", end: "999" },
+              })),
+            },
+          });
+        }
+        const profile = url.searchParams.get("profile");
+        const range = init.headers.range;
+        probes.push({ profile, range });
+        return new Response(null, {
+          status: range === "bytes=740-999" || profile === "VISIONOS" ? 206 : 403,
+        });
+      }),
+    );
+    const source = await youtubeCustomProvider.resolve({
+      asset: { providerReference: "https://youtube.com/watch?v=abc123DEF45" },
+      context: {
+        providerProof: {
+          type: "youtube_web",
+          contentBinding: "abc123DEF45",
+          token: "A".repeat(80),
+        },
+      },
+    });
+    expect(source.delivery.streams.video[0].profile).toBe("VISIONOS");
+    expect(probes).toContainEqual({ profile: "MWEB", range: "bytes=15000000-15001023" });
+    expect(probes).toContainEqual({ profile: "IOS", range: "bytes=15000000-15001023" });
+    expect(probes).toContainEqual({ profile: "VISIONOS", range: "bytes=15000000-15001023" });
   });
 });
