@@ -328,12 +328,15 @@ gateway log from the same attempt. Never post a complete signed playback URL pub
 
 ## Release and publishing
 
-The repository includes **Actions > Publish npm packages**. Maintainers must:
+The repository includes **Actions > Publish npm packages**. For the first release, maintainers must:
 
 1. Have publish access to the `@unpirator` npm organization.
-2. Add an npm automation token as the Actions secret `NPM_TOKEN`.
-3. Increment each released package version; npm versions are immutable.
-4. Verify CI on `main`, then manually run `Publish npm packages`.
-5. Verify installation in a clean example application.
+2. Create a granular npm token with **Read and write** package permission and **Bypass 2FA** enabled.
+3. Add that token as the GitHub Actions secret `NPM_TOKEN`.
+4. Increment each released package version; npm versions are immutable.
+5. Verify CI on `main`, then manually run `Publish npm packages`.
+6. Verify installation in a clean example application.
 
 The workflow publishes packages in dependency order. Publishing requires no database migration.
+After the first release creates every package, configure npm Trusted Publishing for
+`masharzy/theunpirator` and `publish-npm-packages.yml`, then remove the long-lived publish token.
