@@ -193,6 +193,32 @@ function urlWithProof(value, proofToken, cpn) {
   return url.toString();
 }
 
+async function probeStream(stream, profile) {
+  try {
+    const response = await fetch(stream.url, {
+      headers: {
+        range: `bytes=${stream.indexRange.start}-${stream.indexRange.end}`,
+        "user-agent": profile.userAgent,
+        referer: "https://www.youtube.com/",
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(8_000),
+    });
+    const usable = response.status === 206;
+    await response.body?.cancel();
+    return usable;
+  } catch {
+    return false;
+  }
+}
+
+async function keepReachableStreams(streams, profile) {
+  const reachable = await Promise.all(
+    streams.map(async (stream) => ((await probeStream(stream, profile)) ? stream : null)),
+  );
+  return reachable.filter(Boolean);
+}
+
 let cachedPlayer;
 let cachedPlayerExpiresAt = 0;
 
@@ -247,7 +273,7 @@ async function protectedAdaptiveStreams(response, profile, proofToken, cpn) {
     indexRange: { start: Number(item.indexRange.start), end: Number(item.indexRange.end) },
     profile: profile.name,
   });
-  const video = formats
+  const videoCandidates = formats
     .filter(
       (item) => /^\s*video\/mp4/i.test(item.mimeType || "") && /avc1/i.test(item.mimeType || ""),
     )
@@ -260,13 +286,17 @@ async function protectedAdaptiveStreams(response, profile, proofToken, cpn) {
       fps: Number(item.fps || 0),
       qualityLabel: item.qualityLabel || `${Number(item.height || 0)}p`,
     }));
-  const audio = formats
+  const audioCandidates = formats
     .filter(
       (item) => /^\s*audio\/mp4/i.test(item.mimeType || "") && /mp4a/i.test(item.mimeType || ""),
     )
     .sort((a, b) => Number(b.bitrate) - Number(a.bitrate))
     .slice(0, 2)
     .map((item) => ({ ...normalize(item), audioQuality: item.audioQuality || null }));
+  const [video, audio] = await Promise.all([
+    keepReachableStreams(videoCandidates, profile),
+    keepReachableStreams(audioCandidates, profile),
+  ]);
   return video.length && audio.length ? { video, audio } : null;
 }
 
