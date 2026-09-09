@@ -185,15 +185,7 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   const descriptor = manifest[track]?.[variant];
   const range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
-  const { response } = await fetchTrackRange(
-    env,
-    claims,
-    assetId,
-    track,
-    variant,
-    range,
-    source,
-  );
+  const { response } = await fetchTrackRange(env, claims, assetId, track, variant, range, source);
   const body = await response.arrayBuffer();
   if (body.byteLength > 16 * 1024 * 1024) throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
   return { body, contentType: stream.mimeType || "application/octet-stream" };

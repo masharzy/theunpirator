@@ -18,9 +18,7 @@ describe("YouTube custom resolver", () => {
       vi
         .fn()
         .mockResolvedValueOnce(
-          new Response(
-            '{"visitorData":"visitor-1","INNERTUBE_API_KEY":"test-key","STS":20697}',
-          ),
+          new Response('{"visitorData":"visitor-1","INNERTUBE_API_KEY":"test-key","STS":20697}'),
         )
         .mockResolvedValueOnce(
           Response.json({

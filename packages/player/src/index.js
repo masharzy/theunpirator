@@ -26,9 +26,7 @@ function encodeBase64Url(bytes) {
 function withTimeout(promise, message, timeoutMs = BOTGUARD_TIMEOUT_MS) {
   return Promise.race([
     promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(message)), timeoutMs),
-    ),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), timeoutMs)),
   ]);
 }
 
@@ -61,14 +59,7 @@ async function initializeYoutubeMinter(baseUrl, token) {
     setup = (asyncSnapshotFunction, shutdownFunction) =>
       resolve({ asyncSnapshotFunction, shutdownFunction });
   });
-  vm.a(
-    challenge.program,
-    setup,
-    true,
-    undefined,
-    () => {},
-    [[], []],
-  );
+  vm.a(challenge.program, setup, true, undefined, () => {}, [[], []]);
   const { asyncSnapshotFunction, shutdownFunction } = await withTimeout(
     functionsReady,
     "YouTube browser verification timed out",

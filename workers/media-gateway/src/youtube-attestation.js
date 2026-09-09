@@ -109,11 +109,7 @@ export async function createYoutubeIntegrityToken(userAgent, botguardResponse) {
     botguardResponse.length > MAX_BOTGUARD_RESPONSE_LENGTH
   )
     throw securityError("INVALID_REQUEST", 400, "Invalid browser attestation response");
-  const raw = await callBotGuard(
-    GENERATE_IT_URL,
-    [REQUEST_KEY, botguardResponse],
-    userAgent,
-  );
+  const raw = await callBotGuard(GENERATE_IT_URL, [REQUEST_KEY, botguardResponse], userAgent);
   let result;
   try {
     result = JSON.parse(raw);
@@ -121,11 +117,7 @@ export async function createYoutubeIntegrityToken(userAgent, botguardResponse) {
     throw securityError("ATTESTATION_RESPONSE_INVALID", 502, "Browser attestation unavailable");
   }
   const [integrityToken, estimatedTtlSeconds, mintRefreshThreshold] = result;
-  if (
-    typeof integrityToken !== "string" ||
-    !integrityToken ||
-    integrityToken.length > 16 * 1024
-  )
+  if (typeof integrityToken !== "string" || !integrityToken || integrityToken.length > 16 * 1024)
     throw securityError("ATTESTATION_RESPONSE_INVALID", 502, "Browser attestation unavailable");
   return {
     integrityToken,
