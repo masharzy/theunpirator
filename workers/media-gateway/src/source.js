@@ -78,17 +78,11 @@ export async function getSource(env, claims, assetId, forceRefresh = false, prov
       throw securityError("SOURCE_RESOLUTION_FAILED", 502, "Media source unavailable");
     }
   }
-  const configuredTtl = Math.max(
-    10,
-    Math.min(Number(source?.cacheTtlSeconds || 60), 6 * 3600),
-  );
+  const configuredTtl = Math.max(10, Math.min(Number(source?.cacheTtlSeconds || 60), 6 * 3600));
   const signedUrlTtl = source?.expiresAt
     ? Math.floor((Date.parse(source.expiresAt) - Date.now()) / 1000) - 30
     : 0;
-  const ttl = Math.max(
-    60,
-    Math.min(signedUrlTtl > 0 ? signedUrlTtl : configuredTtl, 6 * 3600),
-  );
+  const ttl = Math.max(60, Math.min(signedUrlTtl > 0 ? signedUrlTtl : configuredTtl, 6 * 3600));
   const result = { ...source, allowedOrigins: data.allowedOrigins || [] };
   // A manifest contains byte ranges for one exact resolved source. Never leave an
   // older manifest alive after replacing that source.
