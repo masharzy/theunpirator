@@ -24,8 +24,21 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @unpirator/player test
-      - run: pnpm --filter @unpirator/player publish --access public --no-git-checks
-      - run: pnpm --filter @unpirator/sdk-js publish --access public --no-git-checks
-      - run: pnpm --filter @unpirator/web-component publish --access public --no-git-checks
-      - run: pnpm --filter @unpirator/react publish --access public --no-git-checks
-      - run: pnpm --filter @unpirator/integration-nextjs publish --access public --no-git-checks
+      - name: Publish packages in dependency order
+        shell: bash
+        run: |
+          publish_package() {
+            package="$1"
+            version=$(pnpm --filter "$package" exec node -p "require('./package.json').version")
+            if npm view "$package@$version" version >/dev/null 2>&1; then
+              echo "$package@$version already exists; skipping"
+              return
+            fi
+            pnpm --filter "$package" publish --access public --no-git-checks
+          }
+
+          publish_package @unpirator/player
+          publish_package @unpirator/sdk-js
+          publish_package @unpirator/web-component
+          publish_package @unpirator/react
+          publish_package @unpirator/integration-nextjs
