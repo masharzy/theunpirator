@@ -2,6 +2,20 @@ const WATCH_USER_AGENT =
   "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)";
 const PROFILES = [
   {
+    name: "MWEB",
+    version: "2.20260205.04.01",
+    userAgent: WATCH_USER_AGENT,
+    webPo: true,
+    extra: {
+      osName: "iPad",
+      osVersion: "16_7_10",
+      browserName: "Safari",
+      browserVersion: "16.6",
+      platform: "MOBILE",
+      clientFormFactor: "UNKNOWN_FORM_FACTOR",
+    },
+  },
+  {
     name: "IOS",
     version: "20.11.6",
     userAgent: "com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)",
@@ -21,20 +35,6 @@ const PROFILES = [
       deviceModel: "RealityDevice17,1",
       osName: "visionOS",
       osVersion: "26.5.23O471",
-    },
-  },
-  {
-    name: "MWEB",
-    version: "2.20260205.04.01",
-    userAgent: WATCH_USER_AGENT,
-    webPo: true,
-    extra: {
-      osName: "iPad",
-      osVersion: "16_7_10",
-      browserName: "Safari",
-      browserVersion: "16.6",
-      platform: "MOBILE",
-      clientFormFactor: "UNKNOWN_FORM_FACTOR",
     },
   },
 ];
