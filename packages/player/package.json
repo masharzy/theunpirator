@@ -1,6 +1,6 @@
 {
   "name": "@unpirator/player",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Protected media playback runtime for The Unpirator",
   "keywords": [
     "video",

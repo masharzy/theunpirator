@@ -4,6 +4,44 @@ import { securityError } from "./token.js";
 
 const MANIFEST_TTL_SECONDS = 300;
 
+export function playbackWindows(manifest, body) {
+  const seconds = body.positionSeconds;
+  if (
+    typeof seconds !== "number" ||
+    !Number.isFinite(seconds) ||
+    seconds < 0 ||
+    seconds > manifest.durationMs / 1000
+  )
+    throw securityError("INVALID_REQUEST", 400, "Invalid playback position");
+  return Object.fromEntries(
+    ["video", "audio"].map((track) => {
+      const variant = body[`${track}Variant`];
+      const descriptor = Number.isInteger(variant) && manifest[track]?.[variant];
+      if (!descriptor) throw securityError("INVALID_REQUEST", 400, "Invalid playback variant");
+      let end = 0;
+      const segment =
+        descriptor.segments.find((item) => {
+          end += item.durationMs / 1000;
+          return seconds < end;
+        }) || descriptor.segments.at(-1);
+      end = 0;
+      const last =
+        descriptor.segments.find((item) => {
+          end += item.durationMs / 1000;
+          return seconds + 30 < end;
+        }) || descriptor.segments.at(-1);
+      return [
+        track,
+        {
+          variant,
+          min: Math.max(1, segment.sequence - 2),
+          max: last.sequence,
+        },
+      ];
+    }),
+  );
+}
+
 function readUint64(view, offset) {
   const value = Number(view.getBigUint64(offset));
   if (!Number.isSafeInteger(value)) throw securityError("MEDIA_INDEX_INVALID", 502);

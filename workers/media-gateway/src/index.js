@@ -7,6 +7,7 @@ import {
   encryptProtectedChunk,
   protectedManifest,
   protectedPlainChunk,
+  playbackWindows,
 } from "./protected-media.js";
 import { emitTelemetry } from "./telemetry.js";
 import { createYoutubeAttestation, createYoutubeIntegrityToken } from "./youtube-attestation.js";
@@ -21,9 +22,7 @@ function jsonError(error, requestId, request) {
         code: error.code || "GATEWAY_ERROR",
         message: status >= 500 ? "Media gateway error" : error.message,
         requestId,
-        ...(Number.isInteger(error.upstreamStatus)
-          ? { upstreamStatus: error.upstreamStatus }
-          : {}),
+        ...(Number.isInteger(error.upstreamStatus) ? { upstreamStatus: error.upstreamStatus } : {}),
       },
     },
     { status, headers: { "cache-control": "no-store", ...corsHeaders(request) } },
@@ -217,11 +216,19 @@ export default {
       if (request.method === "POST" && mode === "integrity") {
         await assertProtectedOrigin(request, env, claims, assetId);
         const body = await request.json();
+        const windows =
+          body.tampered !== true && body.positionSeconds !== undefined
+            ? playbackWindows(await protectedManifest(env, claims, assetId), body)
+            : undefined;
         const stub = await sessionStub(env, claims.psid);
         const response = await stub.fetch("https://session/integrity", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sequence: body.sequence, tampered: body.tampered === true }),
+          body: JSON.stringify({
+            sequence: body.sequence,
+            tampered: body.tampered === true,
+            windows,
+          }),
         });
         if (!response.ok) throw securityError("PLAYER_INTEGRITY_LOST", 403);
         return Response.json(await response.json(), {

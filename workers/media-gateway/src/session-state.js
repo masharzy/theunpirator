@@ -42,6 +42,10 @@ export class SessionState {
       const sequence = Math.max(0, Math.min(Number(body.sequence || 0), 1_000_000));
       session.lastIntegrityAt = Date.now();
       session.startedAt ||= Date.now();
+      // Windows are computed from the trusted manifest by the gateway, never
+      // forwarded from the browser. Seeking moves a bounded window, not a global
+      // grant for every preceding segment.
+      if (body.windows) session.windows = body.windows;
       session.allowedSequence = Math.max(
         Number(session.allowedSequence || 8),
         Math.min(sequence + 8, Math.floor(elapsedSeconds / 2) + 16),
@@ -63,7 +67,9 @@ export class SessionState {
         body.variant < 0 ||
         !Number.isInteger(sequence) ||
         sequence < 0 ||
-        sequence > Number(session.allowedSequence || 8)
+        (session.windows
+          ? !this.inWindow(session, body)
+          : sequence > Number(session.allowedSequence || 8))
       )
         return Response.json({ error: "denied" }, { status: 403 });
       const usageKey = `usage:${body.track}:${body.variant}:${sequence}`;
@@ -92,12 +98,14 @@ export class SessionState {
       if (
         !session ||
         session.status !== "active" ||
+        session.expiresAt <= Date.now() ||
         Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
         !ticket ||
         ticket.expiresAt <= Date.now() ||
         ticket.track !== body.track ||
         ticket.variant !== body.variant ||
         ticket.sequence !== body.sequence ||
+        (session.windows && !this.inWindow(session, ticket)) ||
         !mediaKey
       )
         return Response.json({ error: "denied" }, { status: 403 });
@@ -113,5 +121,13 @@ export class SessionState {
   }
   async alarm() {
     await this.state.storage.deleteAll();
+  }
+  inWindow(session, item) {
+    const window = session.windows[item.track];
+    return (
+      window &&
+      window.variant === item.variant &&
+      (item.sequence === 0 || (item.sequence >= window.min && item.sequence <= window.max))
+    );
   }
 }
