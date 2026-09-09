@@ -1,5 +1,5 @@
 import { assertSourceUrl } from "./origin-policy.js";
-import { getSource, invalidateSource } from "./source.js";
+import { getSource } from "./source.js";
 import { securityError } from "./token.js";
 
 const MANIFEST_TTL_SECONDS = 300;
@@ -104,8 +104,7 @@ async function fetchRange(stream, source, range) {
   return response;
 }
 
-async function fetchTrackRange(env, claims, assetId, track, variant, range, initialSource) {
-  let source = initialSource;
+async function fetchTrackRange(track, variant, range, source) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const streams =
@@ -117,8 +116,10 @@ async function fetchTrackRange(env, claims, assetId, track, variant, range, init
     } catch (error) {
       lastError = error;
       if (attempt === 2) break;
-      await invalidateSource(env, claims, assetId);
-      source = await getSource(env, claims, assetId, true);
+      // A protected YouTube source can only be resolved with a fresh browser PO proof.
+      // Retry its already-verified signed URL here; a new playback bootstrap performs
+      // source renewal when that URL has actually expired.
+      await new Promise((resolve) => setTimeout(resolve, 150 * 2 ** attempt));
     }
   }
   throw lastError;
@@ -127,9 +128,6 @@ async function fetchTrackRange(env, claims, assetId, track, variant, range, init
 async function trackManifest(env, claims, assetId, track, variant, source) {
   const initialStream = source.delivery.streams[track][variant];
   const { response, stream } = await fetchTrackRange(
-    env,
-    claims,
-    assetId,
     track,
     variant,
     initialStream.indexRange,
@@ -196,7 +194,7 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   const descriptor = manifest[track]?.[variant];
   const range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
-  const { response } = await fetchTrackRange(env, claims, assetId, track, variant, range, source);
+  const { response } = await fetchTrackRange(track, variant, range, source);
   const body = await response.arrayBuffer();
   if (body.byteLength > 16 * 1024 * 1024) throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
   return { body, contentType: stream.mimeType || "application/octet-stream" };
