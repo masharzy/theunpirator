@@ -235,6 +235,13 @@ importers:
         version: 3.1127.0
 
   workers/media-gateway:
+    dependencies:
+      '@unpirator/cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
+      '@unpirator/provider-youtube-custom':
+        specifier: workspace:*
+        version: link:../../providers/restricted/youtube-custom
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.8.0

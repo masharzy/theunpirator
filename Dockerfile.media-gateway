@@ -1,0 +1,22 @@
+FROM node:22-alpine AS base
+RUN corepack enable
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY workers/media-gateway/package.json workers/media-gateway/package.json
+COPY packages/cache/package.json packages/cache/package.json
+COPY providers/restricted/youtube-custom/package.json providers/restricted/youtube-custom/package.json
+RUN pnpm install --filter @unpirator/media-gateway... --frozen-lockfile
+
+COPY workers/media-gateway workers/media-gateway
+COPY packages/cache packages/cache
+COPY providers/restricted/youtube-custom providers/restricted/youtube-custom
+
+ENV NODE_ENV=production
+ENV PORT=8787
+EXPOSE 8787
+HEALTHCHECK --interval=20s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8787/health || exit 1
+
+USER node
+CMD ["pnpm", "--filter", "@unpirator/media-gateway", "start:node"]

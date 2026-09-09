@@ -1,0 +1,13 @@
+.git
+.github
+.next
+.vercel
+**/.next
+**/dist
+**/node_modules
+node_modules
+.env
+.env.*
+.deploy-secrets.txt
+coverage
+test-results
