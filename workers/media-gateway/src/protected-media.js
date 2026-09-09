@@ -157,11 +157,13 @@ export async function protectedManifest(
   providerProof = null,
 ) {
   const key = `protected:manifest:${claims.psid}:${assetId}`;
+  // Resolve/check the source before accepting its cached manifest. getSource
+  // invalidates this key whenever it has to replace the signed source.
+  const source = await getSource(env, claims, assetId, forceRefresh, providerProof);
   if (!forceRefresh) {
     const cached = await env.SOURCE_CACHE.get(key, "json");
     if (cached) return cached;
   }
-  const source = await getSource(env, claims, assetId, forceRefresh, providerProof);
   if (source.delivery?.mode !== "protected_segments")
     throw securityError("PROTECTED_DELIVERY_UNAVAILABLE", 409, "Protected playback unavailable");
   const videos = [];

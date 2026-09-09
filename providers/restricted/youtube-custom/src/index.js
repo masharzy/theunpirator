@@ -350,7 +350,9 @@ async function resolveYoutube(sourceUrl, proof) {
           expiresAt: expiryFrom(primary.url),
           contentType: "video/mp4",
           supportsRange: true,
-          cacheTtlSeconds: 60,
+          // Keep the exact signed source stable for the lifetime of its URL. The
+          // gateway still checks expiresAt before every use.
+          cacheTtlSeconds: 6 * 3600,
           delivery: { mode: "protected_segments", streams: protectedStreams },
           metadata: {
             videoId,
