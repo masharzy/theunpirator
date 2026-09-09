@@ -21,6 +21,9 @@ function jsonError(error, requestId, request) {
         code: error.code || "GATEWAY_ERROR",
         message: status >= 500 ? "Media gateway error" : error.message,
         requestId,
+        ...(Number.isInteger(error.upstreamStatus)
+          ? { upstreamStatus: error.upstreamStatus }
+          : {}),
       },
     },
     { status, headers: { "cache-control": "no-store", ...corsHeaders(request) } },

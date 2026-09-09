@@ -72,7 +72,12 @@ export function parseSidx(buffer, indexEnd) {
 }
 
 function sourceHeaders(source, range) {
-  const headers = new Headers({ range: `bytes=${range.start}-${range.end}` });
+  const headers = new Headers({
+    range: `bytes=${range.start}-${range.end}`,
+    // Prevent an intermediary from transforming a byte-range response. YouTube's
+    // Content-Range offsets are defined against the identity representation.
+    "accept-encoding": "identity",
+  });
   for (const [name, value] of Object.entries(source.headers || {})) {
     if (!["host", "connection", "content-length"].includes(name.toLowerCase()))
       headers.set(name, String(value));
@@ -99,7 +104,9 @@ async function fetchRange(stream, source, range) {
         profile: stream.profile || null,
       }),
     );
-    throw securityError("ORIGIN_FAILURE", 502, "Protected media unavailable");
+    const error = securityError("ORIGIN_FAILURE", 502, "Protected media unavailable");
+    error.upstreamStatus = response.status;
+    throw error;
   }
   return response;
 }
