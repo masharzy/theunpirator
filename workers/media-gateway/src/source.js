@@ -42,13 +42,7 @@ export async function getAllowedOrigins(env, claims, assetId) {
   return origins;
 }
 
-export async function getSource(
-  env,
-  claims,
-  assetId,
-  forceRefresh = false,
-  providerProof = null,
-) {
+export async function getSource(env, claims, assetId, forceRefresh = false, providerProof = null) {
   const key = sourceKey(claims, assetId);
   if (providerProof)
     await env.SOURCE_CACHE.put(proofKey(claims, assetId), JSON.stringify(providerProof), {

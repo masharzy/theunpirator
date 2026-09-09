@@ -155,9 +155,7 @@ async function requestPlayer(videoId, watchConfig, region, profile, proofToken) 
         cpn,
         contentCheckOk: true,
         racyCheckOk: true,
-        ...(profile.webPo
-          ? { serviceIntegrityDimensions: { poToken: proofToken } }
-          : {}),
+        ...(profile.webPo ? { serviceIntegrityDimensions: { poToken: proofToken } } : {}),
         playbackContext: {
           contentPlaybackContext: {
             html5Preference: "HTML5_PREF_WANTS",
@@ -307,12 +305,7 @@ async function resolveYoutube(sourceUrl, proof) {
           lastReason = player.playabilityStatus?.reason || lastReason;
           continue;
         }
-        const protectedStreams = await protectedAdaptiveStreams(
-          player,
-          profile,
-          proof.token,
-          cpn,
-        );
+        const protectedStreams = await protectedAdaptiveStreams(player, profile, proof.token, cpn);
         if (!protectedStreams) continue;
         const primary = protectedStreams.video[0];
         const allowedHosts = [

@@ -9,10 +9,7 @@ import {
   protectedPlainChunk,
 } from "./protected-media.js";
 import { emitTelemetry } from "./telemetry.js";
-import {
-  createYoutubeAttestation,
-  createYoutubeIntegrityToken,
-} from "./youtube-attestation.js";
+import { createYoutubeAttestation, createYoutubeIntegrityToken } from "./youtube-attestation.js";
 
 const PROTECTED_PLAYER_BUILD = "protected-v1";
 
