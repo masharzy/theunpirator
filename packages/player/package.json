@@ -1,8 +1,16 @@
 {
   "name": "@unpirator/player",
   "version": "0.1.0",
+  "description": "Protected media playback runtime for The Unpirator",
   "type": "module",
   "exports": "./src/index.js",
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "hls.js": "^1.6.10"
   },

@@ -1,0 +1,18 @@
+{
+  "name": "@unpirator/web-component",
+  "version": "0.1.0",
+  "description": "Universal Unpirator player for HTML, PHP, Django and any browser framework",
+  "type": "module",
+  "exports": "./src/index.js",
+  "files": [
+    "src"
+  ],
+  "sideEffects": true,
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@unpirator/player": "workspace:*",
+    "@unpirator/sdk-js": "workspace:*"
+  }
+}

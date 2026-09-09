@@ -51,6 +51,14 @@ Dashboard: `http://localhost:3100`
 API: `http://localhost:4100`  
 Worker local: `pnpm dev:gateway`
 
+## Customer integration
+
+Use `@unpirator/react` for React and Next.js applications, or the
+`@unpirator/web-component` custom element for HTML, PHP, Django, Laravel, WordPress, and other
+browser-based applications. The secret API key stays in the customer's server route.
+
+See `docs/PACKAGE-INTEGRATION.md` for the complete setup.
+
 ## Deployment model
 
 - Next.js dashboard → Vercel

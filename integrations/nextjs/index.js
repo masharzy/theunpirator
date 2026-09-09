@@ -18,6 +18,16 @@ export function createUnpiratorServerClient({ apiUrl, apiKey }) {
   }
   return {
     createPlaybackSession,
+    async createSourcePlaybackSession({ src, title, ...session }) {
+      const url = new URL(src);
+      const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+      if (host !== "youtu.be" && host !== "youtube.com" && !host.endsWith(".youtube.com"))
+        throw new Error("URL sources currently support YouTube; use assetId for other providers");
+      return createPlaybackSession({
+        ...session,
+        source: { provider: "youtube_custom", url: url.toString(), ...(title ? { title } : {}) },
+      });
+    },
     async createYoutubePlaybackSession({ youtubeUrl, title, ...session }) {
       return createPlaybackSession({
         ...session,
@@ -27,9 +37,8 @@ export function createUnpiratorServerClient({ apiUrl, apiKey }) {
   };
 }
 
-export function createUnpiratorYoutubeHandler({ apiUrl, apiKey, siteId, resolveViewer }) {
-  if (!siteId || typeof resolveViewer !== "function")
-    throw new Error("siteId and resolveViewer are required");
+export function createUnpiratorPlaybackHandler({ apiUrl, apiKey, siteId, resolveViewer }) {
+  if (!siteId) throw new Error("siteId is required");
   const client = createUnpiratorServerClient({ apiUrl, apiKey });
   return async function POST(request) {
     try {
@@ -39,19 +48,27 @@ export function createUnpiratorYoutubeHandler({ apiUrl, apiKey, siteId, resolveV
           { error: { message: "Cross-site request rejected" } },
           { status: 403 },
         );
-      const viewer = await resolveViewer(request);
-      if (!viewer?.id)
-        return Response.json({ error: { message: "Sign in required" } }, { status: 401 });
       const body = await request.json();
-      const session = await client.createYoutubePlaybackSession({
+      const deviceId = String(body.deviceId || "");
+      if (deviceId.length < 8) throw new Error("A valid device ID is required");
+      const viewer = resolveViewer ? await resolveViewer(request) : null;
+      const identity = viewer?.id
+        ? { id: String(viewer.id), label: viewer.label ? String(viewer.label) : undefined }
+        : { id: `guest:${deviceId.slice(0, 174)}`, label: "Guest viewer" };
+      const input = {
         siteId,
-        youtubeUrl: body.youtubeUrl,
-        title: body.title,
-        externalUserId: String(viewer.id),
-        displayLabel: viewer.label ? String(viewer.label) : undefined,
-        deviceId: String(body.deviceId || ""),
+        externalUserId: identity.id,
+        displayLabel: identity.label,
+        deviceId,
         client: body.client || {},
-      });
+      };
+      const session = body.assetId
+        ? await client.createPlaybackSession({ ...input, assetId: String(body.assetId) })
+        : await client.createSourcePlaybackSession({
+            ...input,
+            src: body.src || body.youtubeUrl,
+            title: body.title,
+          });
       return Response.json(session, { status: 201, headers: { "cache-control": "no-store" } });
     } catch (error) {
       return Response.json(
@@ -69,3 +86,5 @@ export function createUnpiratorYoutubeHandler({ apiUrl, apiKey, siteId, resolveV
     }
   };
 }
+
+export const createUnpiratorYoutubeHandler = createUnpiratorPlaybackHandler;
