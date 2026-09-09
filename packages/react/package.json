@@ -2,6 +2,18 @@
   "name": "@unpirator/react",
   "version": "0.1.0",
   "description": "React and Next.js component for The Unpirator protected player",
+  "keywords": [
+    "react",
+    "nextjs",
+    "video",
+    "protected-playback"
+  ],
+  "homepage": "https://github.com/masharzy/theunpirator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masharzy/theunpirator.git",
+    "directory": "packages/react"
+  },
   "type": "module",
   "exports": "./src/index.js",
   "files": [
