@@ -19,4 +19,4 @@ HEALTHCHECK --interval=20s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8787/health || exit 1
 
 USER node
-CMD ["pnpm", "--filter", "@unpirator/media-gateway", "start:node"]
+CMD ["node", "workers/media-gateway/src/node-server.js"]
