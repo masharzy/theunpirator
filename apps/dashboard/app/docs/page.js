@@ -307,13 +307,19 @@ export const POST = createUnpiratorPlaybackHandler({
             <h3 className="docs-subtitle">2. Render the player</h3>
             <CodeBlock label="components/lesson-video.jsx">{`"use client";
 
+import { useCallback } from "react";
 import { UnpiratorPlayer } from "@unpirator/react";
 
-export function LessonVideo({ youtubeUrl }) {
+export function LessonVideo({ youtubeUrl, firebaseUser }) {
+  const getAccessToken = useCallback(
+    () => firebaseUser.getIdToken(),
+    [firebaseUser]
+  );
   return (
     <UnpiratorPlayer
       src={youtubeUrl}
       title="Lesson video"
+      getAccessToken={getAccessToken}
       onError={(error) => console.error(error.code, error)}
     />
   );
@@ -321,6 +327,17 @@ export function LessonVideo({ youtubeUrl }) {
             <div className="docs-note">
               YouTube uses <code>src</code>. Bunny, HLS, S3, R2, and direct media use a registered
               asset UUID: <code>{'<UnpiratorPlayer assetId="ASSET_UUID" />'}</code>
+            </div>
+            <div className="docs-callout">
+              <KeyRound size={20} />
+              <div>
+                <strong>Firebase and bearer authentication are supported.</strong>
+                <p>
+                  `getAccessToken` resolves a fresh token before the session request. Your server
+                  verifies it and derives the viewer identity; browser user fields are never
+                  trusted.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -449,7 +466,7 @@ Content-Type: application/json
         <Link href="/" className="wordmark">
           <ShieldCheck size={19} /> unpirator.
         </Link>
-        <p>Documentation for package version 0.1.0</p>
+        <p>Documentation for package version 0.1.x</p>
         <a href="https://www.npmjs.com/org/unpirator" target="_blank" rel="noreferrer">
           npm packages <ArrowUpRight size={13} />
         </a>

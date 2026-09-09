@@ -62,13 +62,16 @@ Render a YouTube video in a Client Component:
 ```jsx
 "use client";
 
+import { useCallback } from "react";
 import { UnpiratorPlayer } from "@unpirator/react";
 
-export function LessonVideo({ youtubeUrl }) {
+export function LessonVideo({ youtubeUrl, firebaseUser }) {
+  const getAccessToken = useCallback(() => firebaseUser.getIdToken(), [firebaseUser]);
   return (
     <UnpiratorPlayer
       src={youtubeUrl}
       title="Lesson video"
+      getAccessToken={getAccessToken}
       onError={(error) => console.error("Playback failed", error)}
     />
   );
@@ -110,20 +113,41 @@ viewer resolver must deny access.
 
 Import `UnpiratorPlayer` from `@unpirator/react`.
 
-| Prop        | Type               | Required   | Description                                                         |
-| ----------- | ------------------ | ---------- | ------------------------------------------------------------------- |
-| `src`       | `string`           | One source | YouTube watch, short, or embed URL                                  |
-| `assetId`   | `string`           | One source | UUID of a registered provider asset                                 |
-| `endpoint`  | `string`           | No         | Same-origin session endpoint; defaults to `/api/unpirator/playback` |
-| `title`     | `string`           | No         | Display/audit title for URL-based playback                          |
-| `poster`    | `string`           | No         | Video poster URL                                                    |
-| `autoPlay`  | `boolean`          | No         | Requests autoplay; browser policy may reject it                     |
-| `className` | `string`           | No         | Class applied to the 16:9 player host                               |
-| `style`     | `object`           | No         | Inline style overrides for the player host                          |
-| `onReady`   | `(player) => void` | No         | Called after the protected player mounts                            |
-| `onError`   | `(error) => void`  | No         | Called when session creation or playback fails                      |
+| Prop             | Type               | Required   | Description                                                         |
+| ---------------- | ------------------ | ---------- | ------------------------------------------------------------------- |
+| `src`            | `string`           | One source | YouTube watch, short, or embed URL                                  |
+| `assetId`        | `string`           | One source | UUID of a registered provider asset                                 |
+| `endpoint`       | `string`           | No         | Same-origin session endpoint; defaults to `/api/unpirator/playback` |
+| `title`          | `string`           | No         | Display/audit title for URL-based playback                          |
+| `poster`         | `string`           | No         | Video poster URL                                                    |
+| `autoPlay`       | `boolean`          | No         | Requests autoplay; browser policy may reject it                     |
+| `className`      | `string`           | No         | Class applied to the 16:9 player host                               |
+| `style`          | `object`           | No         | Inline style overrides for the player host                          |
+| `headers`        | `HeadersInit`      | No         | Static same-origin session request headers                          |
+| `getHeaders`     | Async callback     | No         | Resolves fresh custom headers before session creation               |
+| `getAccessToken` | Async callback     | No         | Resolves a token sent as `Authorization: Bearer ...`                |
+| `onReady`        | `(player) => void` | No         | Called after the protected player mounts                            |
+| `onError`        | `(error) => void`  | No         | Called when session creation or playback fails                      |
 
 Unmounting the React component destroys its timers and media resources.
+
+### Firebase authentication
+
+Use `getAccessToken` when the customer endpoint verifies Firebase ID tokens:
+
+```jsx
+import { useCallback } from "react";
+import { UnpiratorPlayer } from "@unpirator/react";
+
+export function ProtectedLesson({ youtubeUrl, firebaseUser }) {
+  const getAccessToken = useCallback(() => firebaseUser.getIdToken(), [firebaseUser]);
+  return <UnpiratorPlayer src={youtubeUrl} getAccessToken={getAccessToken} />;
+}
+```
+
+The customer server verifies the bearer token with Firebase Admin SDK and derives the viewer ID
+from the verified token. It must never trust `currentUser`, a UID, or an email sent in the request
+body. Keep callback props stable with `useCallback` to avoid unnecessarily remounting the player.
 
 ## HTML, PHP, Django, Laravel, or WordPress
 

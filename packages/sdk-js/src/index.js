@@ -21,13 +21,24 @@ export function createPlaybackBootstrap({
   currentUser,
   deviceId,
   deviceStorageKey,
+  headers,
+  getHeaders,
+  getAccessToken,
 } = {}) {
   if (Boolean(src) === Boolean(assetId)) throw new Error("Provide either src or assetId");
   return async function bootstrap() {
-    const response = await fetch(endpoint, {
+    const requestUrl = new URL(endpoint, window.location.href);
+    if (requestUrl.origin !== window.location.origin)
+      throw new Error("Playback endpoint must use the current site origin");
+    const resolvedHeaders = typeof getHeaders === "function" ? await getHeaders() : headers || {};
+    const accessToken = typeof getAccessToken === "function" ? await getAccessToken() : null;
+    const requestHeaders = new Headers(resolvedHeaders);
+    requestHeaders.set("content-type", "application/json");
+    if (accessToken) requestHeaders.set("authorization", `Bearer ${accessToken}`);
+    const response = await fetch(requestUrl, {
       method: "POST",
       credentials: "same-origin",
-      headers: { "content-type": "application/json" },
+      headers: requestHeaders,
       body: JSON.stringify({
         ...(src ? { src, title } : { assetId }),
         deviceId: deviceId || getOrCreateDeviceId(deviceStorageKey),

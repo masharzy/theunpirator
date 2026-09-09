@@ -14,6 +14,9 @@ export function UnpiratorPlayer({
   style,
   poster,
   autoPlay = false,
+  headers,
+  getHeaders,
+  getAccessToken,
   onReady,
   onError,
 }) {
@@ -25,7 +28,16 @@ export function UnpiratorPlayer({
     let player;
     mountProtectedPlayer({
       element: root.current,
-      bootstrap: createPlaybackBootstrap({ endpoint, src, assetId, title, currentUser }),
+      bootstrap: createPlaybackBootstrap({
+        endpoint,
+        src,
+        assetId,
+        title,
+        currentUser,
+        headers,
+        getHeaders,
+        getAccessToken,
+      }),
       onError,
     })
       .then((mounted) => {
@@ -40,7 +52,18 @@ export function UnpiratorPlayer({
       disposed = true;
       player?.destroy();
     };
-  }, [src, assetId, endpoint, title, currentUserKey, poster, autoPlay]);
+  }, [
+    src,
+    assetId,
+    endpoint,
+    title,
+    currentUserKey,
+    poster,
+    autoPlay,
+    headers,
+    getHeaders,
+    getAccessToken,
+  ]);
 
   return createElement("div", {
     ref: root,
