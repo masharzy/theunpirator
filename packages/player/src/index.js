@@ -1,4 +1,5 @@
 import Hls from "hls.js";
+import { sequenceAtTime } from "./segment-timeline.js";
 
 const positions = [
   ["8%", "8%"],
@@ -380,7 +381,13 @@ function segmentWorkerRuntime() {
             method: "POST",
             credentials: "include",
             headers: auth(),
-            body: JSON.stringify({ sequence: data.sequence, tampered: data.tampered === true }),
+            body: JSON.stringify({
+              sequence: data.sequence,
+              tampered: data.tampered === true,
+              positionSeconds: data.positionSeconds,
+              videoVariant: data.videoVariant,
+              audioVariant: data.audioVariant,
+            }),
           }),
         );
         self.postMessage({ type: "integrity", id: data.id });
@@ -443,7 +450,7 @@ function segmentWorkerRuntime() {
   };
 }
 
-class ProtectedSegmentRuntime {
+export class ProtectedSegmentRuntime {
   constructor({ video, root, surface, host, watermark, state, onError }) {
     this.video = video;
     this.root = root;
@@ -455,6 +462,8 @@ class ProtectedSegmentRuntime {
     this.pending = new Map();
     this.nextId = 1;
     this.nextSequence = 1;
+    this.cursors = { video: 1, audio: 1 };
+    this.generation = 0;
     this.destroyed = false;
   }
   async mount() {
@@ -493,10 +502,12 @@ class ProtectedSegmentRuntime {
     this.audioBuffer = this.mediaSource.addSourceBuffer(
       `${this.manifest.audio[this.audioVariant].mimeType}; codecs="${this.manifest.audio[this.audioVariant].codec}"`,
     );
+    this.mediaSource.duration = this.manifest.durationMs / 1000;
     await Promise.all([
       this.append("video", this.videoVariant, 0, this.videoBuffer),
       this.append("audio", this.audioVariant, 0, this.audioBuffer),
     ]);
+    this.video.addEventListener("seeking", this.onSeeking);
     await this.fillBuffer();
     this.heartbeat = setInterval(() => this.sendIntegrity(false).catch(this.fail), 5_000);
     this.pump = setInterval(() => this.fillBuffer().catch(this.fail), 1_000);
@@ -530,40 +541,88 @@ class ProtectedSegmentRuntime {
     this.worker.postMessage({ type: "segment", id, track, variant, sequence });
     return promise;
   }
-  async append(track, variant, sequence, sourceBuffer) {
+  async append(track, variant, sequence, sourceBuffer, generation = this.generation) {
     const buffer = await this.request(track, variant, sequence);
+    if (this.destroyed || generation !== this.generation) return;
     await appendBuffer(sourceBuffer, buffer);
   }
+  onSeeking = () => {
+    if (this.destroyed) return;
+    this.generation += 1;
+    for (const track of ["video", "audio"]) {
+      const descriptor = this.manifest[track][this[`${track}Variant`]];
+      this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
+    }
+    this.fillBuffer().catch(this.fail);
+  };
   async fillBuffer() {
     if (this.destroyed || this.loading) return;
-    const ahead = bufferedAhead(this.video);
-    if (ahead >= 20) return;
-    const max = Math.min(
-      this.manifest.video[this.videoVariant].segments.length,
-      this.manifest.audio[this.audioVariant].segments.length,
-    );
-    if (this.nextSequence > max) {
-      if (this.mediaSource.readyState === "open") this.mediaSource.endOfStream();
-      return;
-    }
     this.loading = true;
+    const generation = this.generation;
     try {
       await this.sendIntegrity(false);
-      const sequence = this.nextSequence;
-      await Promise.all([
-        this.append("video", this.videoVariant, sequence, this.videoBuffer),
-        this.append("audio", this.audioVariant, sequence, this.audioBuffer),
-      ]);
-      this.nextSequence += 1;
+      if (generation !== this.generation || this.destroyed) return;
+      const results = await Promise.allSettled(
+        ["video", "audio"].map(async (track) => {
+          const variant = this[`${track}Variant`];
+          const sourceBuffer = this[`${track}Buffer`];
+          const descriptor = this.manifest[track][variant];
+          const ahead = bufferedAhead({
+            buffered: sourceBuffer.buffered,
+            currentTime: this.video.currentTime,
+          });
+          if (ahead >= 20) return;
+          // Buffered ranges survive seeks. Resume at the end of the target range,
+          // independently for audio and video (their segment durations differ).
+          if (ahead > 0)
+            this.cursors[track] = Math.max(
+              this.cursors[track],
+              sequenceAtTime(descriptor.segments, this.video.currentTime + ahead + 0.001),
+            );
+          const sequence = this.cursors[track];
+          if (sequence > descriptor.segments.length) return;
+          await this.append(track, variant, sequence, sourceBuffer, generation);
+          if (generation === this.generation) this.cursors[track] = sequence + 1;
+        }),
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure) throw failure.reason;
+      this.nextSequence = Math.max(this.cursors.video, this.cursors.audio);
+      if (
+        generation === this.generation &&
+        ["video", "audio"].every(
+          (track) =>
+            this.cursors[track] > this.manifest[track][this[`${track}Variant`]].segments.length,
+        ) &&
+        this.mediaSource.readyState === "open"
+      )
+        this.mediaSource.endOfStream();
+    } catch (error) {
+      if (!this.destroyed && generation === this.generation) throw error;
     } finally {
       this.loading = false;
+      if (!this.destroyed && generation !== this.generation) this.fillBuffer().catch(this.fail);
     }
   }
   sendIntegrity(tampered) {
+    this.integrityQueue = (this.integrityQueue || Promise.resolve())
+      .catch(() => {})
+      .then(() => this.dispatchIntegrity(tampered));
+    return this.integrityQueue;
+  }
+  dispatchIntegrity(tampered) {
     if (!this.worker) return Promise.resolve();
     const id = this.nextId++;
     const promise = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-    this.worker.postMessage({ type: "integrity", id, sequence: this.nextSequence, tampered });
+    this.worker.postMessage({
+      type: "integrity",
+      id,
+      sequence: this.nextSequence,
+      tampered,
+      positionSeconds: this.video.currentTime,
+      videoVariant: this.videoVariant,
+      audioVariant: this.audioVariant,
+    });
     return promise;
   }
   installIntegrityGuard() {
@@ -607,6 +666,7 @@ class ProtectedSegmentRuntime {
     this.destroyed = true;
     clearInterval(this.heartbeat);
     clearInterval(this.pump);
+    this.video.removeEventListener("seeking", this.onSeeking);
     for (const observer of this.observers || []) observer.disconnect();
     clearInterval(this.visibilityGuard);
     this.worker?.terminate();
