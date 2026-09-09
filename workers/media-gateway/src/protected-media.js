@@ -88,6 +88,17 @@ async function fetchRange(stream, source, range) {
   });
   if (response.status !== 206) {
     await response.body?.cancel();
+    console.error(
+      JSON.stringify({
+        level: "error",
+        component: "protected-origin",
+        code: "ORIGIN_RANGE_REJECTED",
+        upstreamStatus: response.status,
+        hostname: new URL(stream.url).hostname,
+        range: `${range.start}-${range.end}`,
+        profile: stream.profile || null,
+      }),
+    );
     throw securityError("ORIGIN_FAILURE", 502, "Protected media unavailable");
   }
   return response;

@@ -64,7 +64,9 @@ describe("YouTube custom resolver", () => {
               ],
             },
           }),
-        ),
+        )
+        .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 }))
+        .mockResolvedValueOnce(new Response(new Uint8Array(), { status: 206 })),
     );
 
     const source = await youtubeCustomProvider.resolve({
