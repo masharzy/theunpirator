@@ -1,8 +1,16 @@
 {
   "name": "@unpirator/sdk-js",
   "version": "0.1.0",
+  "description": "Browser SDK for The Unpirator protected media player",
   "type": "module",
   "exports": "./src/index.js",
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@unpirator/player": "workspace:*"
   }

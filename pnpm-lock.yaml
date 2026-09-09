@@ -184,11 +184,33 @@ importers:
         specifier: ^1.6.10
         version: 1.7.2
 
+  packages/react:
+    dependencies:
+      '@unpirator/player':
+        specifier: workspace:*
+        version: link:../player
+      '@unpirator/sdk-js':
+        specifier: workspace:*
+        version: link:../sdk-js
+    peerDependencies:
+      react:
+        specifier: '>=18'
+        version: 19.2.8
+
   packages/sdk-js:
     dependencies:
       '@unpirator/player':
         specifier: workspace:*
         version: link:../player
+
+  packages/web-component:
+    dependencies:
+      '@unpirator/player':
+        specifier: workspace:*
+        version: link:../player
+      '@unpirator/sdk-js':
+        specifier: workspace:*
+        version: link:../sdk-js
 
   packages/security:
     devDependencies:
