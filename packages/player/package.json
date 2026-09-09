@@ -2,6 +2,18 @@
   "name": "@unpirator/player",
   "version": "0.1.0",
   "description": "Protected media playback runtime for The Unpirator",
+  "keywords": [
+    "video",
+    "player",
+    "protected-playback",
+    "hls"
+  ],
+  "homepage": "https://github.com/masharzy/theunpirator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masharzy/theunpirator.git",
+    "directory": "packages/player"
+  },
   "type": "module",
   "exports": "./src/index.js",
   "files": [

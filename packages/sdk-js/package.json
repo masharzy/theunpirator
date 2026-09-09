@@ -2,6 +2,17 @@
   "name": "@unpirator/sdk-js",
   "version": "0.1.0",
   "description": "Browser SDK for The Unpirator protected media player",
+  "keywords": [
+    "video",
+    "sdk",
+    "protected-playback"
+  ],
+  "homepage": "https://github.com/masharzy/theunpirator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masharzy/theunpirator.git",
+    "directory": "packages/sdk-js"
+  },
   "type": "module",
   "exports": "./src/index.js",
   "files": [

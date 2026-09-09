@@ -2,6 +2,18 @@
   "name": "@unpirator/web-component",
   "version": "0.1.0",
   "description": "Universal Unpirator player for HTML, PHP, Django and any browser framework",
+  "keywords": [
+    "web-component",
+    "video",
+    "player",
+    "protected-playback"
+  ],
+  "homepage": "https://github.com/masharzy/theunpirator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masharzy/theunpirator.git",
+    "directory": "packages/web-component"
+  },
   "type": "module",
   "exports": "./src/index.js",
   "files": [

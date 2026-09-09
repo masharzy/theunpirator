@@ -2,6 +2,18 @@
   "name": "@unpirator/integration-nextjs",
   "version": "0.1.0",
   "description": "Secure server-side playback session helpers for Next.js",
+  "keywords": [
+    "nextjs",
+    "video",
+    "server",
+    "protected-playback"
+  ],
+  "homepage": "https://github.com/masharzy/theunpirator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masharzy/theunpirator.git",
+    "directory": "integrations/nextjs"
+  },
   "type": "module",
   "exports": "./index.js",
   "files": [
