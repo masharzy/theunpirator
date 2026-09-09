@@ -104,7 +104,11 @@ export default {
     try {
       if (url.pathname === "/health")
         return Response.json(
-          { status: "ok", service: "media-gateway" },
+          {
+            status: "ok",
+            service: "media-gateway",
+            build: env.GATEWAY_BUILD_SHA || "unknown",
+          },
           { headers: { "x-request-id": rid } },
         );
       if (url.pathname === "/__internal/session-state") {

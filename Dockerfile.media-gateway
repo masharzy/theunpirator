@@ -1,4 +1,5 @@
 FROM node:22-alpine AS base
+ARG GATEWAY_BUILD_SHA=development
 RUN corepack enable
 WORKDIR /app
 
@@ -14,6 +15,7 @@ COPY providers/restricted/youtube-custom providers/restricted/youtube-custom
 
 ENV NODE_ENV=production
 ENV PORT=8787
+ENV GATEWAY_BUILD_SHA=$GATEWAY_BUILD_SHA
 EXPOSE 8787
 HEALTHCHECK --interval=20s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8787/health || exit 1
