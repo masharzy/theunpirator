@@ -68,7 +68,9 @@ export class SessionState {
         return Response.json({ error: "denied" }, { status: 403 });
       const usageKey = `usage:${body.track}:${body.variant}:${sequence}`;
       const attempts = Number((await this.state.storage.get(usageKey)) || 0);
-      if (attempts >= 2) return Response.json({ error: "replay" }, { status: 403 });
+      // Tickets remain single-use. A small mint allowance lets the player recover when
+      // the upstream range fetch fails after a ticket has already been consumed.
+      if (attempts >= 8) return Response.json({ error: "replay" }, { status: 403 });
       await this.state.storage.put(usageKey, attempts + 1);
       const ticket = crypto.randomUUID() + crypto.randomUUID();
       await this.state.storage.put(`ticket:${ticket}`, {

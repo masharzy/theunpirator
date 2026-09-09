@@ -388,23 +388,30 @@ function segmentWorkerRuntime() {
       }
       if (data.type === "segment") {
         if (!key) throw new Error("Protected player key unavailable");
-        const ticket = await json(
-          await fetch(`${baseUrl}/ticket`, {
-            method: "POST",
-            credentials: "include",
-            headers: auth(),
-            body: JSON.stringify({
-              track: data.track,
-              variant: data.variant,
-              sequence: data.sequence,
+        let response;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const ticket = await json(
+            await fetch(`${baseUrl}/ticket`, {
+              method: "POST",
+              credentials: "include",
+              headers: auth(),
+              body: JSON.stringify({
+                track: data.track,
+                variant: data.variant,
+                sequence: data.sequence,
+              }),
             }),
-          }),
-        );
-        const response = await fetch(
-          `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
-          { credentials: "include", headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!response.ok) throw new Error(`Protected segment failed (${response.status})`);
+          );
+          response = await fetch(
+            `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
+            { credentials: "include", headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (response.ok) break;
+          if (response.status === 401 || response.status === 403 || attempt === 2) break;
+          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+        }
+        if (!response?.ok)
+          throw new Error(`Protected segment failed (${response?.status || "network"})`);
         const context = response.headers.get("x-unpirator-context") || "";
         const decrypted = await crypto.subtle.decrypt(
           {
