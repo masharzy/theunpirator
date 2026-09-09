@@ -663,6 +663,52 @@ export async function mountProtectedPlayer(options) {
   return player;
 }
 
+export function mountDirectYoutubePlayer({ element, src, title = "YouTube video" } = {}) {
+  const root = typeof element === "string" ? document.querySelector(element) : element;
+  if (!root) throw new Error("YouTube player target element not found");
+  const videoId = youtubeVideoId(src);
+  if (!videoId) throw new Error("A valid YouTube URL is required");
+  const iframe = document.createElement("iframe");
+  iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?playsinline=1&rel=0`;
+  iframe.title = title;
+  iframe.allow =
+    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+  iframe.allowFullscreen = true;
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
+  iframe.style.cssText = "display:block;width:100%;height:100%;border:0;background:#07110b";
+  root.replaceChildren(iframe);
+  return {
+    iframe,
+    video: null,
+    destroy() {
+      iframe.src = "about:blank";
+      if (iframe.parentNode === root) root.replaceChildren();
+    },
+  };
+}
+
+function youtubeVideoId(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (host === "youtu.be") return validYoutubeId(url.pathname.split("/").filter(Boolean)[0]);
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const candidate =
+        url.searchParams.get("v") ||
+        (["shorts", "embed", "live"].includes(parts[0]) ? parts[1] : null);
+      return validYoutubeId(candidate);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function validYoutubeId(value) {
+  return /^[A-Za-z0-9_-]{6,20}$/.test(value || "") ? value : null;
+}
+
 function youtubeUrlFromElement(element) {
   const value = element.dataset?.youtubeUrl || element.getAttribute("src") || "";
   try {

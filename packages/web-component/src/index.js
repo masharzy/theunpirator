@@ -1,10 +1,10 @@
-import { mountProtectedPlayer } from "@unpirator/player";
+import { mountDirectYoutubePlayer, mountProtectedPlayer } from "@unpirator/player";
 import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 
 const ElementBase = globalThis.HTMLElement || class {};
 
 export class UnpiratorPlayerElement extends ElementBase {
-  static observedAttributes = ["src", "asset-id", "endpoint", "poster"];
+  static observedAttributes = ["src", "asset-id", "endpoint", "poster", "youtube-direct"];
 
   constructor() {
     super();
@@ -58,6 +58,17 @@ export class UnpiratorPlayerElement extends ElementBase {
     }
     this.container.innerHTML = '<div part="status">Preparing protected playback...</div>';
     try {
+      if (this.hasAttribute("youtube-direct")) {
+        const player = mountDirectYoutubePlayer({
+          element: this.container,
+          src,
+          title: this.getAttribute("title") || "YouTube video",
+        });
+        if (this.generation !== generation) return player.destroy();
+        this.player = player;
+        this.dispatchEvent(new CustomEvent("unpirator-ready", { bubbles: true }));
+        return;
+      }
       const player = await mountProtectedPlayer({
         element: this.container,
         bootstrap: createPlaybackBootstrap({
