@@ -9,7 +9,11 @@ import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 const bootstrap = createPlaybackBootstrap({
   endpoint: "/api/unpirator/playback",
   src: "https://www.youtube.com/watch?v=VIDEO_ID",
+  getAccessToken: () => firebaseUser.getIdToken(),
 });
 ```
+
+`getAccessToken` sends an `Authorization: Bearer ...` header. Use asynchronous `getHeaders` for a
+different authorization scheme. Static `headers` are also supported.
 
 See the [complete integration guide](https://github.com/masharzy/theunpirator/blob/main/docs/PACKAGE-INTEGRATION.md).
