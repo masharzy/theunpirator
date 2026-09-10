@@ -154,7 +154,7 @@ body. Keep callback props stable with `useCallback` to avoid unnecessarily remou
 Load the universal Web Component from an ESM CDN after publishing:
 
 ```html
-<script type="module" src="https://esm.sh/@unpirator/web-component@0.1.0"></script>
+<script type="module" src="https://esm.sh/@unpirator/web-component@0.1.4"></script>
 
 <unpirator-player
   src="https://www.youtube.com/watch?v=VIDEO_ID"

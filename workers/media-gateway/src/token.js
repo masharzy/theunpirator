@@ -34,12 +34,8 @@ export async function verifyPlaybackToken(
   if (!valid) throw securityError("INVALID_TOKEN", 401);
   const payload = decodeJsonB64Url(body);
   if (
-    !Number.isFinite(payload.exp) ||
-    payload.exp + Math.max(0, Number(allowExpiredSeconds || 0)) <= nowSeconds
-  )
-    throw securityError("TOKEN_EXPIRED", 401);
-  if (
     payload.iss !== "the-unpirator" ||
+    !Number.isFinite(payload.exp) ||
     !Number.isFinite(payload.iat) ||
     payload.iat > nowSeconds + 5 ||
     payload.exp - payload.iat > 180
@@ -47,6 +43,13 @@ export async function verifyPlaybackToken(
     throw securityError("INVALID_TOKEN", 401);
   if (!payload.tid || !payload.sid || !payload.aid || !payload.psid)
     throw securityError("INVALID_TOKEN", 401);
+  if (payload.exp + Math.max(0, Number(allowExpiredSeconds || 0)) <= nowSeconds) {
+    const error = securityError("TOKEN_EXPIRED", 401);
+    // Only attach identity after signature and claim validation. This allows
+    // expired-token failures to be correlated without logging bearer tokens.
+    error.verifiedClaims = payload;
+    throw error;
+  }
   return payload;
 }
 

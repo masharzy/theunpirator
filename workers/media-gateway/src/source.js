@@ -1,4 +1,5 @@
 import { securityError } from "./token.js";
+import { singleFlight } from "./single-flight.js";
 import { youtubeCustomProvider } from "../../../providers/restricted/youtube-custom/src/index.js";
 
 const SOURCE_CACHE_VERSION = "v3";
@@ -43,6 +44,11 @@ export async function getAllowedOrigins(env, claims, assetId) {
 }
 
 export async function getSource(env, claims, assetId, forceRefresh = false, providerProof = null) {
+  return singleFlight(env, sourceKey(claims, assetId), () =>
+    resolveSource(env, claims, assetId, forceRefresh, providerProof),
+  );
+}
+async function resolveSource(env, claims, assetId, forceRefresh, providerProof) {
   const key = sourceKey(claims, assetId);
   if (providerProof)
     await env.SOURCE_CACHE.put(proofKey(claims, assetId), JSON.stringify(providerProof), {
@@ -59,10 +65,19 @@ export async function getSource(env, claims, assetId, forceRefresh = false, prov
     try {
       const proof =
         providerProof || (await env.SOURCE_CACHE.get(proofKey(claims, assetId), "json"));
+      const started = Date.now();
       source = await youtubeCustomProvider.resolve({
         asset: { providerReference: source.providerReference },
         context: { providerProof: proof },
       });
+      console.info(
+        JSON.stringify({
+          component: "playback-timing",
+          phase: "source-resolve",
+          sessionId: claims.psid,
+          durationMs: Date.now() - started,
+        }),
+      );
     } catch (error) {
       console.error(
         JSON.stringify({

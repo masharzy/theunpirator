@@ -244,7 +244,7 @@ export default {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!response.ok) throw securityError("SEGMENT_TICKET_DENIED", 403);
+        if (!response.ok) throw securityError("SEGMENT_TICKET_DENIED", response.status);
         return Response.json(await response.json(), {
           headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
         });
@@ -374,10 +374,12 @@ export default {
       ]);
       return response;
     } catch (error) {
+      currentClaims ||= error.verifiedClaims || null;
       console.error(
         JSON.stringify({
           level: "error",
           requestId: rid,
+          sessionId: currentClaims?.psid || null,
           path: url.pathname,
           code: error?.code || "GATEWAY_ERROR",
           status: Number(error?.status || 500),

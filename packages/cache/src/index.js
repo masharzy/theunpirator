@@ -33,6 +33,10 @@ class IoRedisAdapter {
     await this.ensure();
     return this.client.get(key);
   }
+  async eval(script, keys, args) {
+    await this.ensure();
+    return this.client.eval(script, keys.length, ...keys, ...args);
+  }
   async set(key, value, options = {}) {
     await this.ensure();
     return options.ex ? this.client.set(key, value, "EX", options.ex) : this.client.set(key, value);
@@ -61,6 +65,9 @@ class UpstashAdapter {
   }
   async get(key) {
     return this.client.get(key);
+  }
+  async eval(script, keys, args) {
+    return this.client.eval(script, keys, args);
   }
   async set(key, value, options = {}) {
     return this.client.set(key, value, options.ex ? { ex: options.ex } : undefined);

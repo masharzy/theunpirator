@@ -1,6 +1,7 @@
 import { assertSourceUrl } from "./origin-policy.js";
 import { getSource } from "./source.js";
 import { securityError } from "./token.js";
+import { singleFlight } from "./single-flight.js";
 
 const MANIFEST_TTL_SECONDS = 300;
 
@@ -123,11 +124,12 @@ function sourceHeaders(source, range) {
   return headers;
 }
 
-async function fetchRange(stream, source, range) {
+async function fetchRange(stream, source, range, signal) {
   assertSourceUrl(stream.url, source.allowedHosts);
   const response = await fetch(stream.url, {
     headers: sourceHeaders(source, range),
     redirect: "manual",
+    signal,
   });
   if (response.status !== 206) {
     await response.body?.cancel();
@@ -151,13 +153,14 @@ async function fetchRange(stream, source, range) {
 
 async function fetchTrackRange(track, variant, range, source) {
   let lastError;
+  const signal = AbortSignal.timeout(45000);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const streams =
       track === "video" ? source.delivery?.streams?.video : source.delivery?.streams?.audio;
     const stream = streams?.[variant];
     if (!stream) throw securityError("MEDIA_SEGMENT_INVALID", 404);
     try {
-      return { response: await fetchRange(stream, source, range), stream, source };
+      return { response: await fetchRange(stream, source, range, signal), stream, source };
     } catch (error) {
       lastError = error;
       if (attempt === 2) break;
@@ -201,6 +204,11 @@ export async function protectedManifest(
   forceRefresh = false,
   providerProof = null,
 ) {
+  return singleFlight(env, `manifest:${claims.psid}:${assetId}`, () =>
+    buildManifest(env, claims, assetId, forceRefresh, providerProof),
+  );
+}
+async function buildManifest(env, claims, assetId, forceRefresh, providerProof) {
   const key = `protected:manifest:${claims.psid}:${assetId}`;
   // Resolve/check the source before accepting its cached manifest. getSource
   // invalidates this key whenever it has to replace the signed source.
@@ -211,12 +219,16 @@ export async function protectedManifest(
   }
   if (source.delivery?.mode !== "protected_segments")
     throw securityError("PROTECTED_DELIVERY_UNAVAILABLE", 409, "Protected playback unavailable");
-  const videos = [];
-  for (let variant = 0; variant < source.delivery.streams.video.length; variant += 1)
-    videos.push(await trackManifest(env, claims, assetId, "video", variant, source));
-  const audios = [];
-  for (let variant = 0; variant < source.delivery.streams.audio.length; variant += 1)
-    audios.push(await trackManifest(env, claims, assetId, "audio", variant, source));
+  const started = Date.now();
+  const [videos, audios] = await Promise.all(
+    ["video", "audio"].map((track) =>
+      Promise.all(
+        source.delivery.streams[track].map((_, variant) =>
+          trackManifest(env, claims, assetId, track, variant, source),
+        ),
+      ),
+    ),
+  );
   const manifest = {
     version: 1,
     assetId,
@@ -227,6 +239,14 @@ export async function protectedManifest(
   await env.SOURCE_CACHE.put(key, JSON.stringify(manifest), {
     expirationTtl: MANIFEST_TTL_SECONDS,
   });
+  console.info(
+    JSON.stringify({
+      component: "playback-timing",
+      phase: "manifest-indexes",
+      sessionId: claims.psid,
+      durationMs: Date.now() - started,
+    }),
+  );
   return manifest;
 }
 
@@ -241,10 +261,24 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   const descriptor = manifest[track]?.[variant];
   const range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
-  const { response } = await fetchTrackRange(track, variant, range, source);
-  const body = await response.arrayBuffer();
-  if (body.byteLength > 16 * 1024 * 1024) throw securityError("MEDIA_SEGMENT_TOO_LARGE", 502);
-  return { body, contentType: stream.mimeType || "application/octet-stream" };
+  const stub = env.SESSION_STATE.get(env.SESSION_STATE.idFromName(claims.psid));
+  const reserved = await stub.fetch("https://session/lease", {
+    method: "POST",
+    body: JSON.stringify({ bytes: range.end - range.start + 1 }),
+  });
+  if (!reserved.ok) throw securityError("DELIVERY_LIMIT", reserved.status);
+  const { lease } = await reserved.json();
+  try {
+    const { response } = await fetchTrackRange(track, variant, range, source);
+    const body = await response.arrayBuffer();
+    if (body.byteLength !== range.end - range.start + 1 || body.byteLength > 16 * 1024 * 1024)
+      throw securityError("MEDIA_SEGMENT_INVALID", 502);
+    return { body, contentType: stream.mimeType || "application/octet-stream" };
+  } finally {
+    await stub
+      .fetch("https://session/release", { method: "POST", body: JSON.stringify({ lease }) })
+      .catch(() => {});
+  }
 }
 
 function fromBase64(value) {

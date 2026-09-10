@@ -1,4 +1,4 @@
-import { createCache } from "@unpirator/cache";
+import { createCache } from "../../../packages/cache/src/index.js";
 import { SessionState } from "./session-state.js";
 
 function decode(value) {
@@ -36,8 +36,9 @@ class RedisKvBinding {
   }
 }
 
-class RedisDurableStorage {
+export class RedisDurableStorage {
   constructor(cache, sessionId) {
+    this.alarms = false;
     this.cache = cache;
     this.prefix = `gateway:session:${sessionId}`;
   }
@@ -57,6 +58,71 @@ class RedisDurableStorage {
     await Promise.all([this.delete("session"), this.delete("mediaKey")]);
   }
   async setAlarm() {}
+  async transaction(callback) {
+    // Optimistic transaction: commit only if every value read is unchanged.
+    // Validation, limits and ticket deletion therefore share one atomic commit.
+    for (let attempt = 0; attempt < 16; attempt++) {
+      const reads = new Map();
+      const writes = new Map();
+      const read = async (key) => {
+        if (!reads.has(key))
+          reads.set(
+            key,
+            Promise.resolve(this.cache.get(this.key(key))).then((value) =>
+              value == null ? null : encode(value),
+            ),
+          );
+        return reads.get(key);
+      };
+      const tx = {
+        get: async (key) => decode(writes.has(key) ? writes.get(key) : await read(key)),
+        put: async (key, value) => {
+          await read(key);
+          writes.set(key, encode(value));
+        },
+        delete: async (key) => {
+          await read(key);
+          writes.set(key, null);
+        },
+        setAlarm: async () => {},
+      };
+      const result = await callback(tx);
+      if (!writes.size) return result;
+      const keys = [...reads.keys()];
+      const args = [];
+      for (const key of keys) {
+        const expected = await reads.get(key);
+        args.push(
+          expected === null ? "0" : "1",
+          expected ?? "",
+          writes.has(key) ? (writes.get(key) === null ? "D" : "S") : "R",
+          writes.get(key) ?? "",
+        );
+      }
+      const committed = await this.cache.eval(
+        `
+        for i,key in ipairs(KEYS) do
+          local offset=(i-1)*4
+          local value=redis.call('GET',key)
+          if ARGV[offset+1]=='0' then
+            if value then return 0 end
+          elseif value~=ARGV[offset+2] then return 0 end
+        end
+        for i,key in ipairs(KEYS) do
+          local offset=(i-1)*4
+          if ARGV[offset+3]=='D' then redis.call('DEL',key)
+          elseif ARGV[offset+3]=='S' then redis.call('SET',key,ARGV[offset+4],'EX',86400) end
+        end
+        return 1
+      `,
+        keys.map((key) => this.key(key)),
+        args,
+      );
+      if (Number(committed) === 1) return result;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(50, 2 ** attempt)));
+    }
+    return Response.json({ error: "busy" }, { status: 429 });
+  }
 }
 
 class RedisSessionNamespace {

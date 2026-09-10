@@ -1,9 +1,11 @@
 // Optional real-MSE smoke test. Requires local ffmpeg and Chrome.
-/* global URL, document, window, MediaSource, fetch, setInterval, console */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+/* global URL, document, window, MediaSource, fetch, setInterval, console, TextEncoder, Event */
+import { mkdtemp, readFile, rm, mkdir } from "node:fs/promises";
+import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { webcrypto as crypto } from "node:crypto";
 import { createRequire } from "node:module";
 const { chromium } = createRequire(new URL("../apps/dashboard/package.json", import.meta.url))(
   "@playwright/test",
@@ -28,6 +30,14 @@ try {
       "sine=frequency=440",
       "-t",
       "60",
+      "-map",
+      "0:v",
+      "-map",
+      "0:v",
+      "-map",
+      "1:a",
+      "-filter:v:1",
+      "scale=320:180",
       "-c:v",
       "libx264",
       "-pix_fmt",
@@ -47,8 +57,8 @@ try {
     { windowsHide: true, cwd: directory },
   );
   const mpd = await readFile(path.join(directory, "manifest.mpd"), "utf8");
-  const manifest = { durationMs: 60000 };
-  for (const [i, track] of ["video", "audio"].entries()) {
+  const manifest = { durationMs: 60000, video: [], audio: [] };
+  for (const [i, track] of ["video", "video", "audio"].entries()) {
     const representation = [...mpd.matchAll(/<Representation\b[^>]*>[\s\S]*?<\/Representation>/g)][
       i
     ][0];
@@ -62,14 +72,88 @@ try {
           durationMs: (Number(match[1]) / timescale) * 1000,
         });
     }
-    manifest[track] = [
-      { mimeType: `${track}/mp4`, codec: /codecs="([^"]+)"/.exec(representation)[1], segments },
-    ];
+    manifest[track].push({
+      mimeType: `${track}/mp4`,
+      codec: /codecs="([^"]+)"/.exec(representation)[1],
+      height: i === 1 ? 180 : 90,
+      qualityLabel: i === 1 ? "180p" : "90p",
+      segments,
+    });
   }
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage();
+  let mediaKey;
+  let expireRefresh = false;
+  let bootstrapCount = 0;
+  const tickets = new Map();
   await page.route("https://seek.test/**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
+    const json = (body, status = 200) =>
+      route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (pathname === "/session") {
+      bootstrapCount++;
+      expireRefresh = false;
+      return json({
+        sessionId: `test-${bootstrapCount}`,
+        playbackUrl: "https://seek.test/v/asset/media",
+        refreshUrl: "https://seek.test/v/asset/refresh",
+        token: "test-token",
+        tokenExpiresIn: 90,
+        mode: "protected_segments",
+        watermark: { enabled: true, label: "Test viewer" },
+      });
+    }
+    if (pathname === "/v/asset/refresh")
+      return expireRefresh
+        ? json({ error: { code: "TOKEN_EXPIRED" } }, 401)
+        : json({ token: "refreshed", tokenExpiresIn: 90 });
+    if (pathname === "/v/asset/bootstrap") {
+      const { publicKey } = route.request().postDataJSON();
+      const publicCryptoKey = await crypto.subtle.importKey(
+        "jwk",
+        publicKey,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        false,
+        ["encrypt"],
+      );
+      const raw = crypto.getRandomValues(new Uint8Array(32));
+      mediaKey = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
+      const wrapped = await crypto.subtle.encrypt("RSA-OAEP", publicCryptoKey, raw);
+      return json({ manifest, wrappedKey: Buffer.from(wrapped).toString("base64") });
+    }
+    if (pathname === "/v/asset/integrity" || pathname === "/v/asset/media")
+      return json({ ok: true });
+    if (pathname === "/v/asset/ticket") {
+      const ticket = crypto.randomUUID();
+      tickets.set(ticket, route.request().postDataJSON());
+      return json({ ticket });
+    }
+    if (pathname.startsWith("/v/asset/chunk/")) {
+      const ticket = new URL(route.request().url()).searchParams.get("ticket");
+      const item = tickets.get(ticket);
+      if (!item) return json({ error: { code: "SEGMENT_TICKET_INVALID" } }, 403);
+      tickets.delete(ticket);
+      const stream = item.track === "video" ? item.variant : 2;
+      const file = item.sequence
+        ? `chunk-stream${stream}-${String(item.sequence).padStart(5, "0")}.m4s`
+        : `init-stream${stream}.m4s`;
+      const raw = await readFile(path.join(directory, file));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const context = "test-context";
+      const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(context) },
+        mediaKey,
+        raw,
+      );
+      return route.fulfill({
+        body: Buffer.from(encrypted),
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-unpirator-iv": Buffer.from(iv).toString("base64"),
+          "x-unpirator-context": context,
+        },
+      });
+    }
     if (pathname === "/")
       return route.fulfill({ contentType: "text/html", body: "<video muted controls></video>" });
     if (pathname === "/index.js")
@@ -110,7 +194,7 @@ try {
     );
     runtime.mediaSource.duration = 60;
     runtime.request = async (track, variant, sequence) => {
-      const stream = track === "video" ? 0 : 1;
+      const stream = track === "video" ? variant : 2;
       const file = sequence
         ? `chunk-stream${stream}-${String(sequence).padStart(5, "0")}.m4s`
         : `init-stream${stream}.m4s`;
@@ -151,6 +235,95 @@ try {
     if (state.failure) throw new Error(state.failure);
     console.log(JSON.stringify({ seek: target, ...state }));
   }
+  await page.evaluate(async () => {
+    await window.runtime.setQuality(1);
+  });
+  await page.waitForFunction(
+    () => document.querySelector("video").currentTime > 16 && !window.failure,
+  );
+  console.log(
+    JSON.stringify({
+      qualitySwitch: await page.evaluate(() => ({
+        variant: window.runtime.videoVariant,
+        time: document.querySelector("video").currentTime,
+        failure: window.failure || null,
+      })),
+    }),
+  );
+  await page.evaluate(async () => {
+    document.querySelector("video").pause();
+    await window.runtime.setQuality(0);
+  });
+  if (!(await page.evaluate(() => document.querySelector("video").paused)))
+    throw new Error("Quality switch unpaused the video");
+  await page.evaluate(async () => {
+    window.runtime.destroy();
+    document.body.innerHTML = '<div id="player" style="width:640px;height:360px"></div>';
+    const { mountProtectedPlayer } = await import("/index.js");
+    window.player = await mountProtectedPlayer({
+      element: "#player",
+      bootstrap: async () => (await fetch("/session")).json(),
+      onError: (error) => {
+        window.failure = error.message;
+      },
+    });
+    window.player.video.muted = true;
+    await window.player.video.play();
+  });
+  await page.waitForFunction(() => window.player.video.currentTime > 0.3);
+  await page.evaluate(() => {
+    window.player.video.currentTime = 20;
+  });
+  await page.waitForFunction(
+    () => !window.player.video.seeking && window.player.video.currentTime > 20.3,
+  );
+  expireRefresh = true;
+  await page.evaluate(async () => {
+    window.player.video.pause();
+    window.player.tokenRefreshedAt = Date.now() - 30 * 60000;
+    try {
+      await window.player.ensureFreshToken();
+    } catch (error) {
+      window.player.handlePlaybackError(error);
+    }
+    await window.player.recovering;
+  });
+  const recovered = await page.evaluate(() => ({
+    time: window.player.video.currentTime,
+    paused: window.player.video.paused,
+    error: window.player.errorMessage?.textContent || null,
+  }));
+  if (bootstrapCount !== 2 || recovered.time < 20 || !recovered.paused || recovered.error)
+    throw new Error(`Recovery failed: ${JSON.stringify(recovered)}`);
+  await page.evaluate(async () => {
+    window.player.retryButton.click();
+    await window.player.recovering;
+  });
+  await page.waitForFunction(
+    () => window.player.video.currentTime > 20.8 && !window.player.video.paused,
+  );
+  const selectCount = await page.evaluate(
+    () => window.player.controls.querySelectorAll("option").length,
+  );
+  if (selectCount !== 2) throw new Error("Quality menu missing");
+  await page.evaluate(async () => {
+    const select = window.player.controls.querySelector("select");
+    select.value = String(window.player.protected.videoVariant === 0 ? 1 : 0);
+    select.dispatchEvent(new Event("change"));
+  });
+  await page.waitForFunction(
+    () => !window.player.controls.querySelector("select").disabled && !window.player.errorMessage,
+  );
+  await mkdir("artifacts", { recursive: true });
+  await page.screenshot({ path: "artifacts/player-recovery-quality.png" });
+  console.log(
+    JSON.stringify({
+      encryptedWorkerPlayback: "passed",
+      expiredRefreshRecovery: recovered,
+      manualReload: "passed",
+      qualityOptions: selectCount,
+    }),
+  );
 } finally {
   await browser?.close();
   if (
