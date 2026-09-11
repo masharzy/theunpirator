@@ -45,7 +45,8 @@ function button(label, icon, size = 44) {
     WebkitTapHighlightColor: "transparent",
   });
   const svg = item.querySelector("svg");
-  if (svg) styles(svg, { width: `${Math.round(size * 0.48)}px`, height: `${Math.round(size * 0.48)}px` });
+  if (svg)
+    styles(svg, { width: `${Math.round(size * 0.48)}px`, height: `${Math.round(size * 0.48)}px` });
   return item;
 }
 
@@ -180,14 +181,16 @@ export function installPlayerExperience(player) {
   });
   bottom.dataset.unpiratorUiControl = "true";
 
-  const seekHit = control(styles(document.createElement("div"), {
-    position: "relative",
-    height: "24px",
-    display: "flex",
-    alignItems: "center",
-    cursor: "pointer",
-    touchAction: "none",
-  }));
+  const seekHit = control(
+    styles(document.createElement("div"), {
+      position: "relative",
+      height: "24px",
+      display: "flex",
+      alignItems: "center",
+      cursor: "pointer",
+      touchAction: "none",
+    }),
+  );
   seekHit.setAttribute("role", "slider");
   seekHit.setAttribute("aria-label", "Video progress");
   seekHit.tabIndex = 0;
@@ -247,23 +250,25 @@ export function installPlayerExperience(player) {
   bottomRow.append(timeText, fullscreenButton);
   bottom.append(seekHit, bottomRow);
 
-  const settingsPanel = control(styles(document.createElement("div"), {
-    position: "absolute",
-    top: "54px",
-    right: "10px",
-    zIndex: "34",
-    width: "min(310px,calc(100% - 20px))",
-    maxHeight: "calc(100% - 70px)",
-    overflowY: "auto",
-    display: "none",
-    padding: "12px",
-    borderRadius: "14px",
-    background: "rgba(20,20,20,.96)",
-    border: "1px solid rgba(255,255,255,.12)",
-    boxShadow: "0 14px 40px rgba(0,0,0,.38)",
-    backdropFilter: "blur(12px)",
-    pointerEvents: "auto",
-  }));
+  const settingsPanel = control(
+    styles(document.createElement("div"), {
+      position: "absolute",
+      top: "54px",
+      right: "10px",
+      zIndex: "34",
+      width: "min(310px,calc(100% - 20px))",
+      maxHeight: "calc(100% - 70px)",
+      overflowY: "auto",
+      display: "none",
+      padding: "12px",
+      borderRadius: "14px",
+      background: "rgba(20,20,20,.96)",
+      border: "1px solid rgba(255,255,255,.12)",
+      boxShadow: "0 14px 40px rgba(0,0,0,.38)",
+      backdropFilter: "blur(12px)",
+      pointerEvents: "auto",
+    }),
+  );
 
   const fastBadge = styles(document.createElement("div"), {
     position: "absolute",
@@ -416,7 +421,9 @@ export function installPlayerExperience(player) {
 
   const progressRatio = () => {
     const duration = Number(video.duration);
-    return Number.isFinite(duration) && duration > 0 ? Math.min(1, Math.max(0, video.currentTime / duration)) : 0;
+    return Number.isFinite(duration) && duration > 0
+      ? Math.min(1, Math.max(0, video.currentTime / duration))
+      : 0;
   };
 
   const bufferedRatio = () => {
@@ -424,7 +431,10 @@ export function installPlayerExperience(player) {
     if (!Number.isFinite(duration) || duration <= 0 || !video.buffered?.length) return 0;
     try {
       for (let i = 0; i < video.buffered.length; i += 1) {
-        if (video.buffered.start(i) <= video.currentTime && video.buffered.end(i) >= video.currentTime) {
+        if (
+          video.buffered.start(i) <= video.currentTime &&
+          video.buffered.end(i) >= video.currentTime
+        ) {
           return Math.min(1, video.buffered.end(i) / duration);
         }
       }
@@ -441,8 +451,14 @@ export function installPlayerExperience(player) {
     seekBuffered.style.width = `${buffered}%`;
     seekThumb.style.left = `${played}%`;
     seekHit.setAttribute("aria-valuemin", "0");
-    seekHit.setAttribute("aria-valuemax", String(Math.max(0, Math.floor(Number(video.duration) || 0))));
-    seekHit.setAttribute("aria-valuenow", String(Math.max(0, Math.floor(Number(video.currentTime) || 0))));
+    seekHit.setAttribute(
+      "aria-valuemax",
+      String(Math.max(0, Math.floor(Number(video.duration) || 0))),
+    );
+    seekHit.setAttribute(
+      "aria-valuenow",
+      String(Math.max(0, Math.floor(Number(video.currentTime) || 0))),
+    );
     timeText.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
   };
 
