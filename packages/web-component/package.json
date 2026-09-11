@@ -1,6 +1,6 @@
 {
   "name": "@unpirator/web-component",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Universal Unpirator player for HTML, PHP, Django and any browser framework",
   "keywords": [
     "web-component",
