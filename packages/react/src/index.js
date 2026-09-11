@@ -18,6 +18,12 @@ export function UnpiratorPlayer({
   getHeaders,
   getAccessToken,
   youtubeDirect = false,
+  onBack,
+  onMinimize,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
   onReady,
   onError,
 }) {
@@ -53,6 +59,15 @@ export function UnpiratorPlayer({
       .then((mounted) => {
         if (disposed) return mounted.destroy();
         player = mounted;
+        mounted.setExperienceOptions?.({
+          title,
+          onBack,
+          onMinimize,
+          onPrevious,
+          onNext,
+          hasPrevious,
+          hasNext,
+        });
         if (poster) player.video.poster = poster;
         if (autoPlay) player.video.play().catch(() => {});
         onReady?.(player);
@@ -74,6 +89,12 @@ export function UnpiratorPlayer({
     getHeaders,
     getAccessToken,
     youtubeDirect,
+    onBack,
+    onMinimize,
+    onPrevious,
+    onNext,
+    hasPrevious,
+    hasNext,
   ]);
 
   return createElement("div", {
