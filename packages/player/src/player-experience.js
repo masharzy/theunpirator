@@ -605,7 +605,9 @@ export function installPlayerExperience(player) {
         if (old !== retry) old.remove();
       }
       retry.dataset.unpiratorRetry = "true";
-      retry.textContent = "Refresh video";
+      if (retry.textContent !== "Refresh video") {
+        retry.textContent = "Refresh video";
+      }
       retry.dataset.unpiratorUiControl = "true";
       styles(retry, {
         minWidth: "148px",
