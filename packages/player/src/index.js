@@ -1,5 +1,6 @@
 import Hls from "hls.js";
 import { sequenceAtTime } from "./segment-timeline.js";
+import { installPlayerExperience } from "./player-experience.js";
 
 const positions = [
   ["8%", "8%"],
@@ -161,6 +162,7 @@ export class ProtectedPlayer {
     };
     document.addEventListener("visibilitychange", this.onVisible);
     this.video.addEventListener("play", this.onVisible);
+    this.cleanupExperience = installPlayerExperience(this);
     return this;
   }
 
@@ -476,6 +478,8 @@ export class ProtectedPlayer {
 
   destroy() {
     this.destroyed = true;
+    this.cleanupExperience?.();
+    this.cleanupExperience = null;
     if (this.onVisible) document.removeEventListener("visibilitychange", this.onVisible);
     this.video?.removeEventListener?.("play", this.onVisible);
     for (const timer of this.timers) clearInterval(timer);
