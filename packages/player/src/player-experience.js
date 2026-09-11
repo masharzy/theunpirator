@@ -17,12 +17,21 @@ const ICONS = {
   next: svg("M16 6h2v12h-2zM5 6.5v11L14 12z"),
   play: svg("M8 5v14l11-7z"),
   pause: svg("M6 5h4v14H6zm8 0h4v14h-4z"),
+  volume: svg(
+    "M3 9v6h4l5 4V5L7 9H3zm12.5 3A3.5 3.5 0 0 0 14 9.13v5.74A3.5 3.5 0 0 0 15.5 12zm0-7.1v2.06a7 7 0 0 1 0 10.08v2.06a9 9 0 0 0 0-14.2z",
+  ),
+  muted: svg(
+    "M3 9v6h4l5 4V5L7 9H3zm12.6 3 2.2-2.2-1.4-1.4-2.2 2.2L12 8.4 10.6 9.8l2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2z",
+  ),
   settings: svg(
     "M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58-1.92-3.32-2.39.96a7.1 7.1 0 0 0-1.62-.94L14.87 3h-3.84l-.36 3.18c-.58.24-1.12.55-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.05.31-.08.64-.08.94s.03.63.08.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.02-1.58ZM13 15.5A3.5 3.5 0 1 1 13 8a3.5 3.5 0 0 1 0 7.5Z",
   ),
-  minimize: svg("M7 10l5 5 5-5H7z"),
+  minimize: svg("M6 7h12v10H6V7zm2 2v6h8V9H8zm5 2h2v3h-3v-2h1v-1z"),
   fullscreen: svg(
     "M7 14H5v5h5v-2H7v-3Zm-2-4h2V7h3V5H5v5Zm12 7h-3v2h5v-5h-2v3Zm-3-12v2h3v3h2V5h-5Z",
+  ),
+  fullscreenExit: svg(
+    "M5 16h3v3h2v-5H5v2Zm3-8H5v2h5V5H8v3Zm6 11h2v-3h3v-2h-5v5Zm2-11V5h-2v5h5V8h-3Z",
   ),
 };
 
@@ -47,10 +56,10 @@ function button(label, icon, size = 44, circle = false) {
     flex: `0 0 ${size}px`,
     border: "0",
     borderRadius: "999px",
-    padding: circle ? "13px" : "11px",
+    padding: circle ? "12px" : "10px",
     display: "grid",
     placeItems: "center",
-    background: circle ? "rgba(15,15,15,.53)" : "transparent",
+    background: circle ? "rgba(66,72,77,.72)" : "transparent",
     color: "#fff",
     cursor: "pointer",
     outline: "none",
@@ -90,13 +99,26 @@ function persistSpeed(value) {
   } catch {}
 }
 
+function isEditableTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("input,textarea,select,[contenteditable='true'],[role='textbox']"));
+}
+
 export function installPlayerExperience(player) {
   const video = player?.video;
   const frame = player?.frame || player?.root;
   if (!video || !frame || typeof document === "undefined") return () => {};
 
+  const desktopQuery = window.matchMedia?.("(hover: hover) and (pointer: fine)");
+  let desktopMode = desktopQuery ? desktopQuery.matches : !navigator.maxTouchPoints;
   let destroyed = false;
-  let visible = true;
+  let visible = !desktopMode;
+  let pointerInside = false;
+  let keyboardActive = false;
+  let spaceHoldTimer;
+  let spaceHoldActive = false;
+  let spaceHoldRestoreRate = 1;
+  let spacePressArmed = false;
   let seeking = false;
   let experience = {};
   let hideTimer;
@@ -121,7 +143,6 @@ export function installPlayerExperience(player) {
   video.playsInline = true;
   video.setAttribute("controlsList", "nodownload");
   video.playbackRate = persistedSpeed();
-
   styles(video, {
     width: "100%",
     height: "100%",
@@ -136,7 +157,9 @@ export function installPlayerExperience(player) {
     background: "#000",
     overflow: "hidden",
     transformOrigin: "50% 50%",
+    outline: "none",
   });
+  frame.tabIndex = -1;
 
   const ui = document.createElement("div");
   ui.dataset.unpiratorPlayerUi = "true";
@@ -148,26 +171,46 @@ export function installPlayerExperience(player) {
     fontFamily: "system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
     userSelect: "none",
     pointerEvents: "none",
-    opacity: "1",
-    transform: "scale(1)",
+    opacity: visible ? "1" : "0",
   });
 
-  const top = styles(document.createElement("div"), {
+  const desktopTitleBar = styles(document.createElement("div"), {
+    position: "absolute",
+    inset: "0 0 auto 0",
+    minHeight: "82px",
+    padding: "18px 22px 28px",
+    boxSizing: "border-box",
+    display: "none",
+    alignItems: "flex-start",
+    background: "linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.42),transparent)",
+    pointerEvents: "none",
+  });
+  const desktopTitle = styles(document.createElement("div"), {
+    maxWidth: "min(860px,82%)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    fontSize: "16px",
+    fontWeight: "700",
+    textShadow: "0 2px 6px rgba(0,0,0,.85)",
+  });
+  desktopTitleBar.appendChild(desktopTitle);
+
+  const mobileTop = styles(document.createElement("div"), {
     position: "absolute",
     inset: "0 0 auto 0",
     height: "62px",
     padding: "6px 6px 6px 4px",
     boxSizing: "border-box",
-    display: "flex",
+    display: desktopMode ? "none" : "flex",
     alignItems: "center",
     gap: "2px",
     background: "linear-gradient(to bottom,rgba(0,0,0,.72),rgba(0,0,0,0))",
     pointerEvents: "auto",
   });
-  top.dataset.unpiratorUiControl = "true";
-
+  mobileTop.dataset.unpiratorUiControl = "true";
   const backButton = button("Back", ICONS.back, 46);
-  const titleView = styles(document.createElement("div"), {
+  const mobileTitle = styles(document.createElement("div"), {
     minWidth: "0",
     flex: "1",
     height: "46px",
@@ -196,56 +239,38 @@ export function installPlayerExperience(player) {
     fontWeight: "700",
     cursor: "pointer",
   });
-  const settingsButton = button("Playback settings", ICONS.settings, 44);
-  const minimizeButton = button("Minimize player", ICONS.minimize, 44);
-  top.append(backButton, titleView, speedBadge, settingsButton, minimizeButton);
+  const mobileSettingsButton = button("Playback settings", ICONS.settings, 44);
+  const mobileMinimizeButton = button("Mini player", ICONS.minimize, 44);
+  mobileTop.append(backButton, mobileTitle, speedBadge, mobileSettingsButton, mobileMinimizeButton);
 
-  const center = styles(document.createElement("div"), {
+  const mobileCenter = styles(document.createElement("div"), {
     position: "absolute",
     left: "50%",
     top: "50%",
     transform: "translate(-50%,-50%)",
     height: "76px",
-    display: "flex",
+    display: desktopMode ? "none" : "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: "18px",
     pointerEvents: "auto",
   });
-  center.dataset.unpiratorUiControl = "true";
+  mobileCenter.dataset.unpiratorUiControl = "true";
   const previousButton = button("Previous class", ICONS.previous, 56, true);
-  const playPause = button("Play", ICONS.play, 70, true);
+  const mobilePlayPause = button("Play", ICONS.play, 70, true);
   const nextButton = button("Next class", ICONS.next, 56, true);
-  center.append(previousButton, playPause, nextButton);
-
-  const loading = styles(document.createElement("div"), {
-    position: "absolute",
-    left: "50%",
-    top: "calc(50% + 96px)",
-    transform: "translate(-50%,-50%)",
-    width: "118px",
-    height: "38px",
-    borderRadius: "999px",
-    display: "none",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(28,28,28,.65)",
-    fontSize: "13px",
-    fontWeight: "700",
-    pointerEvents: "none",
-  });
-  loading.textContent = "Loading…";
+  mobileCenter.append(previousButton, mobilePlayPause, nextButton);
 
   const bottom = styles(document.createElement("div"), {
     position: "absolute",
     inset: "auto 0 0 0",
-    height: "72px",
-    padding: "0 4px 4px 8px",
+    minHeight: "68px",
+    padding: desktopMode ? "0 16px 8px" : "0 6px 4px 8px",
     boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
     justifyContent: "flex-end",
-    background: "linear-gradient(to top,rgba(0,0,0,.78),rgba(0,0,0,0))",
+    background: "linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,.26),transparent)",
     pointerEvents: "auto",
   });
   bottom.dataset.unpiratorUiControl = "true";
@@ -253,7 +278,7 @@ export function installPlayerExperience(player) {
   const seekHit = control(
     styles(document.createElement("div"), {
       position: "relative",
-      height: "28px",
+      height: desktopMode ? "18px" : "28px",
       display: "flex",
       alignItems: "center",
       cursor: "pointer",
@@ -267,51 +292,116 @@ export function installPlayerExperience(player) {
     position: "absolute",
     left: "0",
     right: "0",
-    height: "3px",
+    height: desktopMode ? "4px" : "3px",
     borderRadius: "999px",
-    background: "rgba(120,120,120,.57)",
+    background: "rgba(78,78,78,.74)",
     overflow: "hidden",
   });
   const seekBuffered = styles(document.createElement("div"), {
     position: "absolute",
     inset: "0 auto 0 0",
     width: "0%",
-    background: "rgba(220,220,220,.82)",
+    background: "rgba(220,220,220,.70)",
   });
   const seekPlayed = styles(document.createElement("div"), {
     position: "absolute",
     inset: "0 auto 0 0",
     width: "0%",
-    background: "#ff0000",
+    background: "#ff0046",
   });
   const seekThumb = styles(document.createElement("div"), {
     position: "absolute",
     left: "0%",
     top: "50%",
-    width: "12px",
-    height: "12px",
+    width: desktopMode ? "12px" : "12px",
+    height: desktopMode ? "12px" : "12px",
     borderRadius: "999px",
-    background: "#ff0000",
+    background: "#ff0046",
     transform: "translate(-50%,-50%) scale(.78)",
   });
   seekBase.append(seekBuffered, seekPlayed);
   seekHit.append(seekBase, seekThumb);
 
   const bottomRow = styles(document.createElement("div"), {
-    height: "38px",
+    height: desktopMode ? "46px" : "38px",
     display: "flex",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
   });
-  const timeText = styles(document.createElement("div"), {
+  const desktopLeft = styles(document.createElement("div"), {
+    display: desktopMode ? "flex" : "none",
+    alignItems: "center",
+    gap: "8px",
+  });
+  const desktopPlayPause = button("Play", ICONS.play, 42, true);
+  const volumeButton = button("Mute", ICONS.volume, 42, true);
+  const desktopTime = styles(document.createElement("div"), {
+    minWidth: "108px",
+    height: "40px",
+    padding: "0 16px",
+    boxSizing: "border-box",
+    borderRadius: "999px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(82,88,93,.78)",
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: "700",
+    fontVariantNumeric: "tabular-nums",
+    textShadow: "0 1px 3px rgba(0,0,0,.55)",
+  });
+  desktopTime.textContent = "0:00 / 0:00";
+  desktopLeft.append(desktopPlayPause, volumeButton, desktopTime);
+
+  const mobileTime = styles(document.createElement("div"), {
+    display: desktopMode ? "none" : "block",
     flex: "1",
     fontSize: "12px",
     fontWeight: "500",
     textShadow: "0 1px 4px rgba(0,0,0,.8)",
   });
-  timeText.textContent = "0:00 / 0:00";
-  const fullscreenButton = button("Full screen", ICONS.fullscreen, 50);
-  bottomRow.append(timeText, fullscreenButton);
+  mobileTime.textContent = "0:00 / 0:00";
+
+  const desktopRight = styles(document.createElement("div"), {
+    display: desktopMode ? "flex" : "none",
+    alignItems: "center",
+    gap: "4px",
+  });
+  const desktopSettingsButton = button("Playback settings", ICONS.settings, 42);
+  const desktopMinimizeButton = button("Mini player", ICONS.minimize, 42);
+  const fullscreenButton = button("Full screen", ICONS.fullscreen, 44);
+  desktopRight.append(desktopSettingsButton, desktopMinimizeButton, fullscreenButton);
+
+  const mobileRight = styles(document.createElement("div"), {
+    display: desktopMode ? "none" : "flex",
+    alignItems: "center",
+  });
+  const mobileFullscreenButton = button("Full screen", ICONS.fullscreen, 48);
+  mobileRight.appendChild(mobileFullscreenButton);
+  bottomRow.append(desktopLeft, mobileTime, desktopRight, mobileRight);
   bottom.append(seekHit, bottomRow);
+
+  const loading = styles(document.createElement("div"), {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    transform: "translate(-50%,-50%)",
+    minWidth: "118px",
+    height: "38px",
+    padding: "0 14px",
+    boxSizing: "border-box",
+    borderRadius: "999px",
+    display: "none",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(28,28,28,.72)",
+    fontSize: "13px",
+    fontWeight: "700",
+    pointerEvents: "none",
+  });
+  loading.textContent = "Loading…";
 
   const fastBadge = styles(document.createElement("div"), {
     position: "absolute",
@@ -326,7 +416,7 @@ export function installPlayerExperience(player) {
     display: "none",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(28,28,28,.65)",
+    background: "rgba(28,28,28,.72)",
     fontSize: "13px",
     fontWeight: "700",
     zIndex: "35",
@@ -336,11 +426,12 @@ export function installPlayerExperience(player) {
   const settingsPanel = control(
     styles(document.createElement("div"), {
       position: "absolute",
-      top: "54px",
-      right: "10px",
+      right: "12px",
+      bottom: desktopMode ? "64px" : "auto",
+      top: desktopMode ? "auto" : "54px",
       zIndex: "36",
-      width: "min(300px,calc(100% - 20px))",
-      maxHeight: "calc(100% - 66px)",
+      width: "min(300px,calc(100% - 24px))",
+      maxHeight: "calc(100% - 74px)",
       overflowY: "auto",
       display: "none",
       padding: "10px",
@@ -414,59 +505,73 @@ export function installPlayerExperience(player) {
   });
   errorPanel.dataset.unpiratorUiControl = "true";
 
-  ui.append(top, center, bottom, loading, fastBadge, settingsPanel, seekFeedback);
+  ui.append(
+    desktopTitleBar,
+    mobileTop,
+    mobileCenter,
+    bottom,
+    loading,
+    fastBadge,
+    settingsPanel,
+    seekFeedback,
+  );
   frame.append(ui, errorPanel);
 
   const pulse = (node, strong = false) => {
     node.animate(
       [
         { transform: "scale(1)", opacity: 1 },
-        { transform: `scale(${strong ? 0.8 : 0.88})`, opacity: 0.64 },
+        { transform: `scale(${strong ? 0.82 : 0.9})`, opacity: 0.66 },
         { transform: "scale(1)", opacity: node.disabled ? 0.33 : 1 },
       ],
-      { duration: 203, easing: "cubic-bezier(.2,.8,.2,1)" },
+      { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" },
     );
+  };
+
+  const isPlayerFullscreen = () => {
+    const full = document.fullscreenElement;
+    if (!full) return false;
+    return full === frame || full === player.host || full === player.root || full.contains?.(frame);
+  };
+
+  const updateTitleVisibility = () => {
+    const title = typeof experience.title === "string" ? experience.title.trim() : "";
+    mobileTitle.textContent = title;
+    desktopTitle.textContent = title;
+    mobileTitle.style.visibility = !desktopMode && visible && title ? "visible" : "hidden";
+    desktopTitleBar.style.display =
+      desktopMode && visible && title && isPlayerFullscreen() ? "flex" : "none";
   };
 
   const scheduleHide = () => {
     clearTimeout(hideTimer);
+    if (desktopMode) return;
     if (!video.paused && !video.ended && !seeking && settingsPanel.style.display === "none")
       hideTimer = setTimeout(() => setVisible(false), HIDE_DELAY_MS);
   };
 
-  const setVisible = (next) => {
-    if (
-      visible === next &&
-      ((next && ui.style.opacity === "1") || (!next && ui.style.opacity === "0"))
-    )
-      return;
+  const setVisible = (next, immediate = false) => {
+    if (destroyed) return;
+    if (desktopMode && next && !pointerInside && !isPlayerFullscreen()) next = false;
     visible = next;
     clearTimeout(hideTimer);
-    settingsPanel.style.display = "none";
-    ui.style.pointerEvents = "none";
-    top.style.pointerEvents = next ? "auto" : "none";
-    center.style.pointerEvents = next ? "auto" : "none";
+    if (!next) settingsPanel.style.display = "none";
+    mobileTop.style.pointerEvents = next && !desktopMode ? "auto" : "none";
+    mobileCenter.style.pointerEvents = next && !desktopMode ? "auto" : "none";
     bottom.style.pointerEvents = next ? "auto" : "none";
-    const animation = next
-      ? [
-          { opacity: 0, transform: "scale(.985)" },
-          { opacity: 1, transform: "scale(1)" },
-        ]
-      : [
-          { opacity: 1, transform: "scale(1)" },
-          { opacity: 0, transform: "scale(1.008)" },
-        ];
     ui.getAnimations().forEach((item) => item.cancel());
-    const run = ui.animate(animation, {
-      duration: next ? 230 : 190,
-      easing: next ? "cubic-bezier(.1,.72,.2,1)" : "ease-out",
-      fill: "forwards",
-    });
-    run.onfinish = () => {
-      if (destroyed) return;
+    if (immediate) {
       ui.style.opacity = next ? "1" : "0";
-      ui.style.transform = next ? "scale(1)" : "scale(1.008)";
-    };
+    } else {
+      ui.animate([{ opacity: next ? 0 : 1 }, { opacity: next ? 1 : 0 }], {
+        duration: desktopMode ? 100 : next ? 230 : 190,
+        easing: next ? "cubic-bezier(.1,.72,.2,1)" : "ease-out",
+        fill: "forwards",
+      }).onfinish = () => {
+        if (!destroyed) ui.style.opacity = next ? "1" : "0";
+      };
+    }
+    updateTitleVisibility();
     if (next) scheduleHide();
   };
 
@@ -474,27 +579,48 @@ export function installPlayerExperience(player) {
     const playing = !video.paused && !video.ended;
     if (lastPlayingVisual === playing) return;
     lastPlayingVisual = playing;
-    playPause.innerHTML = playing ? ICONS.pause : ICONS.play;
-    playPause.setAttribute("aria-label", playing ? "Pause" : "Play");
-    const child = playPause.querySelector("svg");
-    if (child) styles(child, { width: "100%", height: "100%" });
-    if (animate) {
-      playPause.animate(
-        [
-          { transform: `rotate(${playing ? -5 : 5}deg) scale(.78)` },
-          { transform: "rotate(0deg) scale(1)" },
-        ],
-        { duration: 175, easing: "cubic-bezier(.2,1.45,.35,1)" },
-      );
+    for (const node of [desktopPlayPause, mobilePlayPause]) {
+      node.innerHTML = playing ? ICONS.pause : ICONS.play;
+      node.setAttribute("aria-label", playing ? "Pause" : "Play");
+      const child = node.querySelector("svg");
+      if (child) styles(child, { width: "100%", height: "100%" });
+      if (animate && !desktopMode) {
+        node.animate(
+          [
+            { transform: `rotate(${playing ? -5 : 5}deg) scale(.78)` },
+            { transform: "rotate(0deg) scale(1)" },
+          ],
+          { duration: 175, easing: "cubic-bezier(.2,1.45,.35,1)" },
+        );
+      }
     }
     if (playing) scheduleHide();
     else clearTimeout(hideTimer);
   };
 
+  const updateVolume = () => {
+    const muted = video.muted || Number(video.volume) === 0;
+    volumeButton.innerHTML = muted ? ICONS.muted : ICONS.volume;
+    volumeButton.setAttribute("aria-label", muted ? "Unmute" : "Mute");
+    const child = volumeButton.querySelector("svg");
+    if (child) styles(child, { width: "100%", height: "100%" });
+  };
+
+  const updateFullscreen = () => {
+    const full = isPlayerFullscreen();
+    for (const node of [fullscreenButton, mobileFullscreenButton]) {
+      node.innerHTML = full ? ICONS.fullscreenExit : ICONS.fullscreen;
+      node.setAttribute("aria-label", full ? "Exit full screen" : "Full screen");
+      const child = node.querySelector("svg");
+      if (child) styles(child, { width: "100%", height: "100%" });
+    }
+    updateTitleVisibility();
+  };
+
   const updateSpeedBadge = () => {
     const rate = Number(video.playbackRate || 1);
     speedBadge.textContent = speedLabel(rate);
-    speedBadge.style.display = Math.abs(rate - 1) < 0.001 ? "none" : "inline-flex";
+    speedBadge.style.display = !desktopMode && Math.abs(rate - 1) >= 0.001 ? "inline-flex" : "none";
     speedBadge.style.alignItems = "center";
     speedBadge.style.justifyContent = "center";
   };
@@ -518,7 +644,9 @@ export function installPlayerExperience(player) {
     seekPlayed.style.width = `${ratio * 100}%`;
     seekBuffered.style.width = `${buffered * 100}%`;
     seekThumb.style.left = `${ratio * 100}%`;
-    timeText.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+    const text = `${formatTime(current)} / ${formatTime(duration)}`;
+    desktopTime.textContent = text;
+    mobileTime.textContent = text;
   };
 
   const seekToPointer = (event) => {
@@ -530,14 +658,15 @@ export function installPlayerExperience(player) {
     updateProgress();
   };
 
-  const seekBy = (side) => {
+  const seekBy = (seconds) => {
     const duration = Number(video.duration);
     const upper = Number.isFinite(duration) && duration > 0 ? duration : Number.MAX_SAFE_INTEGER;
-    video.currentTime = Math.max(0, Math.min(upper, Number(video.currentTime || 0) + side * 10));
+    video.currentTime = Math.max(0, Math.min(upper, Number(video.currentTime || 0) + seconds));
     updateProgress();
   };
 
   const showSeekFeedback = (side, seconds) => {
+    if (desktopMode) return;
     clearTimeout(rapidSeekTimer);
     seekFeedback.style.display = "block";
     if (side < 0) {
@@ -586,6 +715,35 @@ export function installPlayerExperience(player) {
     }, 620);
   };
 
+  const togglePlayback = () => {
+    if (video.paused || video.ended) video.play().catch(() => {});
+    else video.pause();
+  };
+
+  const toggleFullscreen = async () => {
+    const target = player.host || frame;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await target.requestFullscreen?.();
+    } catch {}
+  };
+
+  const canMiniPlayer = () =>
+    typeof experience.onMinimize === "function" ||
+    Boolean(document.pictureInPictureEnabled && video.requestPictureInPicture);
+
+  const requestMiniPlayer = async () => {
+    if (typeof experience.onMinimize === "function") {
+      experience.onMinimize();
+      return;
+    }
+    if (!document.pictureInPictureEnabled || !video.requestPictureInPicture) return;
+    try {
+      if (document.pictureInPictureElement === video) await document.exitPictureInPicture?.();
+      else await video.requestPictureInPicture();
+    } catch {}
+  };
+
   const renderSettings = () => {
     settingsPanel.replaceChildren();
     const section = (label) => {
@@ -631,7 +789,7 @@ export function installPlayerExperience(player) {
           persistSpeed(rate);
           updateSpeedBadge();
           settingsPanel.style.display = "none";
-          setVisible(true);
+          if (!desktopMode) setVisible(true);
         }),
       );
     });
@@ -667,16 +825,19 @@ export function installPlayerExperience(player) {
 
   const applyExperience = () => {
     const title = typeof experience.title === "string" ? experience.title.trim() : "";
-    titleView.textContent = title;
-    titleView.style.visibility = title ? "visible" : "hidden";
+    mobileTitle.textContent = title;
+    desktopTitle.textContent = title;
     backButton.style.display = typeof experience.onBack === "function" ? "grid" : "none";
-    minimizeButton.style.display = typeof experience.onMinimize === "function" ? "grid" : "none";
+    const miniAvailable = canMiniPlayer();
+    mobileMinimizeButton.style.display = miniAvailable ? "grid" : "none";
+    desktopMinimizeButton.style.display = miniAvailable ? "grid" : "none";
     previousButton.style.display = typeof experience.onPrevious === "function" ? "grid" : "none";
     nextButton.style.display = typeof experience.onNext === "function" ? "grid" : "none";
     previousButton.disabled = experience.hasPrevious === false;
     nextButton.disabled = experience.hasNext === false;
     previousButton.style.opacity = previousButton.disabled ? ".33" : "1";
     nextButton.style.opacity = nextButton.disabled ? ".33" : "1";
+    updateTitleVisibility();
   };
 
   player.setExperienceOptions = (next = {}) => {
@@ -684,6 +845,23 @@ export function installPlayerExperience(player) {
     applyExperience();
   };
   applyExperience();
+
+  const applyModeLayout = () => {
+    mobileTop.style.display = desktopMode ? "none" : "flex";
+    mobileCenter.style.display = desktopMode ? "none" : "flex";
+    desktopLeft.style.display = desktopMode ? "flex" : "none";
+    desktopRight.style.display = desktopMode ? "flex" : "none";
+    mobileTime.style.display = desktopMode ? "none" : "block";
+    mobileRight.style.display = desktopMode ? "none" : "flex";
+    bottom.style.padding = desktopMode ? "0 16px 8px" : "0 6px 4px 8px";
+    bottomRow.style.height = desktopMode ? "46px" : "38px";
+    seekHit.style.height = desktopMode ? "18px" : "28px";
+    seekBase.style.height = desktopMode ? "4px" : "3px";
+    settingsPanel.style.top = desktopMode ? "auto" : "54px";
+    settingsPanel.style.bottom = desktopMode ? "64px" : "auto";
+    updateSpeedBadge();
+    updateTitleVisibility();
+  };
 
   const resetDrag = () => {
     draggingDown = false;
@@ -726,13 +904,16 @@ export function installPlayerExperience(player) {
           experience.onBack?.();
         }
       } else {
-        experience.onMinimize?.();
+        await requestMiniPlayer();
       }
       resetDrag();
     };
   };
 
   const onPointerDown = (event) => {
+    keyboardActive = true;
+    frame.focus?.({ preventScroll: true });
+    if (desktopMode) return;
     if (event.button !== undefined && event.button !== 0) return;
     pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
     draggingDown = false;
@@ -743,9 +924,8 @@ export function installPlayerExperience(player) {
       if (!pointerStart || draggingDown || destroyed) return;
       holdActive = true;
       holdRestoreRate = Number(video.playbackRate || 1);
-      const fast = Math.min(4, Math.max(2, holdRestoreRate));
-      video.playbackRate = fast;
-      fastBadge.textContent = `${speedLabel(fast)}  Hold`;
+      video.playbackRate = 2;
+      fastBadge.textContent = "2×  Hold";
       fastBadge.style.display = "flex";
       clearTimeout(hideTimer);
     }, LONG_PRESS_MS);
@@ -763,6 +943,7 @@ export function installPlayerExperience(player) {
   };
 
   const onPointerMove = (event) => {
+    if (desktopMode) return;
     if (!pointerStart) return;
     const dx = event.clientX - pointerStart.x;
     const dy = event.clientY - pointerStart.y;
@@ -800,6 +981,14 @@ export function installPlayerExperience(player) {
   };
 
   const finishSurfacePointer = (event) => {
+    if (desktopMode) {
+      clearTimeout(singleTapTimer);
+      singleTapTimer = setTimeout(() => {
+        singleTapTimer = null;
+        togglePlayback();
+      }, 220);
+      return;
+    }
     if (!pointerStart) {
       finishHold();
       return;
@@ -811,14 +1000,12 @@ export function installPlayerExperience(player) {
     const distance = Math.hypot(dx, dy);
     const wasHold = finishHold();
     pointerStart = null;
-
     if (draggingDown) {
       const fullscreen = Boolean(document.fullscreenElement);
       const commit =
         dragProgress >= (fullscreen ? FULLSCREEN_EXIT_FRACTION : MINIMIZE_COMMIT_FRACTION);
       draggingDown = false;
-      if (commit && (fullscreen || typeof experience.onMinimize === "function"))
-        commitDrag(fullscreen);
+      if (commit && (fullscreen || canMiniPlayer())) commitDrag(fullscreen);
       else {
         frame.animate(
           [
@@ -831,15 +1018,13 @@ export function installPlayerExperience(player) {
       return;
     }
     if (wasHold || distance > MOVE_TOLERANCE_PX) return;
-
     const rect = video.getBoundingClientRect();
     const side = event.clientX - rect.left < rect.width / 2 ? -1 : 1;
     const now = Date.now();
-
     if (now <= rapidUntil && side === rapidSide) {
       rapidSeconds += 10;
       rapidUntil = now + RAPID_SEEK_CHAIN_MS;
-      seekBy(side);
+      seekBy(side * 10);
       showSeekFeedback(side, rapidSeconds);
       return;
     }
@@ -849,7 +1034,7 @@ export function installPlayerExperience(player) {
       rapidSide = side;
       rapidSeconds = 10;
       rapidUntil = now + RAPID_SEEK_CHAIN_MS;
-      seekBy(side);
+      seekBy(side * 10);
       showSeekFeedback(side, rapidSeconds);
       return;
     }
@@ -867,6 +1052,27 @@ export function installPlayerExperience(player) {
     pointerStart = null;
     finishHold();
     if (draggingDown) resetDrag();
+  };
+
+  const onDesktopDoubleClick = (event) => {
+    if (!desktopMode) return;
+    clearTimeout(singleTapTimer);
+    singleTapTimer = null;
+    event.preventDefault();
+    toggleFullscreen();
+  };
+
+  const onPointerEnter = () => {
+    if (!desktopMode) return;
+    pointerInside = true;
+    keyboardActive = true;
+    setVisible(true, true);
+  };
+
+  const onPointerLeave = () => {
+    if (!desktopMode) return;
+    pointerInside = false;
+    setVisible(false, true);
   };
 
   const syncCoreRecoveryUi = () => {
@@ -914,10 +1120,10 @@ export function installPlayerExperience(player) {
     errorPanel.style.display = hasError ? "flex" : "none";
     if (hasError) {
       recoveryErrorVisible = true;
-      setVisible(false);
+      setVisible(false, true);
     } else if (recoveryErrorVisible) {
       recoveryErrorVisible = false;
-      setVisible(true);
+      setVisible(!desktopMode || pointerInside, true);
     }
   };
 
@@ -929,13 +1135,24 @@ export function installPlayerExperience(player) {
   observer.observe(frame, { childList: true });
   syncCoreRecoveryUi();
 
+  const openSettings = (buttonNode) => {
+    pulse(buttonNode);
+    renderSettings();
+    settingsPanel.style.display = settingsPanel.style.display === "none" ? "block" : "none";
+    clearTimeout(hideTimer);
+  };
+
   backButton.onclick = () => {
     pulse(backButton);
     experience.onBack?.();
   };
-  minimizeButton.onclick = () => {
-    pulse(minimizeButton);
-    commitDrag(Boolean(document.fullscreenElement));
+  mobileMinimizeButton.onclick = async () => {
+    pulse(mobileMinimizeButton);
+    await requestMiniPlayer();
+  };
+  desktopMinimizeButton.onclick = async () => {
+    pulse(desktopMinimizeButton);
+    await requestMiniPlayer();
   };
   previousButton.onclick = () => {
     if (previousButton.disabled) return;
@@ -949,28 +1166,24 @@ export function installPlayerExperience(player) {
     experience.onNext?.();
     setVisible(true);
   };
-  playPause.onclick = () => {
-    pulse(playPause, true);
-    if (video.paused || video.ended) video.play().catch(() => {});
-    else video.pause();
+  mobilePlayPause.onclick = () => {
+    pulse(mobilePlayPause, true);
+    togglePlayback();
     setVisible(true);
   };
-  settingsButton.onclick = () => {
-    pulse(settingsButton);
-    renderSettings();
-    settingsPanel.style.display = settingsPanel.style.display === "none" ? "block" : "none";
-    clearTimeout(hideTimer);
+  desktopPlayPause.onclick = () => {
+    pulse(desktopPlayPause, true);
+    togglePlayback();
   };
-  speedBadge.onclick = () => settingsButton.click();
-  fullscreenButton.onclick = async () => {
-    pulse(fullscreenButton, true);
-    const target = player.host || frame;
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await target.requestFullscreen?.();
-    } catch {}
-    setVisible(true);
+  volumeButton.onclick = () => {
+    video.muted = !video.muted;
+    updateVolume();
   };
+  mobileSettingsButton.onclick = () => openSettings(mobileSettingsButton);
+  desktopSettingsButton.onclick = () => openSettings(desktopSettingsButton);
+  speedBadge.onclick = () => mobileSettingsButton.click();
+  fullscreenButton.onclick = () => toggleFullscreen();
+  mobileFullscreenButton.onclick = () => toggleFullscreen();
 
   const onSeekDown = (event) => {
     seeking = true;
@@ -988,14 +1201,151 @@ export function installPlayerExperience(player) {
     seekHit.releasePointerCapture?.(event.pointerId);
     seekThumb.style.transform = "translate(-50%,-50%) scale(.78)";
     updateProgress();
-    setVisible(true);
+    if (!desktopMode) setVisible(true);
   };
   const onSeekKey = (event) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    video.currentTime = Math.max(0, video.currentTime + (event.key === "ArrowLeft" ? -5 : 5));
+    seekBy(event.key === "ArrowLeft" ? -5 : 5);
+  };
+
+  const adjustSpeed = (direction) => {
+    const current = Number(video.playbackRate || 1);
+    let index = SPEEDS.findIndex((rate) => rate >= current - 0.001);
+    if (index < 0) index = SPEEDS.indexOf(1);
+    const nextIndex = Math.max(0, Math.min(SPEEDS.length - 1, index + direction));
+    video.playbackRate = SPEEDS[nextIndex];
+    persistSpeed(SPEEDS[nextIndex]);
+  };
+
+  const beginSpaceHold = () => {
+    if (spacePressArmed || spaceHoldActive) return;
+    spacePressArmed = true;
+    clearTimeout(spaceHoldTimer);
+    spaceHoldTimer = setTimeout(() => {
+      if (!spacePressArmed || destroyed) return;
+      spaceHoldTimer = null;
+      spaceHoldActive = true;
+      spaceHoldRestoreRate = Number(video.playbackRate || 1);
+      video.playbackRate = 2;
+      fastBadge.textContent = "2×  Hold";
+      fastBadge.style.display = "flex";
+      clearTimeout(hideTimer);
+    }, LONG_PRESS_MS);
+  };
+
+  const finishSpacePress = () => {
+    if (!spacePressArmed && !spaceHoldActive) return false;
+    const wasHold = spaceHoldActive;
+    clearTimeout(spaceHoldTimer);
+    spaceHoldTimer = null;
+    spacePressArmed = false;
+    if (spaceHoldActive) {
+      spaceHoldActive = false;
+      video.playbackRate = spaceHoldRestoreRate;
+      fastBadge.style.display = "none";
+      updateSpeedBadge();
+    }
+    return wasHold;
+  };
+
+  const onKeyDown = (event) => {
+    if (
+      !desktopMode ||
+      (!keyboardActive && !isPlayerFullscreen()) ||
+      isEditableTarget(event.target)
+    )
+      return;
+    const key = event.key;
+    const lower = key.toLowerCase();
+    if (key === " ") {
+      event.preventDefault();
+      if (!event.repeat) beginSpaceHold();
+      return;
+    }
+    let handled = true;
+    if (lower === "k" && !event.repeat) togglePlayback();
+    else if (lower === "j") seekBy(-10);
+    else if (lower === "l") seekBy(10);
+    else if (key === "ArrowLeft") seekBy(-5);
+    else if (key === "ArrowRight") seekBy(5);
+    else if (key === "ArrowUp") {
+      video.muted = false;
+      video.volume = Math.min(1, Number(video.volume || 0) + 0.05);
+    } else if (key === "ArrowDown") {
+      video.volume = Math.max(0, Number(video.volume || 0) - 0.05);
+      if (video.volume === 0) video.muted = true;
+    } else if (lower === "m" && !event.repeat) video.muted = !video.muted;
+    else if (lower === "f" && !event.repeat) toggleFullscreen();
+    else if (lower === "i" && !event.repeat && canMiniPlayer()) requestMiniPlayer();
+    else if (key === "Home") video.currentTime = 0;
+    else if (key === "End" && Number.isFinite(video.duration)) video.currentTime = video.duration;
+    else if (/^[0-9]$/.test(key) && Number.isFinite(video.duration))
+      video.currentTime = video.duration * (Number(key) / 10);
+    else if (key === "," || key === "<") adjustSpeed(-1);
+    else if (key === "." || key === ">") adjustSpeed(1);
+    else if (event.shiftKey && lower === "n" && typeof experience.onNext === "function")
+      experience.onNext();
+    else if (event.shiftKey && lower === "p" && typeof experience.onPrevious === "function")
+      experience.onPrevious();
+    else handled = false;
+    if (!handled) return;
+    event.preventDefault();
     updateProgress();
-    setVisible(true);
+    updateVolume();
+    updateSpeedBadge();
+  };
+
+  const onKeyUp = (event) => {
+    if (event.key !== " " || (!spacePressArmed && !spaceHoldActive)) return;
+    event.preventDefault();
+    const wasHold = finishSpacePress();
+    if (!wasHold) togglePlayback();
+  };
+
+  const onWindowBlur = () => {
+    if (spacePressArmed || spaceHoldActive) finishSpacePress();
+  };
+
+  const onDocumentPointerDown = (event) => {
+    if (!desktopMode) return;
+    const path = event.composedPath?.() || [];
+    const host = player.host || player.root;
+    if (!path.includes(host) && !path.includes(frame) && !path.includes(video))
+      keyboardActive = false;
+  };
+
+  const onPlaying = () => {
+    loading.style.display = "none";
+    updatePlayPause();
+    updateProgress();
+    scheduleHide();
+  };
+  const onWaiting = () => {
+    loading.style.display = "flex";
+    if (!desktopMode || pointerInside) setVisible(true);
+  };
+  const onPause = () => {
+    loading.style.display = "none";
+    updatePlayPause();
+    if (!desktopMode) setVisible(true);
+  };
+  const onCanPlay = () => {
+    loading.style.display = "none";
+    updateProgress();
+  };
+  const onRateChange = () => updateSpeedBadge();
+  const onVolumeChange = () => updateVolume();
+  const onFullscreenChange = () => {
+    updateFullscreen();
+    if (desktopMode) setVisible(pointerInside, true);
+  };
+  const onModeChange = (event) => {
+    desktopMode = event.matches;
+    pointerInside = false;
+    applyModeLayout();
+    setVisible(!desktopMode, true);
+    if (!desktopMode) scheduleHide();
   };
 
   seekHit.addEventListener("pointerdown", onSeekDown);
@@ -1008,29 +1358,18 @@ export function installPlayerExperience(player) {
   video.addEventListener("pointermove", onPointerMove);
   video.addEventListener("pointerup", finishSurfacePointer);
   video.addEventListener("pointercancel", onPointerCancel);
+  video.addEventListener("dblclick", onDesktopDoubleClick);
+  frame.addEventListener("pointerenter", onPointerEnter);
+  frame.addEventListener("pointerleave", onPointerLeave);
   const preventContext = (event) => event.preventDefault();
   video.addEventListener("contextmenu", preventContext);
 
-  const onPlaying = () => {
-    loading.style.display = "none";
-    updatePlayPause();
-    updateProgress();
-    scheduleHide();
-  };
-  const onWaiting = () => {
-    loading.style.display = "flex";
-    setVisible(true);
-  };
-  const onPause = () => {
-    loading.style.display = "none";
-    updatePlayPause();
-    setVisible(true);
-  };
-  const onCanPlay = () => {
-    loading.style.display = "none";
-    updateProgress();
-  };
-  const onRateChange = () => updateSpeedBadge();
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onWindowBlur);
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  desktopQuery?.addEventListener?.("change", onModeChange);
 
   video.addEventListener("play", updatePlayPause);
   video.addEventListener("playing", onPlaying);
@@ -1043,11 +1382,16 @@ export function installPlayerExperience(player) {
   video.addEventListener("durationchange", updateProgress);
   video.addEventListener("progress", updateProgress);
   video.addEventListener("ratechange", onRateChange);
+  video.addEventListener("volumechange", onVolumeChange);
 
+  applyModeLayout();
   updatePlayPause(false);
+  updateVolume();
+  updateFullscreen();
   updateSpeedBadge();
   updateProgress();
-  scheduleHide();
+  setVisible(!desktopMode, true);
+  if (!desktopMode) scheduleHide();
 
   return () => {
     destroyed = true;
@@ -1055,13 +1399,32 @@ export function installPlayerExperience(player) {
     clearTimeout(singleTapTimer);
     clearTimeout(rapidSeekTimer);
     clearTimeout(longPressTimer);
+    clearTimeout(spaceHoldTimer);
+    if (spaceHoldActive) {
+      video.playbackRate = spaceHoldRestoreRate;
+      fastBadge.style.display = "none";
+    }
     observer.disconnect();
     delete player.setExperienceOptions;
+    seekHit.removeEventListener("pointerdown", onSeekDown);
+    seekHit.removeEventListener("pointermove", onSeekMove);
+    seekHit.removeEventListener("pointerup", finishSeek);
+    seekHit.removeEventListener("pointercancel", finishSeek);
+    seekHit.removeEventListener("keydown", onSeekKey);
     video.removeEventListener("pointerdown", onPointerDown);
     video.removeEventListener("pointermove", onPointerMove);
     video.removeEventListener("pointerup", finishSurfacePointer);
     video.removeEventListener("pointercancel", onPointerCancel);
+    video.removeEventListener("dblclick", onDesktopDoubleClick);
+    frame.removeEventListener("pointerenter", onPointerEnter);
+    frame.removeEventListener("pointerleave", onPointerLeave);
     video.removeEventListener("contextmenu", preventContext);
+    document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("blur", onWindowBlur);
+    document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+    document.removeEventListener("fullscreenchange", onFullscreenChange);
+    desktopQuery?.removeEventListener?.("change", onModeChange);
     video.removeEventListener("play", updatePlayPause);
     video.removeEventListener("playing", onPlaying);
     video.removeEventListener("pause", onPause);
@@ -1073,6 +1436,7 @@ export function installPlayerExperience(player) {
     video.removeEventListener("durationchange", updateProgress);
     video.removeEventListener("progress", updateProgress);
     video.removeEventListener("ratechange", onRateChange);
+    video.removeEventListener("volumechange", onVolumeChange);
     ui.remove();
     errorPanel.remove();
     resetDrag();
