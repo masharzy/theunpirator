@@ -2,6 +2,7 @@ import { assertSourceUrl } from "./origin-policy.js";
 import { getSource } from "./source.js";
 import { securityError } from "./token.js";
 import { singleFlight } from "./single-flight.js";
+import { readRange } from "./read-range.js";
 
 const MANIFEST_TTL_SECONDS = 300;
 
@@ -181,8 +182,7 @@ async function trackManifest(env, claims, assetId, track, variant, source) {
     initialStream.indexRange,
     source,
   );
-  const index = await response.arrayBuffer();
-  if (index.byteLength > 1024 * 1024) throw securityError("MEDIA_INDEX_INVALID", 502);
+  const index = await readRange(response, stream.indexRange, 1024 * 1024, "MEDIA_INDEX_INVALID");
   return {
     codec: stream.codec,
     mimeType: stream.mimeType,
@@ -270,9 +270,7 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   const { lease } = await reserved.json();
   try {
     const { response } = await fetchTrackRange(track, variant, range, source);
-    const body = await response.arrayBuffer();
-    if (body.byteLength !== range.end - range.start + 1 || body.byteLength > 16 * 1024 * 1024)
-      throw securityError("MEDIA_SEGMENT_INVALID", 502);
+    const body = await readRange(response, range, 16 * 1024 * 1024, "MEDIA_SEGMENT_INVALID");
     return { body, contentType: stream.mimeType || "application/octet-stream" };
   } finally {
     await stub

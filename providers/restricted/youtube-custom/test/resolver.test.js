@@ -92,6 +92,8 @@ describe("YouTube custom resolver", () => {
 
   it("rejects a client that serves index bytes but denies later media", async () => {
     const probes = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input, init) => {
@@ -122,6 +124,10 @@ describe("YouTube custom resolver", () => {
         const profile = url.searchParams.get("profile");
         const range = init.headers.range;
         probes.push({ profile, range });
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
         return new Response(null, {
           status: range === "bytes=740-999" || profile === "VISIONOS" ? 206 : 403,
         });
@@ -138,6 +144,7 @@ describe("YouTube custom resolver", () => {
       },
     });
     expect(source.delivery.streams.video[0].profile).toBe("VISIONOS");
+    expect(maxInFlight).toBe(4);
     expect(probes).toContainEqual({ profile: "MWEB", range: "bytes=15000000-15001023" });
     expect(probes).toContainEqual({ profile: "IOS", range: "bytes=15000000-15001023" });
     expect(probes).toContainEqual({ profile: "VISIONOS", range: "bytes=15000000-15001023" });

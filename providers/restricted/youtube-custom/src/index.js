@@ -200,25 +200,26 @@ async function probeStream(stream, profile) {
     const length = stream.contentLength;
     if (!Number.isSafeInteger(length) || length <= stream.indexRange.end + 1) return false;
     const lateStart = Math.max(stream.indexRange.end + 1, Math.floor(length * 0.75));
-    for (const range of [
-      stream.indexRange,
-      { start: lateStart, end: Math.min(length - 1, lateStart + 1023) },
-    ]) {
-      const response = await fetch(stream.url, {
-        headers: {
-          range: `bytes=${range.start}-${range.end}`,
-          "accept-encoding": "identity",
-          "user-agent": profile.userAgent,
-          referer: "https://www.youtube.com/",
+    const results = await Promise.all(
+      [stream.indexRange, { start: lateStart, end: Math.min(length - 1, lateStart + 1023) }].map(
+        async (range) => {
+          const response = await fetch(stream.url, {
+            headers: {
+              range: `bytes=${range.start}-${range.end}`,
+              "accept-encoding": "identity",
+              "user-agent": profile.userAgent,
+              referer: "https://www.youtube.com/",
+            },
+            redirect: "manual",
+            signal: AbortSignal.timeout(8_000),
+          });
+          const usable = response.status === 206;
+          await response.body?.cancel();
+          return usable;
         },
-        redirect: "manual",
-        signal: AbortSignal.timeout(8_000),
-      });
-      const usable = response.status === 206;
-      await response.body?.cancel();
-      if (!usable) return false;
-    }
-    return true;
+      ),
+    );
+    return results.every(Boolean);
   } catch {
     return false;
   }

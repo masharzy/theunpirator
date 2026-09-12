@@ -57,6 +57,7 @@ async function assertProtectedOrigin(request, env, claims, assetId) {
 async function assertSession(env, claims) {
   const stub = await sessionStub(env, claims.psid);
   const response = await stub.fetch("https://session/state");
+  if (!response.ok) throw securityError("SESSION_UNAVAILABLE", 503);
   const data = await response.json();
   if (data.status === "revoked" || data.status === "blocked")
     throw securityError("SESSION_REVOKED", 403, "Playback session ended");
@@ -230,7 +231,11 @@ export default {
             windows,
           }),
         });
-        if (!response.ok) throw securityError("PLAYER_INTEGRITY_LOST", 403);
+        if (!response.ok) {
+          if (response.status === 429 || response.status >= 500)
+            throw securityError("INTEGRITY_UNAVAILABLE", 503);
+          throw securityError("PLAYER_INTEGRITY_LOST", 403);
+        }
         return Response.json(await response.json(), {
           headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
         });
