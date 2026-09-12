@@ -5,6 +5,7 @@ import { unauthorized } from "../errors.js";
 
 export function apiKeyAuth(db, requiredScope = null) {
   return async (req, _res, next) => {
+    const started = performance.now();
     try {
       const bearer = req.get("authorization") || "";
       const raw = bearer.startsWith("Bearer ") ? bearer.slice(7) : "";
@@ -28,6 +29,14 @@ export function apiKeyAuth(db, requiredScope = null) {
       if (requiredScope && !row.key.scopes.includes(requiredScope) && !row.key.scopes.includes("*"))
         throw unauthorized("API key scope missing");
       req.apiAuth = { keyId: row.key.id, tenantId: row.key.tenantId, scopes: row.key.scopes };
+      req.log?.info(
+        {
+          component: "playback-timing",
+          phase: "api-key-auth",
+          durationMs: Math.round(performance.now() - started),
+        },
+        "API key verified",
+      );
       db.update(apiKeys)
         .set({ lastUsedAt: new Date() })
         .where(eq(apiKeys.id, row.key.id))
