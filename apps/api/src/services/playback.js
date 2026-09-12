@@ -17,20 +17,47 @@ import { getPlaybackPolicy } from "./entitlements.js";
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
-    return db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${args.tenantId}:${args.input.externalUserId}`}, 0))`,
+    const started = performance.now();
+    let previous = started;
+    const phases = {};
+    const recordTiming = (phase) => {
+      const now = performance.now();
+      phases[phase] = Math.round(now - previous);
+      previous = now;
+    };
+    let sessionId;
+    try {
+      const result = await db.transaction(async (tx) => {
+        recordTiming("transaction_open");
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${args.tenantId}:${args.input.externalUserId}`}, 0))`,
+        );
+        recordTiming("user_lock");
+        return createPlaybackService({
+          db: tx,
+          cache,
+          config,
+          signingRing,
+          gatewayControl,
+        }).createUnlocked({ ...args, recordTiming });
+      });
+      recordTiming("commit");
+      sessionId = result.sessionId;
+      return result;
+    } finally {
+      console.info(
+        JSON.stringify({
+          component: "playback-timing",
+          phase: "session-phases",
+          requestId: args.requestId || null,
+          sessionId: sessionId || null,
+          phases,
+          durationMs: Math.round(performance.now() - started),
+        }),
       );
-      return createPlaybackService({
-        db: tx,
-        cache,
-        config,
-        signingRing,
-        gatewayControl,
-      }).createUnlocked(args);
-    });
+    }
   }
-  async function createUnlocked({ tenantId, input, ip, userAgent }) {
+  async function createUnlocked({ tenantId, input, ip, userAgent, recordTiming = () => {} }) {
     const [site] = await db
       .select()
       .from(sites)
@@ -39,6 +66,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       )
       .limit(1);
     if (!site) throw notFound("Site not found");
+    recordTiming("site");
     const [verifiedDomain] = await db
       .select({ id: siteDomains.id })
       .from(siteDomains)
@@ -50,8 +78,10 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         "Verify at least one site domain before playback",
         409,
       );
+    recordTiming("domain");
     let asset;
     const policy = await getPlaybackPolicy(db, tenantId);
+    recordTiming("policy");
     if (input.source) {
       if (input.source.provider !== "youtube_custom")
         throw new AppError("SOURCE_INVALID", "Unsupported on-demand provider", 400);
@@ -106,6 +136,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         throw new AppError("ASSET_SITE_MISMATCH", "Asset does not belong to this site", 403);
     }
     const secure = policy.secure;
+    recordTiming("asset");
     if (!secure) throw new AppError("FEATURE_DISABLED", "Secure gateway is disabled", 403);
     if (asset.provider === "youtube_custom") {
       const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
@@ -129,6 +160,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         })
         .returning();
     if (user.status !== "active") throw new AppError("USER_BLOCKED", "User is blocked", 403);
+    recordTiming("user");
     let [device] = await db
       .select()
       .from(devices)
@@ -191,6 +223,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         })
         .where(eq(devices.id, device.id));
     }
+    recordTiming("device");
     const activeSessions = await db
       .select({ id: playbackSessions.id })
       .from(playbackSessions)
@@ -202,6 +235,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         ),
       );
     const maxStreams = Number(entitlements.max_concurrent_streams || 1);
+    recordTiming("active_sessions");
     if (activeSessions.length >= maxStreams) {
       if (entitlements.session_policy === "revoke_old") {
         for (const old of activeSessions) {
@@ -227,6 +261,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       }
     }
     const expiresAt = new Date(Date.now() + 8 * 3600_000);
+    recordTiming("concurrency_policy");
     const [session] = await db
       .insert(playbackSessions)
       .values({
@@ -241,6 +276,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       })
       .returning();
     const tokenTtl = 90;
+    recordTiming("session_insert");
     const now = Math.floor(Date.now() / 1000);
     const payload = {
       iss: "the-unpirator",
@@ -259,7 +295,9 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       activeKid: config.ACTIVE_SIGNING_KID,
     });
     await cache.set(`playback:session:${session.id}`, "active", { ex: 8 * 3600 });
+    recordTiming("token_and_cache");
     await gatewayControl.syncSession(session.id, "active", 8 * 3600);
+    recordTiming("gateway_sync");
     await db.insert(usageEvents).values({
       tenantId,
       type: "playback_sessions",
@@ -272,6 +310,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       assetId: asset.id,
       externalUserId: input.externalUserId,
     });
+    recordTiming("usage_and_webhook");
     return {
       sessionId: session.id,
       playbackUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/media?token=${encodeURIComponent(token)}`,

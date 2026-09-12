@@ -31,6 +31,7 @@ export function playbackRouter({
           input,
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          requestId: req.id,
         });
       const result = idemKey
         ? await db.transaction(async (tx) => {
