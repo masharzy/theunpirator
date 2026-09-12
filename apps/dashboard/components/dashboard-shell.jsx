@@ -18,6 +18,7 @@ import {
   LogOut,
   Menu,
   MonitorSmartphone,
+  FlaskConical,
   PlugZap,
   ReceiptText,
   Settings,
@@ -62,6 +63,7 @@ const groups = [
       [Webhook, "/dashboard/webhooks", "Webhooks"],
       [PlugZap, "/dashboard/integration", "Integration"],
       [FileSearch, "/dashboard/logs", "Logs"],
+      [FlaskConical, "/dashboard/playback-lab", "Playback Lab"],
     ],
   ],
   [

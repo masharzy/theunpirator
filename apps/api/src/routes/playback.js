@@ -5,7 +5,25 @@ import { sha256 } from "@unpirator/crypto";
 import { AppError } from "../errors.js";
 import { playbackSessions } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
-import { csrfGuard } from "../middleware/auth.js";
+
+export function dashboardTestSessionInput(req) {
+  return parseOrThrow(playbackSessionSchema, {
+    siteId: req.body.siteId || req.get("x-unpirator-site-id"),
+    ...(req.body.assetId
+      ? { assetId: req.body.assetId }
+      : {
+          source: {
+            provider: "youtube_custom",
+            url: req.body.src,
+            ...(req.body.title ? { title: req.body.title } : {}),
+          },
+        }),
+    externalUserId: `dashboard:${req.auth.accountId}`,
+    displayLabel: req.auth.email,
+    deviceId: req.body.deviceId,
+    client: req.body.client || {},
+  });
+}
 
 export function playbackRouter({
   playbackService,
@@ -13,9 +31,32 @@ export function playbackRouter({
   db,
   cache,
   dashboardAuth,
+  csrfGuard,
+  requireTenantDeveloper,
   requireTenantAdmin,
 }) {
   const router = Router();
+  router.post(
+    "/test-session",
+    dashboardAuth,
+    csrfGuard,
+    requireTenantDeveloper,
+    async (req, res, next) => {
+      try {
+        const input = dashboardTestSessionInput(req);
+        const session = await playbackService.create({
+          tenantId: req.tenantId,
+          input,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+          requestId: req.id,
+        });
+        res.set("cache-control", "no-store").status(201).json(session);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
   router.post("/sessions", apiKeyAuth, async (req, res, next) => {
     const started = performance.now();
     try {
