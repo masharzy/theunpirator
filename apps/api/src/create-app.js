@@ -105,6 +105,8 @@ export function createApp(overrides = {}) {
       db,
       cache,
       dashboardAuth: auth,
+      csrfGuard,
+      requireTenantDeveloper: tenantDeveloper,
       requireTenantAdmin: tenantAdmin,
     }),
   );
