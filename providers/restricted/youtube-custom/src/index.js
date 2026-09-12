@@ -1,3 +1,6 @@
+import { createProfilePreference } from "./profile-preference.js";
+
+const profilePreference = createProfilePreference();
 const WATCH_USER_AGENT =
   "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)";
 const PROFILES = [
@@ -331,52 +334,67 @@ async function resolveYoutube(sourceUrl, proof) {
   )
     throw providerError("YouTube browser attestation is required", "ATTESTATION_REQUIRED", 403);
   const watchConfig = await fetchWatchConfig(videoId);
-  const attempts = ["US", "BD"];
+  const attempts = profilePreference.order(
+    ["US", "BD"].flatMap((region) => PROFILES.map((profile) => ({ region, profile }))),
+  );
   let lastReason = "No compatible protected MP4 streams were returned";
-  for (const region of attempts) {
-    for (const profile of PROFILES) {
-      try {
-        const { player, cpn } = await requestPlayer(
-          videoId,
-          watchConfig,
-          region,
-          profile,
-          proof.token,
-        );
-        const status = player.playabilityStatus?.status;
-        if (status !== "OK") {
-          lastReason = player.playabilityStatus?.reason || lastReason;
-          continue;
-        }
-        const protectedStreams = await protectedAdaptiveStreams(player, profile, proof.token, cpn);
-        if (!protectedStreams) continue;
-        const primary = protectedStreams.video[0];
-        const allowedHosts = [
-          ...new Set(
-            [...protectedStreams.video, ...protectedStreams.audio].map((stream) => stream.hostname),
-          ),
-        ];
-        return {
-          url: null,
-          allowedHosts,
-          headers: { "user-agent": profile.userAgent, referer: "https://www.youtube.com/" },
-          expiresAt: expiryFrom(primary.url),
-          contentType: "video/mp4",
-          supportsRange: true,
-          // Keep the exact signed source stable for the lifetime of its URL. The
-          // gateway still checks expiresAt before every use.
-          cacheTtlSeconds: 6 * 3600,
-          delivery: { mode: "protected_segments", streams: protectedStreams },
-          metadata: {
-            videoId,
-            title: player.videoDetails?.title || "YouTube video",
-            height: Number(primary.height || 0),
-            qualityLabel: primary.qualityLabel || `${Number(primary.height || 0)}p`,
-          },
-        };
-      } catch (error) {
-        lastReason = error.message || lastReason;
+  for (const { region, profile } of attempts) {
+    const started = Date.now();
+    let usable = false;
+    try {
+      const { player, cpn } = await requestPlayer(
+        videoId,
+        watchConfig,
+        region,
+        profile,
+        proof.token,
+      );
+      const status = player.playabilityStatus?.status;
+      if (status !== "OK") {
+        lastReason = player.playabilityStatus?.reason || lastReason;
+        continue;
       }
+      const protectedStreams = await protectedAdaptiveStreams(player, profile, proof.token, cpn);
+      if (!protectedStreams) continue;
+      usable = true;
+      profilePreference.succeeded({ region, profile });
+      const primary = protectedStreams.video[0];
+      const allowedHosts = [
+        ...new Set(
+          [...protectedStreams.video, ...protectedStreams.audio].map((stream) => stream.hostname),
+        ),
+      ];
+      return {
+        url: null,
+        allowedHosts,
+        headers: { "user-agent": profile.userAgent, referer: "https://www.youtube.com/" },
+        expiresAt: expiryFrom(primary.url),
+        contentType: "video/mp4",
+        supportsRange: true,
+        // Keep the exact signed source stable for the lifetime of its URL. The
+        // gateway still checks expiresAt before every use.
+        cacheTtlSeconds: 6 * 3600,
+        delivery: { mode: "protected_segments", streams: protectedStreams },
+        metadata: {
+          videoId,
+          title: player.videoDetails?.title || "YouTube video",
+          height: Number(primary.height || 0),
+          qualityLabel: primary.qualityLabel || `${Number(primary.height || 0)}p`,
+        },
+      };
+    } catch (error) {
+      lastReason = error.message || lastReason;
+    } finally {
+      console.info(
+        JSON.stringify({
+          component: "playback-timing",
+          phase: "source-profile",
+          profile: profile.name,
+          region,
+          usable,
+          durationMs: Date.now() - started,
+        }),
+      );
     }
   }
   throw providerError(`YouTube could not expose a playable stream. ${lastReason}`);

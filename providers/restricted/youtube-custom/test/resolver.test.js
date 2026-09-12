@@ -148,5 +148,21 @@ describe("YouTube custom resolver", () => {
     expect(probes).toContainEqual({ profile: "MWEB", range: "bytes=15000000-15001023" });
     expect(probes).toContainEqual({ profile: "IOS", range: "bytes=15000000-15001023" });
     expect(probes).toContainEqual({ profile: "VISIONOS", range: "bytes=15000000-15001023" });
+    probes.length = 0;
+    const nextSource = await youtubeCustomProvider.resolve({
+      asset: { providerReference: "https://youtube.com/watch?v=abc123DEF45" },
+      context: {
+        providerProof: {
+          type: "youtube_web",
+          contentBinding: "abc123DEF45",
+          token: "B".repeat(80),
+        },
+      },
+    });
+    expect(nextSource.delivery.streams.video[0].profile).toBe("VISIONOS");
+    expect(probes).toHaveLength(4);
+    expect(probes.every((probe) => probe.profile === "VISIONOS")).toBe(true);
+    expect(probes).toContainEqual({ profile: "VISIONOS", range: "bytes=740-999" });
+    expect(probes).toContainEqual({ profile: "VISIONOS", range: "bytes=15000000-15001023" });
   });
 });

@@ -25,7 +25,10 @@ function jsonError(error, requestId, request) {
         ...(Number.isInteger(error.upstreamStatus) ? { upstreamStatus: error.upstreamStatus } : {}),
       },
     },
-    { status, headers: { "cache-control": "no-store", ...corsHeaders(request) } },
+    {
+      status,
+      headers: { "cache-control": "no-store", "x-request-id": requestId, ...corsHeaders(request) },
+    },
   );
 }
 function requestId(request) {
@@ -98,7 +101,7 @@ function corsPreflight(request) {
   });
 }
 
-export default {
+const gateway = {
   async fetch(request, env, ctx) {
     const rid = requestId(request);
     const url = new URL(request.url);
@@ -417,5 +420,36 @@ export default {
       );
       return jsonError(error, rid, request);
     }
+  },
+};
+
+export default {
+  async fetch(request, env, ctx) {
+    const started = performance.now();
+    const response = await gateway.fetch(request, env, ctx);
+    const durationMs = Math.round(performance.now() - started);
+    const headers = new Headers(response.headers);
+    headers.set("server-timing", `gateway;dur=${durationMs}`);
+    const path = new URL(request.url).pathname;
+    if (
+      /\/(bootstrap|attestation\/create|attestation\/integrity)$/.test(path) ||
+      (/\/integrity$/.test(path) && (durationMs >= 1000 || response.status >= 400))
+    ) {
+      console.info(
+        JSON.stringify({
+          component: "playback-timing",
+          phase: "gateway-request",
+          path,
+          requestId: headers.get("x-request-id"),
+          status: response.status,
+          durationMs,
+        }),
+      );
+    }
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   },
 };

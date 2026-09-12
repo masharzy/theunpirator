@@ -85,17 +85,31 @@ function parseChallenge(raw) {
 }
 
 async function callBotGuard(url, data, userAgent) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: youtubeHeaders(userAgent),
-    body: JSON.stringify(data),
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw securityError("ATTESTATION_UPSTREAM_FAILURE", 502, "Browser attestation unavailable");
+  const started = Date.now();
+  let status = null;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: youtubeHeaders(userAgent),
+      body: JSON.stringify(data),
+      signal: AbortSignal.timeout(20_000),
+    });
+    status = response.status;
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw securityError("ATTESTATION_UPSTREAM_FAILURE", 502, "Browser attestation unavailable");
+    }
+    return await readTextLimited(response);
+  } finally {
+    console.info(
+      JSON.stringify({
+        component: "playback-timing",
+        phase: url === CREATE_URL ? "youtube-create" : "youtube-integrity",
+        status,
+        durationMs: Date.now() - started,
+      }),
+    );
   }
-  return readTextLimited(response);
 }
 
 export async function createYoutubeAttestation(userAgent) {

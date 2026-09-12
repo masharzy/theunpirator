@@ -17,14 +17,22 @@ const ICONS = {
   next: svg("M16 6h2v12h-2zM5 6.5v11L14 12z"),
   play: svg("M8 5v14l11-7z"),
   pause: svg("M6 5h4v14H6zm8 0h4v14h-4z"),
-  volume: svg("M3 9v6h4l5 4V5L7 9H3zm12.5 3A3.5 3.5 0 0 0 14 9.13v5.74A3.5 3.5 0 0 0 15.5 12zm0-7.1v2.06a7 7 0 0 1 0 10.08v2.06a9 9 0 0 0 0-14.2z"),
-  muted: svg("M3 9v6h4l5 4V5L7 9H3zm12.6 3 2.2-2.2-1.4-1.4-2.2 2.2L12 8.4 10.6 9.8l2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2z"),
+  volume: svg(
+    "M3 9v6h4l5 4V5L7 9H3zm12.5 3A3.5 3.5 0 0 0 14 9.13v5.74A3.5 3.5 0 0 0 15.5 12zm0-7.1v2.06a7 7 0 0 1 0 10.08v2.06a9 9 0 0 0 0-14.2z",
+  ),
+  muted: svg(
+    "M3 9v6h4l5 4V5L7 9H3zm12.6 3 2.2-2.2-1.4-1.4-2.2 2.2L12 8.4 10.6 9.8l2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2z",
+  ),
   settings: svg(
     "M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58-1.92-3.32-2.39.96a7.1 7.1 0 0 0-1.62-.94L14.87 3h-3.84l-.36 3.18c-.58.24-1.12.55-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.05.31-.08.64-.08.94s.03.63.08.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.02-1.58ZM13 15.5A3.5 3.5 0 1 1 13 8a3.5 3.5 0 0 1 0 7.5Z",
   ),
   minimize: svg("M6 7h12v10H6V7zm2 2v6h8V9H8zm5 2h2v3h-3v-2h1v-1z"),
-  fullscreen: svg("M7 14H5v5h5v-2H7v-3Zm-2-4h2V7h3V5H5v5Zm12 7h-3v2h5v-5h-2v3Zm-3-12v2h3v3h2V5h-5Z"),
-  fullscreenExit: svg("M5 16h3v3h2v-5H5v2Zm3-8H5v2h5V5H8v3Zm6 11h2v-3h3v-2h-5v5Zm2-11V5h-2v5h5V8h-3Z"),
+  fullscreen: svg(
+    "M7 14H5v5h5v-2H7v-3Zm-2-4h2V7h3V5H5v5Zm12 7h-3v2h5v-5h-2v3Zm-3-12v2h3v3h2V5h-5Z",
+  ),
+  fullscreenExit: svg(
+    "M5 16h3v3h2v-5H5v2Zm3-8H5v2h5V5H8v3Zm6 11h2v-3h3v-2h-5v5Zm2-11V5h-2v5h5V8h-3Z",
+  ),
 };
 
 function styles(node, values) {
@@ -531,7 +539,8 @@ export function installPlayerExperience(player) {
     mobileTitle.textContent = title;
     desktopTitle.textContent = title;
     mobileTitle.style.visibility = !desktopMode && visible && title ? "visible" : "hidden";
-    desktopTitleBar.style.display = desktopMode && visible && title && isPlayerFullscreen() ? "flex" : "none";
+    desktopTitleBar.style.display =
+      desktopMode && visible && title && isPlayerFullscreen() ? "flex" : "none";
   };
 
   const scheduleHide = () => {
@@ -871,11 +880,17 @@ export function installPlayerExperience(player) {
     const animation = frame.animate(
       fullscreen
         ? [
-            { transform: frame.style.transform || "scale(1)", opacity: Number(frame.style.opacity || 1) },
+            {
+              transform: frame.style.transform || "scale(1)",
+              opacity: Number(frame.style.opacity || 1),
+            },
             { transform: "translate3d(0,22%,0) scale(.84)", opacity: 0.5 },
           ]
         : [
-            { transform: frame.style.transform || "scale(1)", opacity: Number(frame.style.opacity || 1) },
+            {
+              transform: frame.style.transform || "scale(1)",
+              opacity: Number(frame.style.opacity || 1),
+            },
             { transform: "translate3d(16%,34%,0) scale(.66)", opacity: 0.92 },
           ],
       { duration: fullscreen ? 165 : 150, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" },
@@ -1235,7 +1250,12 @@ export function installPlayerExperience(player) {
   };
 
   const onKeyDown = (event) => {
-    if (!desktopMode || (!keyboardActive && !isPlayerFullscreen()) || isEditableTarget(event.target)) return;
+    if (
+      !desktopMode ||
+      (!keyboardActive && !isPlayerFullscreen()) ||
+      isEditableTarget(event.target)
+    )
+      return;
     const key = event.key;
     const lower = key.toLowerCase();
     if (key === " ") {
@@ -1291,7 +1311,8 @@ export function installPlayerExperience(player) {
     if (!desktopMode) return;
     const path = event.composedPath?.() || [];
     const host = player.host || player.root;
-    if (!path.includes(host) && !path.includes(frame) && !path.includes(video)) keyboardActive = false;
+    if (!path.includes(host) && !path.includes(frame) && !path.includes(video))
+      keyboardActive = false;
   };
 
   const onPlaying = () => {
