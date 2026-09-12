@@ -13,7 +13,7 @@ import { signPlaybackToken } from "@unpirator/crypto";
 import { riskFor } from "@unpirator/security";
 import { queueWebhook } from "./webhooks.js";
 import { AppError, notFound } from "../errors.js";
-import { getEntitlements, featureEnabled, restrictedFeatureEnabled } from "./entitlements.js";
+import { getPlaybackPolicy } from "./entitlements.js";
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
@@ -51,12 +51,11 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         409,
       );
     let asset;
+    const policy = await getPlaybackPolicy(db, tenantId);
     if (input.source) {
       if (input.source.provider !== "youtube_custom")
         throw new AppError("SOURCE_INVALID", "Unsupported on-demand provider", 400);
-      const enabled =
-        config.YOUTUBE_CUSTOM_GLOBAL &&
-        (await restrictedFeatureEnabled(db, "youtube_custom", tenantId));
+      const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
       if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
       const reference = canonicalYoutubeUrl(input.source.url);
       await db.execute(
@@ -106,15 +105,13 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       if (asset.siteId !== input.siteId)
         throw new AppError("ASSET_SITE_MISMATCH", "Asset does not belong to this site", 403);
     }
-    const secure = await featureEnabled(db, "secure_gateway", tenantId, true);
+    const secure = policy.secure;
     if (!secure) throw new AppError("FEATURE_DISABLED", "Secure gateway is disabled", 403);
     if (asset.provider === "youtube_custom") {
-      const enabled =
-        config.YOUTUBE_CUSTOM_GLOBAL &&
-        (await restrictedFeatureEnabled(db, "youtube_custom", tenantId));
+      const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
       if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
     }
-    const entitlements = await getEntitlements(db, tenantId);
+    const entitlements = policy.entitlements;
     let [user] = await db
       .select()
       .from(endUsers)
@@ -292,7 +289,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           ? { provider: "youtube", contentBinding: youtubeVideoId(asset.providerReference) }
           : null,
       sessionExpiresAt: expiresAt,
-      watermark: (await featureEnabled(db, "dynamic_watermark", tenantId, true))
+      watermark: policy.watermark
         ? {
             enabled: true,
             label: input.displayLabel || input.externalUserId,

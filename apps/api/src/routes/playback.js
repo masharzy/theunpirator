@@ -17,6 +17,7 @@ export function playbackRouter({
 }) {
   const router = Router();
   router.post("/sessions", apiKeyAuth, async (req, res, next) => {
+    const started = performance.now();
     try {
       const input = parseOrThrow(playbackSessionSchema, req.body);
       const idem = req.get("idempotency-key");
@@ -50,6 +51,16 @@ export function playbackRouter({
             return value;
           })
         : await create();
+      const durationMs = Math.round(performance.now() - started);
+      res.set("server-timing", `playback_session;dur=${durationMs}`);
+      console.info(
+        JSON.stringify({
+          component: "playback-timing",
+          phase: "session-create",
+          sessionId: result.sessionId,
+          durationMs,
+        }),
+      );
       res.status(201).json(result);
     } catch (e) {
       next(e);
