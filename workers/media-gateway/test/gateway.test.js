@@ -46,6 +46,52 @@ const source = {
 const sourceEnv = { REQUIRE_ORIGIN: "true", SOURCE_CACHE: { get: async () => source } };
 afterEach(() => vi.unstubAllGlobals());
 describe("gateway authorization", () => {
+  it("fails closed when session storage is unavailable", async () => {
+    const fetchState = vi.fn(async () => Response.json({}, { status: 503 }));
+    const response = await gateway.fetch(
+      new Request(`https://gateway.example/v/${aid}/media?token=${token()}`),
+      {
+        ...env,
+        SESSION_STATE: { idFromName: (value) => value, get: () => ({ fetch: fetchState }) },
+      },
+      ctx,
+    );
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe("SESSION_UNAVAILABLE");
+    expect(fetchState).toHaveBeenCalledTimes(1);
+  });
+  it.each([429, 500, 503, 403])("preserves integrity denial semantics for %s", async (status) => {
+    const configured = {
+      ...env,
+      SOURCE_CACHE: { get: async () => ["learn.example.com"] },
+      SESSION_STATE: {
+        idFromName: (value) => value,
+        get: () => ({
+          fetch: async (url) =>
+            url.endsWith("/state")
+              ? Response.json({ status: "active" })
+              : Response.json({}, { status }),
+        }),
+      },
+    };
+    const response = await gateway.fetch(
+      new Request(`https://gateway.example/v/${aid}/integrity`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token()}`,
+          origin: "https://learn.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ sequence: 1 }),
+      }),
+      configured,
+      ctx,
+    );
+    expect(response.status).toBe(status === 403 ? 403 : 503);
+    expect((await response.json()).error.code).toBe(
+      status === 403 ? "PLAYER_INTEGRITY_LOST" : "INTEGRITY_UNAVAILABLE",
+    );
+  });
   it("rejects forged tokens", async () => {
     const r = await gateway.fetch(
       new Request(`https://gateway.example/v/${aid}/media?token=forged`),
