@@ -789,10 +789,21 @@ class ProtectedHlsRuntime {
         this.abort();
       }
     }
-    this.hls = new Hls({ loader: EncryptedHlsLoader, enableWorker: true });
+    this.hls = new Hls({
+      loader: EncryptedHlsLoader,
+      enableWorker: true,
+      enableWebVTT: false,
+      enableIMSC1: false,
+      enableCEA708Captions: false,
+      renderTextTracksNatively: false,
+    });
     const ready = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Protected HLS loading timed out")), 20_000);
       this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Text renditions use a separate parsing pipeline. Keep them disabled
+        // until encrypted WebVTT delivery is supported; otherwise a default
+        // subtitle track can retry its first cue forever and starve A/V.
+        this.hls.subtitleTrack = -1;
         // Do not report readiness from metadata alone. Explicitly start loading
         // so preload=metadata and browser policy differences cannot leave the
         // media element with a duration but no playable bytes.
