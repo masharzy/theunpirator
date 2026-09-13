@@ -1,5 +1,16 @@
 import { securityError } from "./token.js";
 
+function normalizeAllowedHost(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    return parsed.hostname.replace(/\.$/, "");
+  } catch {
+    return raw.replace(/^\.+|\.+$/g, "");
+  }
+}
+
 export function assertSourceUrl(value, allowedHosts) {
   let url;
   try {
@@ -7,7 +18,11 @@ export function assertSourceUrl(value, allowedHosts) {
   } catch {
     throw securityError("SOURCE_HOST_BLOCKED", 502, "Media source unavailable");
   }
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  const normalizedAllowedHosts = (allowedHosts || [])
+    .flatMap((value) => String(value || "").split(/[\s,]+/))
+    .map(normalizeAllowedHost)
+    .filter(Boolean);
   const privateHost =
     host === "localhost" ||
     host.endsWith(".localhost") ||
@@ -21,8 +36,17 @@ export function assertSourceUrl(value, allowedHosts) {
     url.password ||
     privateHost ||
     (url.port && !["80", "443"].includes(url.port)) ||
-    !(allowedHosts || []).some((v) => host === v.toLowerCase())
+    !normalizedAllowedHosts.includes(host)
   ) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        component: "origin-policy",
+        code: "SOURCE_HOST_BLOCKED",
+        actualHost: host,
+        allowedHosts: normalizedAllowedHosts,
+      }),
+    );
     throw securityError("SOURCE_HOST_BLOCKED", 502, "Media source unavailable");
   }
   return url;
