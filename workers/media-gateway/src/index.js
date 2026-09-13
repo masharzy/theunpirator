@@ -1,8 +1,8 @@
 export { SessionState } from "./session-state.js";
 import { verifyPlaybackToken, securityError } from "./token.js";
-import { proxyHlsObject, proxyPrimary } from "./proxy.js";
+import { protectedHlsResource, proxyHlsObject, proxyPrimary } from "./proxy.js";
 import { assertOrigin } from "./proxy.js";
-import { getAllowedOrigins } from "./source.js";
+import { getAllowedOrigins, getSource } from "./source.js";
 import {
   encryptProtectedChunk,
   protectedManifest,
@@ -73,7 +73,8 @@ function corsHeaders(request) {
         "Access-Control-Allow-Origin": origin,
         Vary: "Origin",
         "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Expose-Headers": "x-unpirator-iv,x-unpirator-context,x-request-id",
+        "Access-Control-Expose-Headers":
+          "x-unpirator-iv,x-unpirator-context,x-unpirator-content-type,x-request-id",
       }
     : {};
 }
@@ -134,12 +135,13 @@ const gateway = {
         return new Response(null, { status: 204 });
       }
       const match =
-        /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|bootstrap|manifest|integrity|ticket|attestation\/create|attestation\/integrity|chunk\/(video|audio)\/(\d+)\/(\d+)|hls\/([a-f0-9]{40}))$/.exec(
+        /^\/v\/([0-9a-fA-F-]{36})\/(media|refresh|bootstrap|manifest|integrity|ticket|resource-ticket|attestation\/create|attestation\/integrity|chunk\/(video|audio)\/(\d+)\/(\d+)|hls\/([a-f0-9]{40})|sealed\/(root|[a-f0-9]{40}))$/.exec(
           url.pathname,
         );
       if (!match || !["GET", "HEAD", "POST"].includes(request.method))
         throw securityError("NOT_FOUND", 404, "Media route not found");
-      const [, assetId, mode, chunkTrack, chunkVariantRaw, chunkSequenceRaw, objectId] = match;
+      const [, assetId, mode, chunkTrack, chunkVariantRaw, chunkSequenceRaw, objectId, resourceId] =
+        match;
       const token = readToken(request, url);
       const claims = await verifyPlaybackToken(
         token,
@@ -196,7 +198,11 @@ const gateway = {
         const mediaKey = crypto.getRandomValues(new Uint8Array(32));
         const wrappedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, mediaKey);
         const stub = await sessionStub(env, claims.psid);
-        const manifest = await protectedManifest(env, claims, assetId, false, body.providerProof);
+        const source = await getSource(env, claims, assetId, false, body.providerProof);
+        const protectedHls = source.manifestType === "hls";
+        const manifest = protectedHls
+          ? null
+          : await protectedManifest(env, claims, assetId, false, body.providerProof);
         const stored = await stub.fetch("https://session/crypto", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -204,7 +210,12 @@ const gateway = {
         });
         if (!stored.ok) throw securityError("SESSION_UNKNOWN", 403);
         return Response.json(
-          { manifest, wrappedKey: toBase64(wrappedKey), algorithm: "AES-GCM" },
+          {
+            manifest,
+            transport: protectedHls ? "hls" : "segments",
+            wrappedKey: toBase64(wrappedKey),
+            algorithm: "AES-GCM",
+          },
           {
             headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
           },
@@ -256,6 +267,47 @@ const gateway = {
           headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
         });
       }
+      if (request.method === "POST" && mode === "resource-ticket") {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const body = await request.json();
+        const stub = await sessionStub(env, claims.psid);
+        const response = await stub.fetch("https://session/resource-ticket", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ resourceId: body.resourceId }),
+        });
+        if (!response.ok) throw securityError("RESOURCE_TICKET_DENIED", response.status);
+        return Response.json(await response.json(), {
+          headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
+        });
+      }
+      if (request.method === "GET" && mode.startsWith("sealed/")) {
+        await assertProtectedOrigin(request, env, claims, assetId);
+        const ticket = url.searchParams.get("ticket") || "";
+        const stub = await sessionStub(env, claims.psid);
+        const consumed = await stub.fetch("https://session/consume-resource", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ticket, resourceId }),
+        });
+        if (!consumed.ok) throw securityError("RESOURCE_TICKET_INVALID", 403);
+        const { keyBase64 } = await consumed.json();
+        const resource = await protectedHlsResource(request, env, claims, assetId, resourceId);
+        const context = `${claims.psid}:${assetId}:hls:${resourceId}:${crypto.randomUUID()}`;
+        const encrypted = await encryptProtectedChunk(resource.body, keyBase64, context);
+        return new Response(encrypted.encrypted, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "cache-control": "private, no-store",
+            "x-unpirator-content-type": resource.contentType,
+            "x-unpirator-iv": encrypted.iv,
+            "x-unpirator-context": context,
+            "x-content-type-options": "nosniff",
+            "x-request-id": rid,
+            ...corsHeaders(request),
+          },
+        });
+      }
       if (request.method === "GET" && mode.startsWith("chunk/")) {
         await assertProtectedOrigin(request, env, claims, assetId);
         const variant = Number(chunkVariantRaw);
@@ -297,10 +349,13 @@ const gateway = {
           "manifest",
           "integrity",
           "ticket",
+          "resource-ticket",
           "attestation/create",
           "attestation/integrity",
         ].includes(mode)
       )
+        throw securityError("METHOD_NOT_ALLOWED", 405);
+      if (mode.startsWith("sealed/") || mode.startsWith("chunk/"))
         throw securityError("METHOD_NOT_ALLOWED", 405);
       if (request.method === "POST" && mode === "refresh") {
         await assertProtectedOrigin(request, env, claims, assetId);

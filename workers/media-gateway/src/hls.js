@@ -18,6 +18,7 @@ async function mapUri(uri, baseUrl, assetId, source, env) {
       headers: source.headers || {},
       allowedHosts: source.allowedHosts || [],
       allowedOrigins: source.allowedOrigins || [],
+      protectedTransport: source.manifestType === "hls",
     },
     3600,
   );

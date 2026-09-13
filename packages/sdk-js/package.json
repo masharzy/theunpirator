@@ -1,6 +1,6 @@
 {
   "name": "@unpirator/sdk-js",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Browser SDK for The Unpirator protected media player",
   "keywords": [
     "video",

@@ -151,7 +151,8 @@ export class ProtectedPlayer {
     this.root.appendChild(this.video);
     this.state = await this.bootstrap();
     this.tokenRefreshedAt = Date.now();
-    if (this.state.mode === "protected_segments") this.setupProtectedSurface();
+    if (["protected_segments", "protected_hls"].includes(this.state.mode))
+      this.setupProtectedSurface();
     this.setupWatermark(this.state.watermark);
     await this.attachMedia();
     this.scheduleRefresh();
@@ -182,6 +183,10 @@ export class ProtectedPlayer {
   async attachMedia() {
     if (this.state.mode === "protected_segments") {
       await this.attachProtectedSegments();
+      return;
+    }
+    if (this.state.mode === "protected_hls") {
+      await this.attachProtectedHls();
       return;
     }
     const url = new URL(this.state.playbackUrl);
@@ -270,6 +275,22 @@ export class ProtectedPlayer {
     });
     await this.protected.mount();
     this.installPlaybackControls();
+  }
+
+  async attachProtectedHls() {
+    if (!Hls.isSupported() || !window.MediaSource || !crypto?.subtle)
+      throw new Error("This browser does not support protected HLS playback");
+    this.protected = new ProtectedHlsRuntime({
+      video: this.video,
+      root: this.root,
+      surface: this.surface,
+      host: this.host,
+      watermark: this.watermarkElement,
+      state: this.state,
+      ensureToken: () => this.ensureFreshToken(),
+      onError: (error) => this.handlePlaybackError(error),
+    });
+    await this.protected.mount();
   }
 
   async refreshToken() {
@@ -667,6 +688,243 @@ function segmentWorkerRuntime() {
       });
     }
   };
+}
+
+class ProtectedHlsRuntime {
+  constructor({ video, root, surface, host, watermark, state, ensureToken, onError }) {
+    this.video = video;
+    this.root = root;
+    this.surface = surface;
+    this.host = host;
+    this.watermark = watermark;
+    this.state = state;
+    this.ensureToken = ensureToken;
+    this.onError = onError;
+    this.destroyed = false;
+  }
+  async mount() {
+    const mediaUrl = new URL(this.state.playbackUrl);
+    mediaUrl.search = "";
+    this.baseUrl = mediaUrl.toString().replace(/\/media$/, "");
+    const pair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-OAEP",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      false,
+      ["encrypt", "unwrapKey"],
+    );
+    const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    const bootstrap = await this.readJson(
+      await fetch(`${this.baseUrl}/bootstrap`, {
+        method: "POST",
+        credentials: "include",
+        headers: this.authHeaders(),
+        body: JSON.stringify({ publicKey, playerBuild: "protected-v1" }),
+      }),
+    );
+    if (bootstrap.transport !== "hls") throw new Error("Protected HLS transport unavailable");
+    this.key = await crypto.subtle.unwrapKey(
+      "raw",
+      decodeBase64(bootstrap.wrappedKey),
+      pair.privateKey,
+      { name: "RSA-OAEP" },
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"],
+    );
+    await this.integrity();
+    const runtime = this;
+    class EncryptedHlsLoader {
+      constructor() {
+        this.controller = null;
+        this.context = null;
+        const timing = () => ({ start: 0, first: 0, end: 0 });
+        this.stats = {
+          aborted: false,
+          loaded: 0,
+          total: 0,
+          retry: 0,
+          chunkCount: 0,
+          bwEstimate: 0,
+          loading: timing(),
+          parsing: { start: 0, end: 0 },
+          buffering: timing(),
+        };
+      }
+      load(context, _config, callbacks) {
+        this.context = context;
+        this.callbacks = callbacks;
+        this.stats.loading.start = performance.now();
+        this.controller = new AbortController();
+        runtime
+          .load(context.url, context, this.controller.signal)
+          .then(({ data, url }) => {
+            this.stats.loading.first ||= performance.now();
+            this.stats.loading.end = performance.now();
+            this.stats.loaded = data.byteLength ?? data.length;
+            this.stats.total = this.stats.loaded;
+            this.stats.chunkCount = 1;
+            callbacks.onSuccess({ data, url, code: 200 }, this.stats, context, null);
+          })
+          .catch((error) => {
+            if (this.stats.aborted) return;
+            callbacks.onError(
+              { code: Number(error.status || 0), text: error.message || "Protected HLS failed" },
+              context,
+              null,
+              this.stats,
+            );
+          });
+      }
+      abort() {
+        if (this.stats.aborted) return;
+        this.stats.aborted = true;
+        this.controller?.abort();
+        this.callbacks?.onAbort?.(this.stats, this.context, null);
+      }
+      destroy() {
+        this.abort();
+      }
+    }
+    this.hls = new Hls({ loader: EncryptedHlsLoader, enableWorker: true });
+    const ready = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Protected HLS loading timed out")), 20_000);
+      this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      this.hls.on(Hls.Events.ERROR, (_event, failure) => {
+        if (!failure.fatal) return;
+        clearTimeout(timer);
+        reject(
+          Object.assign(new Error(failure.details || "Protected HLS playback failed"), {
+            code: failure.details,
+          }),
+        );
+      });
+    });
+    this.hls.loadSource(`${this.baseUrl}/sealed/root`);
+    this.hls.attachMedia(this.video);
+    this.heartbeat = setInterval(() => {
+      if (!this.destroyed && !(document.hidden && this.video.paused))
+        this.integrity().catch(this.onError);
+    }, 5_000);
+    await ready;
+    this.installIntegrityGuard();
+  }
+  authHeaders() {
+    return { Authorization: `Bearer ${this.state.token}`, "content-type": "application/json" };
+  }
+  async readJson(response) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok)
+      throw Object.assign(
+        new Error(data?.error?.message || `Protected request failed (${response.status})`),
+        { code: data?.error?.code, status: response.status },
+      );
+    return data;
+  }
+  resourceId(url) {
+    const path = new URL(url, this.baseUrl).pathname;
+    if (path.endsWith("/sealed/root") || path.endsWith("/media")) return "root";
+    const match = /\/hls\/([a-f0-9]{40})$/.exec(path);
+    if (!match) throw new Error("Invalid protected HLS resource");
+    return match[1];
+  }
+  async load(url, context, signal) {
+    await this.ensureToken?.();
+    const resourceId = this.resourceId(url);
+    const ticket = await this.readJson(
+      await fetch(`${this.baseUrl}/resource-ticket`, {
+        method: "POST",
+        credentials: "include",
+        headers: this.authHeaders(),
+        body: JSON.stringify({ resourceId }),
+        signal,
+      }),
+    );
+    const rangeHeaders = {};
+    if (Number.isInteger(context.rangeStart) && Number.isInteger(context.rangeEnd))
+      rangeHeaders.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
+    const response = await fetch(
+      `${this.baseUrl}/sealed/${resourceId}?ticket=${encodeURIComponent(ticket.ticket)}`,
+      {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${this.state.token}`, ...rangeHeaders },
+        signal,
+      },
+    );
+    if (!response.ok) await this.readJson(response);
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: decodeBase64(response.headers.get("x-unpirator-iv") || ""),
+        additionalData: new TextEncoder().encode(response.headers.get("x-unpirator-context") || ""),
+      },
+      this.key,
+      await response.arrayBuffer(),
+    );
+    const text = context.responseType !== "arraybuffer";
+    return {
+      data: text ? new TextDecoder().decode(decrypted) : decrypted,
+      url,
+    };
+  }
+  setToken(token) {
+    this.state.token = token;
+  }
+  installIntegrityGuard() {
+    this.originalParent = this.video.parentNode;
+    const verify = () => {
+      if (this.integrityTampered || this.destroyed) return;
+      const watermarkStyle = this.watermark ? getComputedStyle(this.watermark) : null;
+      if (
+        !this.video.isConnected ||
+        this.video.parentNode !== this.originalParent ||
+        !this.host?.isConnected ||
+        (this.watermark &&
+          (!this.watermark.isConnected ||
+            watermarkStyle.display === "none" ||
+            watermarkStyle.visibility === "hidden" ||
+            Number(watermarkStyle.opacity) < 0.08))
+      ) {
+        this.integrityTampered = true;
+        this.integrity(true).catch(() => {});
+        this.onError(Object.assign(new Error("Player integrity lost"), { status: 403 }));
+      }
+    };
+    this.observers = [this.root, this.surface].filter(Boolean).map((target) => {
+      const observer = new MutationObserver(verify);
+      observer.observe(target, { childList: true, subtree: true, attributes: true });
+      return observer;
+    });
+    this.visibilityGuard = setInterval(verify, 1_000);
+  }
+  async integrity(tampered = false) {
+    await this.ensureToken?.();
+    await this.readJson(
+      await fetch(`${this.baseUrl}/integrity`, {
+        method: "POST",
+        credentials: "include",
+        headers: this.authHeaders(),
+        body: JSON.stringify({ sequence: 0, tampered }),
+      }),
+    );
+  }
+  destroy() {
+    this.destroyed = true;
+    clearInterval(this.heartbeat);
+    clearInterval(this.visibilityGuard);
+    this.observers?.forEach((observer) => observer.disconnect());
+    this.hls?.destroy();
+  }
+}
+
+function decodeBase64(value) {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 }
 
 export class ProtectedSegmentRuntime {
