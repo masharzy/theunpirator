@@ -10,6 +10,13 @@ registerProvider("youtube_custom", {
     allowedHosts: ["signed.googlevideo.com"],
   }),
 });
+registerProvider("trusted_redirect", {
+  resolve: async () => ({
+    url: "https://video.cdn.example/playlist.m3u8",
+    allowedHosts: ["video.cdn.example"],
+    trustedResolvedHosts: true,
+  }),
+});
 describe("source allowlist", () => {
   it("allows registered origin hosts", async () => {
     const source = await resolveAssetSource(
@@ -43,5 +50,30 @@ describe("source allowlist", () => {
       {},
     );
     expect(source.allowedHosts).toEqual(["signed.googlevideo.com"]);
+  });
+  it("allows a trusted provider host only from an allowlisted reference", async () => {
+    const source = await resolveAssetSource(
+      {
+        provider: "trusted_redirect",
+        providerReference: "https://embed.example/video/1",
+        allowedHosts: ["embed.example"],
+      },
+      {},
+      {},
+    );
+    expect(source.allowedHosts).toEqual(["video.cdn.example"]);
+  });
+  it("rejects a trusted provider host when the reference host was not allowlisted", async () => {
+    await expect(
+      resolveAssetSource(
+        {
+          provider: "trusted_redirect",
+          providerReference: "https://embed.example/video/1",
+          allowedHosts: ["other.example"],
+        },
+        {},
+        {},
+      ),
+    ).rejects.toMatchObject({ code: "SOURCE_HOST_BLOCKED" });
   });
 });

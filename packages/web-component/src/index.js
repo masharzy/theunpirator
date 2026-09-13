@@ -44,6 +44,33 @@ export class UnpiratorPlayerElement extends ElementBase {
     return this._currentUser;
   }
 
+  set headers(value) {
+    this._headers = value;
+    if (this.isConnected) this.mount();
+  }
+
+  get headers() {
+    return this._headers;
+  }
+
+  set getHeaders(value) {
+    this._getHeaders = value;
+    if (this.isConnected) this.mount();
+  }
+
+  get getHeaders() {
+    return this._getHeaders;
+  }
+
+  set getAccessToken(value) {
+    this._getAccessToken = value;
+    if (this.isConnected) this.mount();
+  }
+
+  get getAccessToken() {
+    return this._getAccessToken;
+  }
+
   async mount() {
     if (!this.container) return;
     const generation = (this.generation || 0) + 1;
@@ -77,6 +104,9 @@ export class UnpiratorPlayerElement extends ElementBase {
           assetId,
           title: this.getAttribute("title") || undefined,
           currentUser: this.currentUser,
+          headers: this.headers,
+          getHeaders: this.getHeaders,
+          getAccessToken: this.getAccessToken,
         }),
         onError: (error) => this.fail(error),
       });

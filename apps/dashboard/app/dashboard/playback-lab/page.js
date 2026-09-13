@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, CircleAlert, FlaskConical, Play, ShieldCheck } from "lucide-react";
 import { UnpiratorPlayer } from "@unpirator/react";
 import { api } from "@/lib/api";
@@ -38,10 +38,17 @@ function parseProviderConfig(value) {
 }
 
 function configPlaceholder(provider) {
-  if (provider === "bunny") return '{"accessKey":"...","headers":{"Referer":"..."}}';
+  if (provider === "bunny") return '{"accessKey":"..."}';
   if (provider === "s3" || provider === "r2")
     return '{"endpoint":"...","region":"auto","accessKeyId":"...","secretAccessKey":"..."}';
   return '{"headers":{"Authorization":"Bearer ..."}}';
+}
+
+function referencePlaceholder(provider) {
+  if (provider === "bunny") return "https://iframe.mediadelivery.net/embed/library-id/video-id";
+  if (provider === "s3" || provider === "r2") return "bucket/path/video.m3u8";
+  if (provider === "hls") return "https://cdn.example.com/video/master.m3u8";
+  return "https://cdn.example.com/video.mp4";
 }
 
 function providerForReference(selectedProvider, reference) {
@@ -61,6 +68,41 @@ function providerForReference(selectedProvider, reference) {
   return selectedProvider;
 }
 
+function WebComponentPlayer({ target, run, endpoint, getHeaders, onReady, onError }) {
+  const elementRef = useRef(null);
+  const callbacks = useRef({ onReady, onError });
+  callbacks.current = { onReady, onError };
+
+  useEffect(() => {
+    let active = true;
+    const element = elementRef.current;
+    const ready = () => active && callbacks.current.onReady();
+    const failed = (event) => active && callbacks.current.onError(event.detail?.error);
+    element.addEventListener("unpirator-ready", ready);
+    element.addEventListener("unpirator-error", failed);
+    import("@unpirator/web-component").then(() => {
+      if (!active) return;
+      element.getHeaders = getHeaders;
+    });
+    return () => {
+      active = false;
+      element.removeEventListener("unpirator-ready", ready);
+      element.removeEventListener("unpirator-error", failed);
+    };
+  }, [getHeaders, run]);
+
+  return (
+    <unpirator-player
+      key={run}
+      ref={elementRef}
+      asset-id={target.assetId}
+      src={target.src}
+      title={target.title}
+      endpoint={endpoint}
+    />
+  );
+}
+
 export default function PlaybackLabPage() {
   const [sites, setSites] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -69,6 +111,8 @@ export default function PlaybackLabPage() {
   const [siteId, setSiteId] = useState("");
   const [mode, setMode] = useState("youtube");
   const [provider, setProvider] = useState("direct");
+  const [securityPolicy, setSecurityPolicy] = useState("strict");
+  const [renderer, setRenderer] = useState("react");
   const [assetId, setAssetId] = useState("");
   const [connectionId, setConnectionId] = useState("");
   const [title, setTitle] = useState("Playback Lab test");
@@ -139,7 +183,7 @@ export default function PlaybackLabPage() {
             allowedHosts: hosts,
             connectionId: connectionId || null,
             providerConfig: connectionId ? {} : parseProviderConfig(headersJson),
-            securityPolicy: "strict",
+            securityPolicy,
           }),
         });
         next = { assetId: created.asset.id, title: title.trim() || "Playback Lab asset" };
@@ -197,6 +241,18 @@ export default function PlaybackLabPage() {
                 <option value="youtube">YouTube URL</option>
                 <option value="existing">Existing protected asset</option>
                 <option value="new">New authorized source</option>
+              </select>
+            </label>
+
+            <label className="block text-sm font-medium text-[#354230]">
+              Package renderer
+              <select
+                className={selectClass}
+                value={renderer}
+                onChange={(e) => setRenderer(e.target.value)}
+              >
+                <option value="react">@unpirator/react</option>
+                <option value="web-component">@unpirator/web-component</option>
               </select>
             </label>
 
@@ -269,10 +325,28 @@ export default function PlaybackLabPage() {
                     placeholder={
                       mode === "youtube"
                         ? "https://youtube.com/watch?v=…"
-                        : "https://cdn.example.com/lesson.m3u8"
+                        : referencePlaceholder(provider)
                     }
                   />
                 </label>
+                {mode === "new" && (
+                  <label className="block text-sm font-medium text-[#354230]">
+                    Security policy
+                    <select
+                      className={selectClass}
+                      value={securityPolicy}
+                      onChange={(e) => setSecurityPolicy(e.target.value)}
+                    >
+                      <option value="strict">Strict — HLS only</option>
+                      <option value="maximum">Maximum — HLS only</option>
+                      <option value="standard">Standard — MP4 or HLS</option>
+                    </select>
+                    <span className="mt-2 block text-[11px] leading-4 text-[#7b8674]">
+                      Use Standard for progressive MP4. Use Strict or Maximum for HLS, Bunny Stream,
+                      and S3/R2 objects ending in .m3u8.
+                    </span>
+                  </label>
+                )}
                 <label className="block text-sm font-medium text-[#354230]">
                   Test title
                   <Input
@@ -338,14 +412,25 @@ export default function PlaybackLabPage() {
           <Surface className="overflow-hidden bg-[#07110b] p-2 shadow-[0_25px_80px_rgba(15,30,10,.22)]">
             <div className="aspect-video overflow-hidden rounded-[18px] bg-[#050806]">
               {target ? (
-                <UnpiratorPlayer
-                  key={run}
-                  {...target}
-                  endpoint={endpoint}
-                  getHeaders={playbackHeaders}
-                  onReady={() => setStatus("Protected playback is ready.")}
-                  onError={(error) => setStatus(error?.message || "Playback failed.")}
-                />
+                renderer === "react" ? (
+                  <UnpiratorPlayer
+                    key={run}
+                    {...target}
+                    endpoint={endpoint}
+                    getHeaders={playbackHeaders}
+                    onReady={() => setStatus("Protected playback is ready.")}
+                    onError={(error) => setStatus(error?.message || "Playback failed.")}
+                  />
+                ) : (
+                  <WebComponentPlayer
+                    target={target}
+                    run={run}
+                    endpoint={endpoint}
+                    getHeaders={playbackHeaders}
+                    onReady={() => setStatus("Protected playback is ready.")}
+                    onError={(error) => setStatus(error?.message || "Playback failed.")}
+                  />
+                )
               ) : (
                 <div className="grid h-full place-items-center px-8 text-center">
                   <div>

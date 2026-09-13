@@ -102,6 +102,9 @@ importers:
       '@unpirator/react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@unpirator/web-component':
+        specifier: workspace:*
+        version: link:../../packages/web-component
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -230,7 +233,11 @@ importers:
         specifier: workspace:*
         version: link:../sdk-js
 
-  providers/bunny: {}
+  providers/bunny:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
 
   providers/direct: {}
 
