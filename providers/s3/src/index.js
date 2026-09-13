@@ -34,6 +34,7 @@ export const s3Provider = {
     return {
       url,
       supportsRange: true,
+      manifestType: key.toLowerCase().endsWith(".m3u8") ? "hls" : null,
       expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
       cacheTtlSeconds: Math.min(expiresIn - 10, 180),
     };

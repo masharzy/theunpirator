@@ -97,6 +97,8 @@ export async function proxyPrimary(request, env, claims, assetId) {
   assertOrigin(request, source.allowedOrigins, env);
   if (source.delivery?.mode === "protected_segments")
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected playback runtime");
+  if (source.manifestType === "hls")
+    throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
   let response = await originFetch(request, source.url, source);
   if ([401, 403, 404].includes(response.status)) {
     await invalidateSource(env, claims, assetId);
@@ -111,9 +113,40 @@ export async function proxyHlsObject(request, env, claims, assetId, objectId) {
   const mapped = await getHlsObject(env, assetId, objectId);
   if (!mapped?.url)
     throw securityError("HLS_OBJECT_EXPIRED", 410, "Media object expired; refresh playback");
+  if (mapped.protectedTransport)
+    throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
   assertOrigin(request, mapped.allowedOrigins, env);
   const response = await originFetch(request, mapped.url, mapped);
   return finalize(request, response, mapped.url, mapped, assetId, env);
+}
+
+export async function protectedHlsResource(request, env, claims, assetId, resourceId) {
+  const source = await getSource(env, claims, assetId);
+  if (source.manifestType !== "hls")
+    throw securityError("PROTECTED_HLS_UNAVAILABLE", 409, "Protected HLS unavailable");
+  const mapped = resourceId === "root" ? source : await getHlsObject(env, assetId, resourceId);
+  if (!mapped?.url)
+    throw securityError("HLS_OBJECT_EXPIRED", 410, "Media object expired; reload playback");
+  assertOrigin(request, mapped.allowedOrigins || source.allowedOrigins, env);
+  const response = await originFetch(request, mapped.url, mapped);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
+  }
+  const type = response.headers.get("content-type") || "";
+  if (looksLikeHls(mapped.url, response, { ...source, ...mapped })) {
+    const text = await response.text();
+    return {
+      body: new TextEncoder().encode(
+        await rewriteHlsManifest(text, mapped.url, assetId, { ...source, ...mapped }, env),
+      ),
+      contentType: "application/vnd.apple.mpegurl",
+    };
+  }
+  const body = await response.arrayBuffer();
+  if (body.byteLength > 16 * 1024 * 1024)
+    throw securityError("HLS_RESOURCE_TOO_LARGE", 413, "HLS segment exceeds 16 MB");
+  return { body, contentType: type || "application/octet-stream" };
 }
 
 async function finalize(request, response, sourceUrl, source, assetId, env) {

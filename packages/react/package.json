@@ -1,6 +1,6 @@
 {
   "name": "@unpirator/react",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "React and Next.js component for The Unpirator protected player",
   "keywords": [
     "react",

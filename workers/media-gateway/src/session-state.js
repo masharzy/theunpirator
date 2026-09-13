@@ -136,6 +136,54 @@ export class SessionState {
       await this.state.storage.delete(key);
       return Response.json({ ok: true, keyBase64: mediaKey });
     }
+    if (request.method === "POST" && url.pathname === "/resource-ticket") {
+      const body = await request.json();
+      const session = await this.state.storage.get("session");
+      const resourceId = String(body.resourceId || "");
+      if (
+        !session ||
+        session.status !== "active" ||
+        session.expiresAt <= Date.now() ||
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        !/^(root|[a-f0-9]{40})$/.test(resourceId)
+      )
+        return Response.json({ error: "denied" }, { status: 403 });
+      const bucket = Math.floor(Date.now() / 60_000);
+      const rateKey = `resource-rate:${bucket}`;
+      const count = Number((await this.state.storage.get(rateKey)) || 0);
+      if (count >= 240) return Response.json({ error: "rate_limited" }, { status: 429 });
+      const ticket = crypto.randomUUID() + crypto.randomUUID();
+      await Promise.all([
+        this.state.storage.put(rateKey, count + 1),
+        this.state.storage.put(`resource-ticket:${ticket}`, {
+          resourceId,
+          expiresAt: Date.now() + 20_000,
+        }),
+      ]);
+      return Response.json({ ticket, expiresIn: 20 });
+    }
+    if (request.method === "POST" && url.pathname === "/consume-resource") {
+      const body = await request.json();
+      const key = `resource-ticket:${body.ticket || ""}`;
+      const [session, ticket, mediaKey] = await Promise.all([
+        this.state.storage.get("session"),
+        this.state.storage.get(key),
+        this.state.storage.get("mediaKey"),
+      ]);
+      if (
+        !session ||
+        session.status !== "active" ||
+        session.expiresAt <= Date.now() ||
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        !ticket ||
+        ticket.expiresAt <= Date.now() ||
+        ticket.resourceId !== body.resourceId ||
+        !mediaKey
+      )
+        return Response.json({ error: "denied" }, { status: 403 });
+      await this.state.storage.delete(key);
+      return Response.json({ ok: true, keyBase64: mediaKey });
+    }
     if (request.method === "POST" && url.pathname === "/lease") {
       const body = await request.json();
       const session = await this.state.storage.get("session");

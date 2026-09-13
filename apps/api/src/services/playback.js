@@ -142,6 +142,13 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
       if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
     }
+    const protectedHls = isHlsAsset(asset);
+    if (asset.provider !== "youtube_custom" && !protectedHls && asset.securityPolicy !== "standard")
+      throw new AppError(
+        "PROTECTED_SOURCE_REQUIRED",
+        "Strict playback requires an HLS source. Convert progressive MP4 to HLS or use the standard policy.",
+        409,
+      );
     const entitlements = policy.entitlements;
     let [user] = await db
       .select()
@@ -320,8 +327,8 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       mode:
         asset.provider === "youtube_custom"
           ? "protected_segments"
-          : asset.provider === "hls"
-            ? "hls"
+          : protectedHls
+            ? "protected_hls"
             : "native",
       attestation:
         asset.provider === "youtube_custom"
@@ -355,6 +362,12 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     return session;
   }
   return { create, createUnlocked, revoke };
+}
+
+export function isHlsAsset(asset) {
+  if (asset.provider === "hls") return true;
+  if (!["bunny", "s3", "r2"].includes(asset.provider)) return false;
+  return asset.providerReference.toLowerCase().split(/[?#]/)[0].endsWith(".m3u8");
 }
 
 function youtubeVideoId(value) {

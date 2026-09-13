@@ -181,6 +181,34 @@ describe("protected segment state", () => {
     expect((await post("/integrity", { tampered: true })).status).toBe(403);
     expect((await post("/ticket", { track: "video", variant: 0, sequence: 2 })).status).toBe(403);
   });
+  it("issues single-use tickets for encrypted HLS resources", async () => {
+    const values = new Map();
+    const object = new SessionState({
+      storage: {
+        get: async (key) => values.get(key),
+        put: async (key, value) => values.set(key, value),
+        delete: async (key) => values.delete(key),
+        deleteAll: async () => values.clear(),
+        setAlarm: async () => {},
+      },
+    });
+    const post = (path, body) =>
+      object.fetch(
+        new Request(`https://session${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    await post("/state", { status: "active", ttlSeconds: 300 });
+    await post("/crypto", { keyBase64: "key" });
+    const issued = await post("/resource-ticket", { resourceId: "root" });
+    expect(issued.status).toBe(200);
+    const { ticket } = await issued.json();
+    const request = { ticket, resourceId: "root" };
+    expect((await post("/consume-resource", request)).status).toBe(200);
+    expect((await post("/consume-resource", request)).status).toBe(403);
+  });
 });
 describe("media delivery", () => {
   it("maps SIDX references to bounded protected byte ranges", () => {
@@ -216,6 +244,24 @@ describe("media delivery", () => {
           SOURCE_CACHE: {
             get: async () => ({ ...source, delivery: { mode: "protected_segments" } }),
           },
+        },
+        { tid: "t" },
+        aid,
+      ),
+    ).rejects.toMatchObject({ code: "NATIVE_DELIVERY_DISABLED" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("refuses the plaintext media route for protected HLS sources", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      proxyPrimary(
+        new Request("https://gateway.example/media", {
+          headers: { origin: "https://learn.example.com" },
+        }),
+        {
+          REQUIRE_ORIGIN: "true",
+          SOURCE_CACHE: { get: async () => ({ ...source, manifestType: "hls" }) },
         },
         { tid: "t" },
         aid,
