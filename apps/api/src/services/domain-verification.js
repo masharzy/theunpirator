@@ -1,7 +1,15 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
-const MAX_RESPONSE_BYTES = 64 * 1024;
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
+function verificationError(code, message, status, details) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  error.details = details;
+  return error;
+}
 
 function isPrivateIpv4(address) {
   const parts = address.split(".").map(Number);
@@ -42,16 +50,61 @@ async function assertPublicDomain(domain) {
 
 async function fetchVerificationPage(domain, path = "/") {
   await assertPublicDomain(domain);
-  const response = await fetch(`https://${domain}${path}`, {
-    headers: { accept: "text/html,text/plain;q=0.9", "user-agent": "The-Unpirator-Verify/1.0" },
-    redirect: "error",
-    signal: AbortSignal.timeout(7000),
-  });
-  if (!response.ok) return null;
+  let response;
+  try {
+    response = await fetch(`https://${domain}${path}`, {
+      headers: {
+        accept: "text/html,text/plain;q=0.9",
+        "user-agent": "The-Unpirator-Verify/1.0",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(7000),
+    });
+  } catch (cause) {
+    const timeout = cause?.name === "TimeoutError" || cause?.name === "AbortError";
+    throw verificationError(
+      timeout ? "DOMAIN_VERIFICATION_TIMEOUT" : "DOMAIN_VERIFICATION_FETCH_FAILED",
+      timeout
+        ? "Domain verification request timed out after 7 seconds"
+        : "Could not fetch the domain verification page over HTTPS",
+      422,
+      { domain, path },
+    );
+  }
+  return readVerificationResponse(response, { domain, path });
+}
+
+export async function readVerificationResponse(
+  response,
+  { domain = "unknown", path = "/", maxBytes = MAX_RESPONSE_BYTES } = {},
+) {
+  if (!response.ok) {
+    throw verificationError(
+      "DOMAIN_VERIFICATION_HTTP_ERROR",
+      `Domain verification URL returned HTTP ${response.status}`,
+      422,
+      { domain, path, httpStatus: response.status },
+    );
+  }
   const declaredLength = Number(response.headers.get("content-length") || 0);
-  if (declaredLength > MAX_RESPONSE_BYTES) return null;
+  if (declaredLength > maxBytes) {
+    throw verificationError(
+      "DOMAIN_VERIFICATION_RESPONSE_TOO_LARGE",
+      `Domain verification response exceeds the ${Math.round(maxBytes / 1024)} KB limit`,
+      422,
+      { domain, path, maxBytes, declaredBytes: declaredLength },
+    );
+  }
   const body = await response.text();
-  return body.length <= MAX_RESPONSE_BYTES ? body : null;
+  if (Buffer.byteLength(body, "utf8") > maxBytes) {
+    throw verificationError(
+      "DOMAIN_VERIFICATION_RESPONSE_TOO_LARGE",
+      `Domain verification response exceeds the ${Math.round(maxBytes / 1024)} KB limit`,
+      422,
+      { domain, path, maxBytes, actualBytes: Buffer.byteLength(body, "utf8") },
+    );
+  }
+  return body;
 }
 
 function readMetaAttributes(tag) {

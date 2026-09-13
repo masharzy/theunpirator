@@ -111,18 +111,18 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         throw error;
       }
       let verified = false;
-      try {
-        if (method === "dns") {
+      if (method === "dns") {
+        try {
           const records = await resolveTxt(`_unpirator.${row.domain}`);
           const expected = `unpirator-verification=${row.token}`;
           verified = records.some((parts) => parts.join("") === expected);
-        } else if (method === "meta") {
-          verified = await verifyMetaChallenge(row.domain, row.token);
-        } else {
-          verified = await verifyFileChallenge(row.domain, row.token);
+        } catch (error) {
+          if (!["ENODATA", "ENOTFOUND"].includes(error?.code)) throw error;
         }
-      } catch (error) {
-        if (error?.code === "DOMAIN_NOT_PUBLIC") throw error;
+      } else if (method === "meta") {
+        verified = await verifyMetaChallenge(row.domain, row.token);
+      } else {
+        verified = await verifyFileChallenge(row.domain, row.token);
       }
       if (!verified) {
         const labels = {
