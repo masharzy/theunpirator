@@ -741,6 +741,7 @@ class ProtectedHlsRuntime {
       constructor() {
         this.controller = null;
         this.context = null;
+        this.completed = false;
         const timing = () => ({ start: 0, first: 0, end: 0 });
         this.stats = {
           aborted: false,
@@ -762,6 +763,7 @@ class ProtectedHlsRuntime {
         runtime
           .load(context.url, context, this.controller.signal)
           .then(({ data, url }) => {
+            this.completed = true;
             this.stats.loading.first ||= performance.now();
             this.stats.loading.end = performance.now();
             this.stats.loaded = data.byteLength ?? data.length;
@@ -783,7 +785,7 @@ class ProtectedHlsRuntime {
           });
       }
       abort() {
-        if (this.stats.aborted) return;
+        if (this.completed || this.stats.aborted) return;
         this.stats.aborted = true;
         this.controller?.abort();
         this.callbacks?.onAbort?.(this.stats, this.context, null);
@@ -820,7 +822,6 @@ class ProtectedHlsRuntime {
         resolve();
       });
       this.hls.on(Hls.Events.ERROR, (_event, failure) => {
-        console.warn("[Unpirator HLS]", failure.type, failure.details, failure.reason || "");
         if (!failure.fatal) return;
         clearTimeout(timer);
         reject(
