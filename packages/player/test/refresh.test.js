@@ -2,21 +2,18 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("hls.js", () => ({ default: { isSupported: () => false } }));
 import { ProtectedPlayer } from "../src/index.js";
 describe("native playback refresh", () => {
-  it("refreshes the token URL and preserves playback position", async () => {
+  it("refreshes native playback without reloading its source", async () => {
     const player = new ProtectedPlayer({
       element: {},
       bootstrap: async () => ({}),
       onError: vi.fn(),
     });
     const play = vi.fn(async () => {});
-    let onMetadata;
     player.video = {
       src: "https://gateway.example/v/asset/media?token=old",
       currentTime: 42,
       paused: false,
-      addEventListener: vi.fn((name, fn) => {
-        if (name === "loadedmetadata") onMetadata = fn;
-      }),
+      addEventListener: vi.fn(),
       play,
     };
     player.state = {
@@ -29,12 +26,10 @@ describe("native playback refresh", () => {
       vi.fn(async () => Response.json({ token: "new", tokenExpiresIn: 90 })),
     );
     await player.refreshToken();
-    expect(player.video.src).toContain("token=new");
+    expect(player.video.src).toContain("token=old");
     expect(player.state.token).toBe("new");
-    player.video.currentTime = 0;
-    onMetadata();
     expect(player.video.currentTime).toBe(42);
-    expect(play).toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
   it("pauses playback when token refresh is denied", async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
-import gateway from "../src/index.js";
+import gateway, { readToken } from "../src/index.js";
 import { proxyPrimary } from "../src/proxy.js";
 import { rewriteHlsManifest } from "../src/hls.js";
 import { assertSourceUrl } from "../src/origin-policy.js";
@@ -46,6 +46,12 @@ const source = {
 const sourceEnv = { REQUIRE_ORIGIN: "true", SOURCE_CACHE: { get: async () => source } };
 afterEach(() => vi.unstubAllGlobals());
 describe("gateway authorization", () => {
+  it("prefers the rotated HttpOnly cookie over a stale media query token", () => {
+    const request = new Request("https://gateway.example/media?token=old", {
+      headers: { cookie: "ap_playback=new" },
+    });
+    expect(readToken(request, new URL(request.url))).toBe("new");
+  });
   it("fails closed when session storage is unavailable", async () => {
     const fetchState = vi.fn(async () => Response.json({}, { status: 503 }));
     const response = await gateway.fetch(
