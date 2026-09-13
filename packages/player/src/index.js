@@ -793,6 +793,12 @@ class ProtectedHlsRuntime {
     const ready = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Protected HLS loading timed out")), 20_000);
       this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Do not report readiness from metadata alone. Explicitly start loading
+        // so preload=metadata and browser policy differences cannot leave the
+        // media element with a duration but no playable bytes.
+        this.hls.startLoad(Math.max(0, Number(this.video.currentTime || 0)));
+      });
+      this.hls.on(Hls.Events.FRAG_BUFFERED, () => {
         clearTimeout(timer);
         resolve();
       });
@@ -806,8 +812,8 @@ class ProtectedHlsRuntime {
         );
       });
     });
-    this.hls.loadSource(`${this.baseUrl}/sealed/root`);
     this.hls.attachMedia(this.video);
+    this.hls.loadSource(`${this.baseUrl}/sealed/root`);
     this.heartbeat = setInterval(() => {
       if (!this.destroyed && !(document.hidden && this.video.paused))
         this.integrity().catch(this.onError);
