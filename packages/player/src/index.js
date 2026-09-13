@@ -808,8 +808,6 @@ class ProtectedHlsRuntime {
         // so preload=metadata and browser policy differences cannot leave the
         // media element with a duration but no playable bytes.
         this.hls.startLoad(Math.max(0, Number(this.video.currentTime || 0)));
-      });
-      this.hls.on(Hls.Events.FRAG_BUFFERED, () => {
         clearTimeout(timer);
         resolve();
       });
