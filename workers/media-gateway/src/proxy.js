@@ -85,7 +85,7 @@ function copyResponseHeaders(origin, requestOrigin) {
   return headers;
 }
 
-function looksLikeHls(url, response, source) {
+export function looksLikeHls(url, response, source) {
   const type = response.headers.get("content-type") || "";
   return (
     source.manifestType === "hls" || url.toLowerCase().includes(".m3u8") || type.includes("mpegurl")
@@ -134,7 +134,10 @@ export async function protectedHlsResource(request, env, claims, assetId, resour
     throw securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
   }
   const type = response.headers.get("content-type") || "";
-  if (looksLikeHls(mapped.url, response, { ...source, ...mapped })) {
+  // Only the root descriptor is known to be a manifest. Child objects may be
+  // playlists or binary media; inheriting the root manifestType
+  // makes every TS/fMP4 segment get decoded and parsed as an M3U8 playlist.
+  if (looksLikeHls(mapped.url, response, resourceId === "root" ? source : mapped)) {
     const text = await response.text();
     return {
       body: new TextEncoder().encode(

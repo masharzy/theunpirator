@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import gateway, { readToken } from "../src/index.js";
-import { proxyPrimary } from "../src/proxy.js";
+import { looksLikeHls, proxyPrimary } from "../src/proxy.js";
 import { rewriteHlsManifest } from "../src/hls.js";
 import { assertSourceUrl } from "../src/origin-policy.js";
 import { parseSidx } from "../src/protected-media.js";
@@ -211,6 +211,17 @@ describe("protected segment state", () => {
   });
 });
 describe("media delivery", () => {
+  it("does not classify an HLS binary child segment as a manifest", () => {
+    const response = new Response(new Uint8Array([0x47]), {
+      headers: { "content-type": "video/mp2t" },
+    });
+    expect(
+      looksLikeHls("https://media.example.com/segment.ts", response, {
+        url: "https://media.example.com/segment.ts",
+        allowedHosts: ["media.example.com"],
+      }),
+    ).toBe(false);
+  });
   it("maps SIDX references to bounded protected byte ranges", () => {
     const buffer = new ArrayBuffer(44);
     const view = new DataView(buffer);
