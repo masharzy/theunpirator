@@ -766,7 +766,10 @@ class ProtectedHlsRuntime {
             this.stats.loading.end = performance.now();
             this.stats.loaded = data.byteLength ?? data.length;
             this.stats.total = this.stats.loaded;
-            this.stats.chunkCount = 1;
+            // Hls.js sends fragment bytes to its transmuxer from onProgress.
+            // onSuccess only completes and flushes the load, so omitting this
+            // callback leaves MSE empty even though the segment request was 200.
+            callbacks.onProgress?.(this.stats, context, data, null);
             callbacks.onSuccess({ data, url, code: 200 }, this.stats, context, null);
           })
           .catch((error) => {
