@@ -378,4 +378,11 @@ describe("media delivery", () => {
       assertSourceUrl(url, ["127.0.0.1", "[::1]", "localhost", "media.example.com"]),
     ).toThrow();
   });
+  it("normalizes URL, whitespace, and comma-separated source host allowlists", () => {
+    expect(() =>
+      assertSourceUrl("https://devstreaming-cdn.apple.com/video/master.m3u8", [
+        " https://devstreaming-cdn.apple.com/path, test-streams.mux.dev ",
+      ]),
+    ).not.toThrow();
+  });
 });
