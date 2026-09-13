@@ -1,7 +1,9 @@
 import { securityError } from "./token.js";
 
 function normalizeAllowedHost(value) {
-  const raw = String(value || "").trim().toLowerCase();
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "";
   try {
     const parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
