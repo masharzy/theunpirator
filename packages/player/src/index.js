@@ -797,6 +797,11 @@ class ProtectedHlsRuntime {
       enableCEA708Captions: false,
       renderTextTracksNatively: false,
     });
+    this.startHlsLoading = () => {
+      if (this.destroyed) return;
+      this.hls.startLoad(Math.max(0, Number(this.video.currentTime || 0)));
+    };
+    this.video.addEventListener("play", this.startHlsLoading);
     const ready = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Protected HLS loading timed out")), 20_000);
       this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -807,7 +812,7 @@ class ProtectedHlsRuntime {
         // Do not report readiness from metadata alone. Explicitly start loading
         // so preload=metadata and browser policy differences cannot leave the
         // media element with a duration but no playable bytes.
-        this.hls.startLoad(Math.max(0, Number(this.video.currentTime || 0)));
+        queueMicrotask(this.startHlsLoading);
         clearTimeout(timer);
         resolve();
       });
@@ -931,6 +936,7 @@ class ProtectedHlsRuntime {
   }
   destroy() {
     this.destroyed = true;
+    this.video?.removeEventListener("play", this.startHlsLoading);
     clearInterval(this.heartbeat);
     clearInterval(this.visibilityGuard);
     this.observers?.forEach((observer) => observer.disconnect());
