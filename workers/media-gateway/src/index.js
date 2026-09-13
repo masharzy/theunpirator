@@ -34,14 +34,13 @@ function jsonError(error, requestId, request) {
 function requestId(request) {
   return request.headers.get("x-request-id") || crypto.randomUUID();
 }
-function readToken(request, url) {
+export function readToken(request, url) {
   const auth = request.headers.get("authorization") || "";
   if (auth.startsWith("Bearer ")) return auth.slice(7);
-  const query = url.searchParams.get("token");
-  if (query) return query;
   const cookie = request.headers.get("cookie") || "";
   const match = /(?:^|;\s*)ap_playback=([^;]+)/.exec(cookie);
-  return match ? decodeURIComponent(match[1]) : url.searchParams.get("token") || "";
+  if (match) return decodeURIComponent(match[1]);
+  return url.searchParams.get("token") || "";
 }
 function playbackCookie(token, assetId, maxAge) {
   return `ap_playback=${encodeURIComponent(token)}; Path=/v/${assetId}; Max-Age=${Math.max(30, Number(maxAge || 90))}; HttpOnly; Secure; SameSite=None`;

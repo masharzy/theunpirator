@@ -44,6 +44,23 @@ function configPlaceholder(provider) {
   return '{"headers":{"Authorization":"Bearer ..."}}';
 }
 
+function providerForReference(selectedProvider, reference) {
+  if (selectedProvider !== "direct") return selectedProvider;
+  const path = (() => {
+    try {
+      return new URL(reference).pathname.toLowerCase();
+    } catch {
+      return reference.toLowerCase().split(/[?#]/)[0];
+    }
+  })();
+  if (path.endsWith(".m3u8")) return "hls";
+  if (path.endsWith(".mpd"))
+    throw new Error("DASH/MPD is not supported yet. Use an MP4 or HLS source.");
+  if (path.endsWith(".m3u"))
+    throw new Error("M3U playlists are not supported. Use an HLS .m3u8 manifest.");
+  return selectedProvider;
+}
+
 export default function PlaybackLabPage() {
   const [sites, setSites] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -106,6 +123,7 @@ export default function PlaybackLabPage() {
         setSiteId(selected?.siteId || siteId);
         next = { assetId, title: selected?.title || "Asset test" };
       } else {
+        const resolvedProvider = providerForReference(provider, reference.trim());
         const hosts = (allowedHosts || inferHost(reference))
           .split(",")
           .map((value) => value.trim().toLowerCase())
@@ -116,7 +134,7 @@ export default function PlaybackLabPage() {
           body: JSON.stringify({
             siteId,
             title: title.trim() || "Playback Lab asset",
-            provider,
+            provider: resolvedProvider,
             providerReference: reference.trim(),
             allowedHosts: hosts,
             connectionId: connectionId || null,
@@ -125,6 +143,9 @@ export default function PlaybackLabPage() {
           }),
         });
         next = { assetId: created.asset.id, title: title.trim() || "Playback Lab asset" };
+        if (resolvedProvider !== provider) {
+          setProvider(resolvedProvider);
+        }
         setAssets((items) => [{ ...created.asset, siteId }, ...items]);
         setAssetId(created.asset.id);
       }

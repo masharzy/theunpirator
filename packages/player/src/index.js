@@ -193,14 +193,64 @@ export class ProtectedPlayer {
           xhr.setRequestHeader("Authorization", `Bearer ${this.state.token}`);
         },
       });
-      this.hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) this.onError(data);
+      const ready = new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () =>
+            reject(
+              Object.assign(new Error("HLS manifest loading timed out"), {
+                code: "MEDIA_LOAD_TIMEOUT",
+              }),
+            ),
+          20_000,
+        );
+        this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        this.hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (!data.fatal) return;
+          clearTimeout(timer);
+          reject(
+            Object.assign(new Error(data.details || "HLS playback failed"), { code: data.details }),
+          );
+        });
       });
       this.hls.loadSource(url.toString());
       this.hls.attachMedia(this.video);
+      await ready;
     } else {
       this.video.src = this.state.playbackUrl;
+      await this.waitForMediaReady();
     }
+  }
+
+  waitForMediaReady() {
+    if (this.video.readyState >= 1) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.video.removeEventListener("loadedmetadata", loaded);
+        this.video.removeEventListener("error", failed);
+      };
+      const loaded = () => {
+        cleanup();
+        resolve();
+      };
+      const failed = () => {
+        cleanup();
+        reject(
+          Object.assign(new Error("Media metadata could not be loaded"), {
+            code: "MEDIA_LOAD_FAILED",
+          }),
+        );
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(Object.assign(new Error("Media loading timed out"), { code: "MEDIA_LOAD_TIMEOUT" }));
+      }, 20_000);
+      this.video.addEventListener("loadedmetadata", loaded, { once: true });
+      this.video.addEventListener("error", failed, { once: true });
+    });
   }
 
   async attachProtectedSegments() {
@@ -252,22 +302,8 @@ export class ProtectedPlayer {
     this.state.tokenExpiresIn = data.tokenExpiresIn;
     this.tokenRefreshedAt = Date.now();
     this.protected?.setToken(data.token);
-    if (!this.protected && !this.hls && this.video?.src) {
-      const position = this.video.currentTime;
-      const wasPlaying = !this.video.paused;
-      const nextUrl = new URL(this.state.playbackUrl);
-      nextUrl.searchParams.set("token", data.token);
-      this.state.playbackUrl = nextUrl.toString();
-      this.video.addEventListener(
-        "loadedmetadata",
-        () => {
-          this.video.currentTime = position;
-          if (wasPlaying) this.video.play().catch(this.onError);
-        },
-        { once: true },
-      );
-      this.video.src = this.state.playbackUrl;
-    }
+    // Native media requests use the refreshed HttpOnly playback cookie. Keeping
+    // the current src avoids a visible reload and preserves the browser buffer.
   }
 
   scheduleRefresh() {
