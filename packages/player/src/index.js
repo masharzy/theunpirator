@@ -820,6 +820,7 @@ class ProtectedHlsRuntime {
         resolve();
       });
       this.hls.on(Hls.Events.ERROR, (_event, failure) => {
+        console.warn("[Unpirator HLS]", failure.type, failure.details, failure.reason || "");
         if (!failure.fatal) return;
         clearTimeout(timer);
         reject(
