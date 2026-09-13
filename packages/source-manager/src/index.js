@@ -46,11 +46,14 @@ function assertResolvedSource(asset, source) {
       code: "SOURCE_INVALID",
       status: 502,
     });
-  const youtubeHost =
-    asset.provider === "youtube_custom" &&
-    (url.hostname === "googlevideo.com" || url.hostname.endsWith(".googlevideo.com"));
+  const providerResolvedHosts =
+    source.trustedResolvedHosts === true &&
+    Array.isArray(source.allowedHosts) &&
+    source.allowedHosts.length > 0 &&
+    referenceHostIsAllowed(asset);
   const allowed =
-    youtubeHost && Array.isArray(source.allowedHosts)
+    (asset.provider === "youtube_custom" || providerResolvedHosts) &&
+    Array.isArray(source.allowedHosts)
       ? source.allowedHosts
       : Array.isArray(asset.allowedHosts)
         ? asset.allowedHosts
@@ -60,5 +63,14 @@ function assertResolvedSource(asset, source) {
       code: "SOURCE_HOST_BLOCKED",
       status: 502,
     });
+  }
+}
+
+function referenceHostIsAllowed(asset) {
+  try {
+    const hostname = new URL(asset.providerReference).hostname.toLowerCase();
+    return (asset.allowedHosts || []).some((host) => host.toLowerCase() === hostname);
+  } catch {
+    return false;
   }
 }
