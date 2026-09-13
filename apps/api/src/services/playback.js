@@ -366,6 +366,18 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
 
 export function isHlsAsset(asset) {
   if (asset.provider === "hls") return true;
+  if (asset.provider === "bunny") {
+    try {
+      const url = new URL(asset.providerReference);
+      if (
+        url.hostname.toLowerCase() === "iframe.mediadelivery.net" &&
+        /^\/embed\/\d+\/[0-9a-f-]{36}\/?$/i.test(url.pathname)
+      )
+        return true;
+    } catch {
+      // Object references and relative provider paths are handled below.
+    }
+  }
   if (!["bunny", "s3", "r2"].includes(asset.provider)) return false;
   return asset.providerReference.toLowerCase().split(/[?#]/)[0].endsWith(".m3u8");
 }
