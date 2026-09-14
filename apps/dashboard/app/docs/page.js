@@ -27,7 +27,7 @@ const sections = [
   ["choose-package", "Choose a package"],
   ["dashboard-setup", "Dashboard setup"],
   ["nextjs", "Next.js quick start"],
-  ["web-component", "Other platforms"],
+  ["web-component", "PHP, Python & HTML"],
   ["server-contract", "Server contract"],
   ["security", "Security checklist"],
   ["errors", "Errors"],
@@ -336,9 +336,30 @@ UNPIRATOR_SITE_ID=00000000-0000-0000-0000-000000000000`}</CodeBlock>
               secrets on the server and returns only a short-lived playback session.
             </p>
             <CodeBlock label="terminal">
-              npm install @unpirator/react @unpirator/integration-nextjs
+              npm install @unpirator/react@0.1.12 @unpirator/integration-nextjs@0.1.1
             </CodeBlock>
-            <h3 className="docs-subtitle">1. Create the server route</h3>
+            <h3 className="docs-subtitle">1. Synchronize the lesson when it is saved</h3>
+            <CodeBlock label="server/content-sync.js">{`import { createUnpiratorServerClient }
+  from "@unpirator/integration-nextjs";
+
+const unpirator = createUnpiratorServerClient({
+  apiUrl: process.env.UNPIRATOR_API_URL,
+  apiKey: process.env.UNPIRATOR_API_KEY,
+});
+
+const synced = await unpirator.upsertPlaybackAsset({
+  siteId: process.env.UNPIRATOR_SITE_ID,
+  externalContentId: String(lesson.id),
+  title: lesson.title,
+  provider: "hls",
+  sourceUrl: lesson.privateVideoUrl,
+  allowedHosts: ["media.example.com"],
+  providerConfig: {},
+  securityPolicy: "strict",
+});
+
+await savePlaybackRef(lesson.id, synced.playbackRef);`}</CodeBlock>
+            <h3 className="docs-subtitle">2. Create the authenticated playback route</h3>
             <CodeBlock label="app/api/unpirator/playback/route.js">{`import { createUnpiratorPlaybackHandler }
   from "@unpirator/integration-nextjs";
 import { auth } from "@/auth";
@@ -361,30 +382,27 @@ export const POST = createUnpiratorPlaybackHandler({
       label: session.user.email || session.user.id,
     };
   },
+  authorizePlayback: async ({ body, viewer }) =>
+    canViewLesson(viewer.id, body.playbackRef),
 });`}</CodeBlock>
-            <h3 className="docs-subtitle">2. Render the player</h3>
+            <h3 className="docs-subtitle">3. Render only the opaque reference</h3>
             <CodeBlock label="components/lesson-video.jsx">{`"use client";
 
-import { useCallback } from "react";
 import { UnpiratorPlayer } from "@unpirator/react";
 
-export function LessonVideo({ youtubeUrl, firebaseUser }) {
-  const getAccessToken = useCallback(
-    () => firebaseUser.getIdToken(),
-    [firebaseUser]
-  );
+export function LessonVideo({ playbackRef }) {
   return (
     <UnpiratorPlayer
-      src={youtubeUrl}
+      playbackRef={playbackRef}
+      endpoint="/api/unpirator/playback"
       title="Lesson video"
-      getAccessToken={getAccessToken}
       onError={(error) => console.error(error.code, error)}
     />
   );
 }`}</CodeBlock>
             <div className="docs-note">
-              YouTube uses <code>src</code>. Bunny, HLS, S3, R2, and direct media use a registered
-              asset UUID: <code>{'<UnpiratorPlayer assetId="ASSET_UUID" />'}</code>
+              The private URL is used only during server-side synchronization. The browser page,
+              React props, rendered HTML, and player requests receive <code>playbackRef</code>.
             </div>
             <div className="docs-callout">
               <KeyRound size={20} />
@@ -401,23 +419,65 @@ export function LessonVideo({ youtubeUrl, firebaseUser }) {
 
           <section id="web-component" className="docs-section">
             <div className="docs-kicker">05 · OTHER PLATFORMS</div>
-            <h2>One element for every browser stack.</h2>
+            <h2>Private playback in every server stack.</h2>
             <p className="docs-lead">
               The Web Component works in PHP, Laravel, Django, Flask, WordPress, plain HTML, and
               other browser frameworks. Your backend still owns the secret session endpoint.
             </p>
-            <CodeBlock label="your template">{`<script type="module"
-  src="https://esm.sh/@unpirator/web-component@0.1.0">
+            <CodeBlock label="browser template">{`<script type="module"
+  src="https://esm.sh/@unpirator/web-component@0.1.11">
 </script>
 
 <unpirator-player
-  src="https://www.youtube.com/watch?v=VIDEO_ID"
+  playback-ref="OPAQUE_REFERENCE_FROM_YOUR_BACKEND"
   endpoint="/api/unpirator/playback"
   title="Lesson video">
 </unpirator-player>`}</CodeBlock>
+            <CodeBlock label="PHP / Laravel: synchronize when content is saved">{`$payload = [
+  'siteId' => getenv('UNPIRATOR_SITE_ID'),
+  'externalContentId' => (string) $lesson->id,
+  'title' => $lesson->title,
+  'provider' => 'hls',
+  'sourceUrl' => $lesson->private_video_url,
+  'allowedHosts' => ['media.example.com'],
+  'providerConfig' => new stdClass(),
+  'securityPolicy' => 'strict',
+];
+
+// POST JSON from PHP to:
+// {UNPIRATOR_API_URL}/v1/playback/assets/upsert
+// Authorization: Bearer {UNPIRATOR_API_KEY}
+// Save response.playbackRef on the lesson record.`}</CodeBlock>
+            <CodeBlock label="Django / Flask: synchronize when content is saved">{`payload = {
+    "siteId": os.environ["UNPIRATOR_SITE_ID"],
+    "externalContentId": str(lesson.id),
+    "title": lesson.title,
+    "provider": "hls",
+    "sourceUrl": lesson.private_video_url,
+    "allowedHosts": ["media.example.com"],
+    "providerConfig": {},
+    "securityPolicy": "strict",
+}
+
+# POST payload server-side to:
+# {UNPIRATOR_API_URL}/v1/playback/assets/upsert
+# Authorization: Bearer {UNPIRATOR_API_KEY}
+# Save response["playbackRef"] on the lesson record.`}</CodeBlock>
+            <div className="docs-callout">
+              <LockKeyhole size={20} />
+              <div>
+                <strong>The template never needs the private source URL.</strong>
+                <p>
+                  The same-origin playback endpoint authenticates the student, checks lesson access,
+                  creates the playback session with the server API key, and returns it with
+                  `Cache-Control: no-store`.
+                </p>
+              </div>
+            </div>
             <div className="docs-attribute-grid">
               {[
-                ["src", "YouTube URL"],
+                ["playback-ref", "Opaque reference for private production sources"],
+                ["src", "Inline YouTube URL; visible when rendered into page markup"],
                 ["asset-id", "Registered asset UUID"],
                 ["endpoint", "Same-origin server route"],
                 ["title", "Playback and audit label"],
