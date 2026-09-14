@@ -9,6 +9,8 @@ const DEFAULTS = {
   max_devices_per_user: 2,
   max_concurrent_streams: 1,
   session_policy: "block_new",
+  // Legacy subscriptions predate policy ceilings and historically allowed Strict.
+  max_security_policy: "strict",
   youtube_custom: false,
 };
 

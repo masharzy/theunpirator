@@ -15,6 +15,13 @@ import { queueWebhook } from "./webhooks.js";
 import { AppError, notFound } from "../errors.js";
 import { getPlaybackPolicy } from "./entitlements.js";
 
+export function effectiveSecurityPolicy(requested, ceiling, supportsProtectedDelivery) {
+  const rank = { standard: 1, strict: 2, maximum: 3 };
+  const byRank = [null, "standard", "strict", "maximum"];
+  if (!supportsProtectedDelivery) return "standard";
+  return byRank[Math.min(rank[requested] || 1, rank[ceiling] || 1)];
+}
+
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
     const started = performance.now();
@@ -143,13 +150,16 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
     }
     const protectedHls = isHlsAsset(asset);
-    if (asset.provider !== "youtube_custom" && !protectedHls && asset.securityPolicy !== "standard")
-      throw new AppError(
-        "PROTECTED_SOURCE_REQUIRED",
-        "Strict playback requires an HLS source. Convert progressive MP4 to HLS or use the standard policy.",
-        409,
-      );
     const entitlements = policy.entitlements;
+    const planPolicy = entitlements.max_security_policy || "strict";
+    // Plans define a security ceiling. A lower plan still plays every supported
+    // source; it receives the strongest policy included in that plan. Progressive
+    // MP4 currently uses native range delivery, whose effective ceiling is Standard.
+    const effectivePolicy = effectiveSecurityPolicy(
+      asset.securityPolicy,
+      planPolicy,
+      asset.provider === "youtube_custom" || protectedHls,
+    );
     let [user] = await db
       .select()
       .from(endUsers)
@@ -293,7 +303,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       aid: asset.id,
       did: device.id,
       psid: session.id,
-      policy: asset.securityPolicy,
+      policy: effectivePolicy,
       iat: now,
       exp: now + tokenTtl,
     };
@@ -323,6 +333,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       playbackUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/media?token=${encodeURIComponent(token)}`,
       token,
       tokenExpiresIn: tokenTtl,
+      securityPolicy: effectivePolicy,
       refreshUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/refresh`,
       mode:
         asset.provider === "youtube_custom"
