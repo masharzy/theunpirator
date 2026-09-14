@@ -18,7 +18,7 @@ new_classes = ["SessionState"]
 # Source and rewritten-HLS mapping cache only.
 [[kv_namespaces]]
 binding = "SOURCE_CACHE"
-id = "00000000000000000000000000000000"
+id = "4cc223e149af498abfb28c6f75838dc9"
 
 # Secrets (wrangler secret put ...):
 # PLAYBACK_PUBLIC_KEYS_B64
