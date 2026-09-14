@@ -7,6 +7,7 @@ import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 export function UnpiratorPlayer({
   src,
   assetId,
+  playbackRef,
   endpoint = "/api/unpirator/playback",
   title,
   currentUser,
@@ -48,6 +49,7 @@ export function UnpiratorPlayer({
         endpoint,
         src,
         assetId,
+        playbackRef,
         title,
         currentUser,
         headers,
@@ -80,6 +82,7 @@ export function UnpiratorPlayer({
   }, [
     src,
     assetId,
+    playbackRef,
     endpoint,
     title,
     currentUserKey,

@@ -17,6 +17,7 @@ export function createPlaybackBootstrap({
   endpoint = "/api/unpirator/playback",
   src,
   assetId,
+  playbackRef,
   title,
   currentUser,
   deviceId,
@@ -25,7 +26,8 @@ export function createPlaybackBootstrap({
   getHeaders,
   getAccessToken,
 } = {}) {
-  if (Boolean(src) === Boolean(assetId)) throw new Error("Provide either src or assetId");
+  const selected = [src, assetId, playbackRef].filter(Boolean);
+  if (selected.length !== 1) throw new Error("Provide exactly one of src, assetId, or playbackRef");
   return async function bootstrap() {
     const requestUrl = new URL(endpoint, window.location.href);
     if (requestUrl.origin !== window.location.origin)
@@ -40,7 +42,7 @@ export function createPlaybackBootstrap({
       credentials: "same-origin",
       headers: requestHeaders,
       body: JSON.stringify({
-        ...(src ? { src, title } : { assetId }),
+        ...(src ? { src, title } : playbackRef ? { playbackRef } : { assetId }),
         deviceId: deviceId || getOrCreateDeviceId(deviceStorageKey),
         ...(currentUser ? { currentUser } : {}),
         client: {

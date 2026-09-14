@@ -23,6 +23,7 @@ export const metadata = {
 
 const sections = [
   ["overview", "Overview"],
+  ["private-sources", "Private source sync"],
   ["choose-package", "Choose a package"],
   ["dashboard-setup", "Dashboard setup"],
   ["nextjs", "Next.js quick start"],
@@ -193,6 +194,63 @@ export default function Docs() {
                 <p>
                   Store it in server-only environment variables. Never use `NEXT_PUBLIC_`, `VITE_`,
                   or another public prefix.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section id="private-sources" className="docs-section">
+            <div className="docs-kicker">02 · PRIVATE SOURCE SYNC</div>
+            <h2>Keep the original video URL out of the browser.</h2>
+            <p className="docs-lead">
+              When a lesson is created or updated, send its private source from your backend to the
+              asset upsert API. Store the returned opaque playback reference with the lesson and
+              render only that reference in the player.
+            </p>
+            <div className="docs-flow" aria-label="Private source synchronization flow">
+              {[
+                [ServerCog, "Content backend", "Reads the private source"],
+                [KeyRound, "Asset upsert", "Creates or updates once"],
+                [Boxes, "Lesson record", "Stores playbackRef"],
+                [ShieldCheck, "Browser player", "Receives no origin URL"],
+              ].map(([Icon, title, text], index) => (
+                <div className="docs-flow-item" key={title}>
+                  <span>{index + 1}</span>
+                  <Icon size={21} />
+                  <strong>{title}</strong>
+                  <small>{text}</small>
+                </div>
+              ))}
+            </div>
+            <CodeBlock label="Server-only asset synchronization">{`POST /v1/playback/assets/upsert
+Authorization: Bearer apk_prefix.secret
+
+{
+  "siteId": "SITE_UUID",
+  "externalContentId": "lesson-42",
+  "title": "Lesson 42",
+  "provider": "hls",
+  "sourceUrl": "https://private-origin.example/master.m3u8",
+  "allowedHosts": ["private-origin.example"],
+  "providerConfig": {},
+  "securityPolicy": "strict"
+}`}</CodeBlock>
+            <CodeBlock label="React / Next.js">{`<UnpiratorPlayer
+  playbackRef={lesson.unpiratorPlaybackRef}
+  endpoint="/api/unpirator/playback"
+/>`}</CodeBlock>
+            <CodeBlock label="PHP / Laravel / Django / Flask">{`<unpirator-player
+  playback-ref="OPAQUE_REFERENCE_FROM_YOUR_BACKEND"
+  endpoint="/api/unpirator/playback">
+</unpirator-player>`}</CodeBlock>
+            <div className="docs-callout">
+              <LockKeyhole size={20} />
+              <div>
+                <strong>Synchronize on content save, not on every student page load.</strong>
+                <p>
+                  The unique key is site plus externalContentId. Repeating the request reuses and
+                  updates the same asset. Your playback endpoint must still authenticate the viewer
+                  and verify access to the referenced lesson.
                 </p>
               </div>
             </div>
