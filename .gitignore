@@ -22,3 +22,14 @@ wrangler.production.toml
 .vercel/
 .env.local
 .env.*.local
+
+.vercel
+.env*
+.tmp-bunny-actions
+.tmp-bunny-actions/
+.tmp-publish-logs
+.tmp-publish-logs/
+.codex-output
+.codex-output/
+*.png
+.tmp-*
