@@ -4,7 +4,14 @@ import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 const ElementBase = globalThis.HTMLElement || class {};
 
 export class UnpiratorPlayerElement extends ElementBase {
-  static observedAttributes = ["src", "asset-id", "playback-ref", "endpoint", "poster", "youtube-direct"];
+  static observedAttributes = [
+    "src",
+    "asset-id",
+    "playback-ref",
+    "endpoint",
+    "poster",
+    "youtube-direct",
+  ];
 
   constructor() {
     super();
