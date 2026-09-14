@@ -18,6 +18,22 @@ export function createUnpiratorServerClient({ apiUrl, apiKey }) {
   }
   return {
     createPlaybackSession,
+    async upsertPlaybackAsset(input) {
+      const response = await fetch(`${apiUrl}/v1/playback/assets/upsert`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify(input),
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(data?.error?.message || "Asset synchronization failed");
+        error.status = response.status;
+        error.code = data?.error?.code;
+        throw error;
+      }
+      return data;
+    },
     async createSourcePlaybackSession({ src, title, ...session }) {
       const url = new URL(src);
       const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
@@ -37,7 +53,13 @@ export function createUnpiratorServerClient({ apiUrl, apiKey }) {
   };
 }
 
-export function createUnpiratorPlaybackHandler({ apiUrl, apiKey, siteId, resolveViewer }) {
+export function createUnpiratorPlaybackHandler({
+  apiUrl,
+  apiKey,
+  siteId,
+  resolveViewer,
+  authorizePlayback,
+}) {
   if (!siteId) throw new Error("siteId is required");
   const client = createUnpiratorServerClient({ apiUrl, apiKey });
   return async function POST(request) {
@@ -55,6 +77,15 @@ export function createUnpiratorPlaybackHandler({ apiUrl, apiKey, siteId, resolve
       const identity = viewer?.id
         ? { id: String(viewer.id), label: viewer.label ? String(viewer.label) : undefined }
         : { id: `guest:${deviceId.slice(0, 174)}`, label: "Guest viewer" };
+      if (authorizePlayback) {
+        const allowed = await authorizePlayback({ request, body, viewer: identity });
+        if (!allowed) {
+          const error = new Error("Viewer is not allowed to access this content");
+          error.status = 403;
+          error.code = "CONTENT_ACCESS_DENIED";
+          throw error;
+        }
+      }
       const input = {
         siteId,
         externalUserId: identity.id,
@@ -62,8 +93,9 @@ export function createUnpiratorPlaybackHandler({ apiUrl, apiKey, siteId, resolve
         deviceId,
         client: body.client || {},
       };
-      const session = body.assetId
-        ? await client.createPlaybackSession({ ...input, assetId: String(body.assetId) })
+      const resolvedAssetId = body.playbackRef || body.assetId;
+      const session = resolvedAssetId
+        ? await client.createPlaybackSession({ ...input, assetId: String(resolvedAssetId) })
         : await client.createSourcePlaybackSession({
             ...input,
             src: body.src || body.youtubeUrl,

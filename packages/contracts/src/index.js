@@ -57,6 +57,18 @@ export const assetCreateSchema = z
     securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
   })
   .strict();
+export const assetSyncSchema = z
+  .object({
+    siteId: idSchema,
+    externalContentId: z.string().trim().min(1).max(180),
+    title: z.string().trim().min(1).max(240),
+    provider: z.enum(["r2", "s3", "bunny", "direct", "hls", "youtube_custom"]),
+    sourceUrl: z.string().url().max(4096),
+    allowedHosts: z.array(domainSchema).max(20).default([]),
+    providerConfig: z.record(z.string(), z.unknown()).default({}),
+    securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
+  })
+  .strict();
 const clientMetadataSchema = z
   .string()
   .max(2048)

@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { playbackSessionSchema, parseOrThrow } from "@unpirator/contracts";
-import { eq, sql } from "drizzle-orm";
-import { sha256 } from "@unpirator/crypto";
+import { assetSyncSchema, playbackSessionSchema, parseOrThrow } from "@unpirator/contracts";
+import { and, eq, sql } from "drizzle-orm";
+import { encryptJson, sha256 } from "@unpirator/crypto";
 import { AppError } from "../errors.js";
-import { playbackSessions } from "@unpirator/db/schema";
+import { assets, playbackSessions, sites } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 
 export function dashboardTestSessionInput(req) {
@@ -30,12 +30,62 @@ export function playbackRouter({
   apiKeyAuth,
   db,
   cache,
+  config,
   dashboardAuth,
   csrfGuard,
   requireTenantDeveloper,
   requireTenantAdmin,
 }) {
   const router = Router();
+  router.post("/assets/upsert", apiKeyAuth, async (req, res, next) => {
+    try {
+      const input = parseOrThrow(assetSyncSchema, req.body);
+      const [site] = await db
+        .select({ id: sites.id })
+        .from(sites)
+        .where(and(eq(sites.id, input.siteId), eq(sites.tenantId, req.apiAuth.tenantId)))
+        .limit(1);
+      if (!site) throw new AppError("SITE_NOT_FOUND", "Site not found", 404);
+
+      const encryptedProviderConfig = Object.keys(input.providerConfig).length
+        ? encryptJson(input.providerConfig, config.APP_ENCRYPTION_KEY_BASE64)
+        : null;
+      const [asset] = await db
+        .insert(assets)
+        .values({
+          tenantId: req.apiAuth.tenantId,
+          siteId: input.siteId,
+          externalContentId: input.externalContentId,
+          title: input.title,
+          provider: input.provider,
+          providerReference: input.sourceUrl,
+          allowedHosts: input.allowedHosts,
+          encryptedProviderConfig,
+          securityPolicy: input.securityPolicy,
+          status: "active",
+        })
+        .onConflictDoUpdate({
+          target: [assets.tenantId, assets.siteId, assets.externalContentId],
+          set: {
+            title: input.title,
+            provider: input.provider,
+            providerReference: input.sourceUrl,
+            allowedHosts: input.allowedHosts,
+            encryptedProviderConfig,
+            securityPolicy: input.securityPolicy,
+            status: "active",
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: assets.id, externalContentId: assets.externalContentId });
+      res.status(200).set("cache-control", "no-store").json({
+        playbackRef: asset.id,
+        externalContentId: asset.externalContentId,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
   router.post(
     "/test-session",
     dashboardAuth,

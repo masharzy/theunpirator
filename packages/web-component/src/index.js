@@ -4,7 +4,7 @@ import { createPlaybackBootstrap } from "@unpirator/sdk-js";
 const ElementBase = globalThis.HTMLElement || class {};
 
 export class UnpiratorPlayerElement extends ElementBase {
-  static observedAttributes = ["src", "asset-id", "endpoint", "poster", "youtube-direct"];
+  static observedAttributes = ["src", "asset-id", "playback-ref", "endpoint", "poster", "youtube-direct"];
 
   constructor() {
     super();
@@ -79,8 +79,9 @@ export class UnpiratorPlayerElement extends ElementBase {
     this.player = null;
     const src = this.getAttribute("src") || undefined;
     const assetId = this.getAttribute("asset-id") || undefined;
-    if (Boolean(src) === Boolean(assetId)) {
-      this.showError("Set either src or asset-id.");
+    const playbackRef = this.getAttribute("playback-ref") || undefined;
+    if ([src, assetId, playbackRef].filter(Boolean).length !== 1) {
+      this.showError("Set exactly one of src, asset-id, or playback-ref.");
       return;
     }
     this.container.innerHTML = '<div part="status">Preparing protected playback...</div>';
@@ -102,6 +103,7 @@ export class UnpiratorPlayerElement extends ElementBase {
           endpoint: this.getAttribute("endpoint") || "/api/unpirator/playback",
           src,
           assetId,
+          playbackRef,
           title: this.getAttribute("title") || undefined,
           currentUser: this.currentUser,
           headers: this.headers,

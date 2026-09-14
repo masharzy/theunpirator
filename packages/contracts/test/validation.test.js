@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { siteCreateSchema, playbackSessionSchema, registerSchema } from "../src/index.js";
+import {
+  assetSyncSchema,
+  siteCreateSchema,
+  playbackSessionSchema,
+  registerSchema,
+} from "../src/index.js";
 describe("public input validation", () => {
   it("rejects URL-shaped site domains", () => {
     expect(
@@ -60,6 +65,20 @@ describe("public input validation", () => {
     });
 
     expect(result.client).toEqual({ browser: "easy-education-web" });
+  });
+  it("accepts server-side asset synchronization and rejects injected fields", () => {
+    const input = {
+      siteId: "site",
+      externalContentId: "lesson-42",
+      title: "Lesson 42",
+      provider: "hls",
+      sourceUrl: "https://media.example.com/master.m3u8",
+      allowedHosts: ["media.example.com"],
+      providerConfig: { headers: { authorization: "Bearer private" } },
+      securityPolicy: "strict",
+    };
+    expect(assetSyncSchema.safeParse(input).success).toBe(true);
+    expect(assetSyncSchema.safeParse({ ...input, tenantId: "forged" }).success).toBe(false);
   });
   it("normalizes email addresses and rejects weak passwords", () => {
     expect(

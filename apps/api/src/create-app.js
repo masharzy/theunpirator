@@ -104,6 +104,7 @@ export function createApp(overrides = {}) {
       apiKeyAuth: apiKeyAuth(db, "playback:create"),
       db,
       cache,
+      config,
       dashboardAuth: auth,
       csrfGuard,
       requireTenantDeveloper: tenantDeveloper,

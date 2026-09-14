@@ -264,6 +264,7 @@ export const assets = pgTable(
     siteId: uuid("site_id")
       .references(() => sites.id, { onDelete: "cascade" })
       .notNull(),
+    externalContentId: text("external_content_id"),
     title: text("title").notNull(),
     provider: text("provider").notNull(),
     providerReference: text("provider_reference").notNull(),
@@ -273,7 +274,11 @@ export const assets = pgTable(
     status: text("status").default("active").notNull(),
     ...timestamps,
   },
-  (t) => [index("assets_tenant_idx").on(t.tenantId), index("assets_site_idx").on(t.siteId)],
+  (t) => [
+    index("assets_tenant_idx").on(t.tenantId),
+    index("assets_site_idx").on(t.siteId),
+    uniqueIndex("assets_external_content_uq").on(t.tenantId, t.siteId, t.externalContentId),
+  ],
 );
 
 export const endUsers = pgTable(
