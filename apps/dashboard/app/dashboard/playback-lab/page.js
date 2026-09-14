@@ -337,13 +337,13 @@ export default function PlaybackLabPage() {
                       value={securityPolicy}
                       onChange={(e) => setSecurityPolicy(e.target.value)}
                     >
-                      <option value="strict">Strict — HLS only</option>
-                      <option value="maximum">Maximum — HLS only</option>
-                      <option value="standard">Standard — MP4 or HLS</option>
+                      <option value="standard">Standard</option>
+                      <option value="strict">Strict</option>
+                      <option value="maximum">Maximum</option>
                     </select>
                     <span className="mt-2 block text-[11px] leading-4 text-[#7b8674]">
-                      Use Standard for progressive MP4. Use Strict or Maximum for HLS, Bunny Stream,
-                      and S3/R2 objects ending in .m3u8.
+                      Your plan sets the security ceiling. Every supported source still plays;
+                      progressive MP4 currently falls back to Standard delivery.
                     </span>
                   </label>
                 )}

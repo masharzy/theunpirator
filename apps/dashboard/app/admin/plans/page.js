@@ -18,10 +18,9 @@ const numericEntitlements = [
   ["monthly_gateway_requests", "Monthly gateway requests"],
   ["monthly_egress_bytes", "Monthly egress bytes"],
   ["monthly_playback_minutes", "Monthly playback minutes"],
-  ["monthly_gateway_requests", "Monthly gateway requests"],
-  ["monthly_egress_bytes", "Monthly egress bytes"],
-  ["monthly_playback_minutes", "Monthly playback minutes"],
   ["monthly_playback_sessions", "Monthly playback sessions"],
+  ["security_event_retention_days", "Security event retention (days)"],
+  ["audit_log_retention_days", "Audit log retention (days)"],
 ];
 
 const booleanEntitlements = [
@@ -53,6 +52,7 @@ const empty = {
     max_devices_per_user: 2,
     max_concurrent_streams: 1,
     session_policy: "block_new",
+    max_security_policy: "standard",
   },
 };
 
@@ -279,6 +279,18 @@ export default function AdminPlansPage() {
                   </label>
                 ))}
               </div>
+              <label className="mt-4 block text-xs font-medium text-[#5f6b58]">
+                Maximum security policy
+                <select
+                  className="mt-1.5 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
+                  value={form.entitlements?.max_security_policy || "standard"}
+                  onChange={(event) => setEntitlement("max_security_policy", event.target.value)}
+                >
+                  <option value="standard">Standard</option>
+                  <option value="strict">Strict</option>
+                  <option value="maximum">Maximum</option>
+                </select>
+              </label>
               <label className="mt-4 block text-xs font-medium text-[#5f6b58]">
                 Session limit action
                 <select
