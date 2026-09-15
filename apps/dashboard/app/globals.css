@@ -3721,3 +3721,708 @@ html {
     background-size: 24px 24px;
   }
 }
+
+/* ==========================================================================
+   DOCS FINAL REPAIR PASS
+   - restores missing component styles used by docs-client.jsx
+   - improves docs typography/readability
+   - keeps the docs page + animation canvas white
+   - restores olive production components inside the animation
+   ========================================================================== */
+
+/* ---------- Page / general docs readability ---------- */
+
+.docs-shell {
+  background: #ffffff;
+  color: #222a1e;
+}
+
+.docs-content {
+  max-width: 960px;
+}
+
+.docs-section h2 {
+  font-size: clamp(34px, 4vw, 48px);
+  line-height: 1.08;
+}
+
+.docs-lead,
+.docs-section > p {
+  max-width: 800px;
+  color: #596452;
+  font-size: 16px;
+  line-height: 1.82;
+}
+
+.docs-subtitle {
+  margin: 36px 0 -4px;
+  color: #26311f;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.35px;
+}
+
+.docs-side-label,
+.docs-kicker {
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 1.45px;
+}
+
+.docs-sidebar nav a {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.docs-sidebar nav span {
+  font-size: 10px;
+}
+
+.docs-side-help strong {
+  font-size: 13px;
+}
+
+.docs-side-help p,
+.docs-side-help a {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.docs-callout strong {
+  font-size: 14px;
+}
+
+.docs-callout p,
+.docs-warning p {
+  font-size: 13px;
+  line-height: 1.72;
+}
+
+.docs-note {
+  font-size: 13px;
+  line-height: 1.72;
+}
+
+.docs-numbered li {
+  font-size: 14px;
+  line-height: 1.68;
+}
+
+.docs-numbered li::before {
+  font-size: 10px;
+}
+
+.docs-package-grid article > div {
+  font-size: 10px;
+}
+
+.docs-package-grid article > code {
+  font-size: 12px;
+}
+
+.docs-package-grid h3 {
+  font-size: 19px;
+}
+
+.docs-package-grid p {
+  font-size: 13px;
+  line-height: 1.68;
+}
+
+.docs-checklist small {
+  font-size: 10px;
+}
+
+.docs-checklist h3 {
+  font-size: 15px;
+}
+
+.docs-checklist p {
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.docs-code-head {
+  font-size: 10px;
+}
+
+.docs-code pre {
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.docs-attribute-grid code {
+  font-size: 12px;
+}
+
+.docs-attribute-grid span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.docs-security-grid div {
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.docs-errors code {
+  font-size: 11px;
+}
+
+.docs-errors p {
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.docs-footer {
+  font-size: 12px;
+}
+
+/* ---------- Restore missing docs-client.jsx styles ---------- */
+
+.hero-stack-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.hero-stack-label {
+  margin-right: 2px;
+  color: #697561;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stack-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 6px;
+}
+
+.stack-picker-dense {
+  margin: 0;
+  gap: 6px;
+}
+
+.stack-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid #d6ddcf;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #53604b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.stack-picker-dense .stack-pill {
+  min-height: 30px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.stack-pill:hover {
+  border-color: #aebe91;
+  background: #f7faF2;
+  color: #334326;
+  transform: translateY(-1px);
+}
+
+.stack-pill.is-active {
+  border-color: #758f48;
+  background: #eaf4ce;
+  color: #3f5727;
+  box-shadow: inset 0 0 0 1px rgba(117, 143, 72, 0.08);
+}
+
+.docs-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 6px 9px;
+  border: 1px solid #4b5845;
+  border-radius: 6px;
+  background: #2c3529;
+  color: #d9e5cf;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.docs-copy-btn:hover,
+.docs-copy-btn.is-copied {
+  border-color: #91ad60;
+  background: #35432f;
+  color: #dff3b6;
+}
+
+/* ---------- New rewrite components: larger text ---------- */
+
+.docs-important-flow article > span {
+  font-size: 11px;
+}
+
+.docs-important-flow strong {
+  font-size: 15px;
+}
+
+.docs-important-flow p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.docs-responsibility > span {
+  font-size: 10px;
+}
+
+.docs-responsibility strong {
+  font-size: 15px;
+}
+
+.docs-responsibility p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.docs-step-banner > span {
+  font-size: 11px;
+}
+
+.docs-step-banner strong {
+  font-size: 20px;
+  line-height: 1.42;
+}
+
+.docs-step-banner p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.docs-field-map small {
+  font-size: 10px;
+}
+
+.docs-field-map code {
+  font-size: 12px;
+}
+
+.docs-field-map span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.docs-origin-table code {
+  font-size: 11px;
+}
+
+.docs-origin-table strong {
+  font-size: 14px;
+}
+
+.docs-origin-table p {
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.docs-ref-line {
+  font-size: 12px;
+}
+
+/* ---------- Animation: white canvas, olive components ---------- */
+
+.journey-demo,
+.journey-demo-v2 {
+  border: 1px solid #dfe4da;
+  background: #ffffff;
+  color: #222a1e;
+  box-shadow: 0 20px 60px rgba(35, 46, 29, 0.07);
+}
+
+.journey-demo-v2 .journey-toolbar,
+.journey-progress,
+.journey-stage,
+.journey-stage-v2,
+.journey-caption,
+.journey-caption-v2,
+.journey-legend {
+  background: #ffffff;
+  color: #222a1e;
+}
+
+.journey-demo-v2 .journey-toolbar {
+  border-bottom: 1px solid #e7ebe3;
+}
+
+.journey-demo-v2 .journey-toolbar h3 {
+  color: #26311f;
+  font-size: 27px;
+}
+
+.journey-demo-v2 .journey-toolbar p {
+  color: #66715f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.journey-eyebrow {
+  color: #5d7934;
+  font-size: 10px;
+}
+
+.journey-progress {
+  border-bottom-color: #e7ebe3;
+}
+
+.journey-progress-track {
+  background: #edf1e9;
+}
+
+.journey-progress-track i {
+  background: #7f9e4c;
+}
+
+.journey-progress-steps span {
+  color: #98a18f;
+  font-size: 9px;
+}
+
+.journey-progress-steps span.is-current {
+  color: #4f682c;
+}
+
+.journey-progress-steps span.is-complete {
+  color: #718064;
+}
+
+.journey-stage-v2 {
+  background:
+    linear-gradient(rgba(82, 105, 62, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(82, 105, 62, 0.045) 1px, transparent 1px),
+    #ffffff;
+  background-size: 28px 28px;
+}
+
+/* Main production components return to the original olive language. */
+.journey-browser,
+.journey-browser-v2,
+.journey-backend,
+.journey-backend-v2,
+.journey-unpirator,
+.journey-unpirator-v2 {
+  border: 1px solid #3f4a39;
+  background: #293126;
+  color: #edf3e8;
+  box-shadow: 0 18px 42px rgba(35, 45, 30, 0.17);
+}
+
+.journey-browser-top,
+.journey-panel-head {
+  border-bottom: 1px solid #414c3b;
+  background: #20271e;
+  color: #b7c0af;
+}
+
+.journey-browser-top > div {
+  background: #313a2d;
+  color: #b5beb0;
+}
+
+.journey-browser-top span i {
+  background: #64705e;
+}
+
+.journey-browser-top span i:first-child {
+  background: #d4f279;
+}
+
+.journey-browser-page {
+  background: #293126;
+}
+
+.journey-course-head small {
+  color: #9ba695;
+  font-size: 9px;
+}
+
+.journey-course-head strong {
+  color: #edf3e8;
+  font-size: 13px;
+}
+
+.journey-user-chip {
+  border-color: #495541;
+  background: #242c21;
+  color: #aab4a3;
+  font-size: 9px;
+}
+
+.journey-avatar {
+  background: #384331;
+  color: #d4f279;
+}
+
+.journey-video,
+.journey-video.is-player {
+  border: 1px solid #414c3b;
+  background: #232b20;
+  color: #c9d3c2;
+}
+
+.journey-player-bar {
+  border-bottom: 1px solid #404b3a;
+  color: #dce6d4;
+  font-size: 9px;
+}
+
+.journey-player-bar > span {
+  color: #9ba695;
+  font-size: 9px;
+}
+
+.journey-player-center {
+  color: #dce9d2;
+}
+
+.journey-player-center span {
+  font-size: 11px;
+}
+
+.journey-player-progress {
+  background: #3a4436;
+}
+
+.journey-player-progress i,
+.journey-player-progress i.is-playing {
+  background: #d4f279;
+}
+
+.journey-browser-data {
+  border-top: 1px solid #404b3a;
+}
+
+.journey-browser-data span {
+  color: #aeb8a7;
+  font-size: 9px;
+}
+
+.journey-browser-data .is-on {
+  color: #d5e9ae;
+}
+
+.journey-browser-data .is-secret {
+  border: 1px solid #665238;
+  background: #3a3025;
+  color: #e7cda9;
+}
+
+.journey-backend-row,
+.journey-unpirator-card,
+.journey-request-card,
+.journey-gateway-card {
+  border-color: #414c3b;
+  background: #293126;
+  color: #e9f0e3;
+}
+
+.journey-backend-row + .journey-backend-row,
+.journey-unpirator-card + .journey-unpirator-card {
+  border-top-color: #3c4737;
+}
+
+.journey-backend-row strong,
+.journey-unpirator-card strong,
+.journey-gateway-card strong,
+.journey-request-card strong {
+  color: #edf3e8;
+  font-size: 11px;
+}
+
+.journey-backend-row code,
+.journey-unpirator-card code,
+.journey-gateway-card code {
+  color: #a5afa0;
+  font-size: 9px;
+}
+
+.journey-backend-row.is-active,
+.journey-unpirator-card.is-active,
+.journey-request-card.is-active,
+.journey-gateway-card.is-active {
+  border-color: #72894e;
+  background: #303a2b;
+  box-shadow: inset 0 0 0 1px rgba(212, 242, 121, 0.055);
+}
+
+.journey-backend-row.private,
+.journey-backend-row.private.is-active {
+  border-color: #715d3f;
+  background: #352f24;
+}
+
+.journey-backend-v2 .journey-backend-row b {
+  background: #384331;
+  color: #bac5b0;
+  font-size: 8px;
+}
+
+.journey-backend-v2 .journey-backend-row.private b {
+  background: #4a3b27;
+  color: #efca96;
+}
+
+.journey-request-card pre {
+  border: 1px solid #3e4938;
+  background: #20271e;
+  color: #b7c1af;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.journey-request-card small,
+.journey-unpirator-card small,
+.journey-gateway-card small {
+  color: #d4f279;
+  font-size: 8px;
+}
+
+.journey-gateway-bars i {
+  background: #d4f279;
+}
+
+.journey-caption,
+.journey-caption-v2,
+.journey-legend {
+  border-top: 1px solid #e7ebe3;
+}
+
+.journey-caption-v2 > span {
+  background: #edf4df;
+  color: #526c2d;
+  font-size: 10px;
+}
+
+.journey-caption-v2 strong {
+  color: #26311f;
+  font-size: 14px;
+}
+
+.journey-caption-v2 p {
+  color: #66715f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.journey-caption-status small {
+  color: #7b8574;
+  font-size: 9px;
+}
+
+.journey-caption-status strong {
+  color: #597631;
+  font-size: 9px;
+}
+
+.journey-legend {
+  color: #66715f;
+  font-size: 11px;
+}
+
+.journey-system-label span {
+  color: #596a4e;
+  font-size: 9px;
+}
+
+.journey-system-label small {
+  color: #7d8877;
+  font-size: 9px;
+}
+
+.line-browser-server,
+.line-server-unpirator,
+.line-unpirator-browser {
+  border-color: rgba(90, 114, 68, 0.3);
+}
+
+.packet-page {
+  background: #eef1ff;
+  color: #465075;
+  border: 1px solid #dbe0f4;
+}
+
+.packet-source {
+  background: #463725;
+  color: #f0d0a2;
+  border: 1px solid #6f583a;
+}
+
+.packet-ref,
+.packet-session,
+.packet-grant {
+  background: #35432d;
+  color: #def4af;
+  border: 1px solid #657f45;
+}
+
+.journey-packet {
+  font-size: 9px;
+  box-shadow: 0 8px 22px rgba(35, 46, 29, 0.16);
+}
+
+.journey-demo .primary-cta {
+  background: #263020;
+  color: #ffffff;
+}
+
+.journey-demo .primary-cta:hover {
+  background: #39472e;
+}
+
+.journey-demo .text-cta {
+  color: #4d5d44;
+}
+
+/* ---------- Mobile readability ---------- */
+
+@media (max-width: 760px) {
+  .docs-lead,
+  .docs-section > p {
+    font-size: 15px;
+  }
+
+  .docs-subtitle {
+    font-size: 19px;
+  }
+
+  .docs-important-flow p,
+  .docs-responsibility p,
+  .docs-step-banner p,
+  .docs-origin-table p {
+    font-size: 12.5px;
+  }
+
+  .docs-field-map {
+    grid-template-columns: 1fr;
+  }
+
+  .stack-pill {
+    font-size: 11px;
+  }
+}
