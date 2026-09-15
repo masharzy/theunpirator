@@ -4426,3 +4426,302 @@ html {
     font-size: 11px;
   }
 }
+
+/* ==========================================================================
+   DOCS READABILITY PASS
+   Font-size floor for production docs and journey visualization.
+   ========================================================================== */
+
+/* Global docs body readability */
+.docs-shell,
+.docs-shell button,
+.docs-shell input,
+.docs-shell select,
+.docs-shell textarea {
+  font-size: 16px;
+}
+
+.docs-hero > div:first-child > p,
+.docs-lead,
+.docs-section > p {
+  font-size: 16px;
+  line-height: 1.82;
+}
+
+.docs-subtitle {
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+/* Sidebar and navigation */
+.docs-side-label,
+.docs-kicker {
+  font-size: 12px;
+}
+
+.docs-sidebar nav a {
+  font-size: 14px;
+}
+
+.docs-sidebar nav span {
+  font-size: 11px;
+}
+
+.docs-side-help strong {
+  font-size: 14px;
+}
+
+.docs-side-help p,
+.docs-side-help a {
+  font-size: 13px;
+}
+
+/* Generic cards / helper copy */
+.docs-callout strong,
+.docs-warning strong {
+  font-size: 15px;
+}
+
+.docs-callout p,
+.docs-warning p,
+.docs-note {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.docs-numbered li {
+  font-size: 14px;
+}
+
+.docs-numbered li::before {
+  font-size: 11px;
+}
+
+.docs-package-grid article > div,
+.docs-checklist small,
+.docs-attribute-grid span {
+  font-size: 11px;
+}
+
+.docs-package-grid article > code,
+.docs-attribute-grid code,
+.docs-errors code {
+  font-size: 12px;
+}
+
+.docs-package-grid h3,
+.docs-checklist h3 {
+  font-size: 16px;
+}
+
+.docs-package-grid p,
+.docs-checklist p,
+.docs-errors p,
+.docs-security-grid div {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.docs-code-head {
+  font-size: 11px;
+}
+
+.docs-code pre {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+/* Stack controls */
+.hero-stack-label {
+  font-size: 13px;
+}
+
+.stack-pill {
+  font-size: 13px;
+}
+
+.stack-picker-dense .stack-pill {
+  font-size: 12px;
+}
+
+.docs-copy-btn {
+  font-size: 11px;
+}
+
+/* Rewrite-specific cards */
+.docs-important-flow article > span,
+.docs-responsibility > span,
+.docs-step-banner > span,
+.docs-field-map small {
+  font-size: 12px;
+}
+
+.docs-important-flow strong,
+.docs-responsibility strong {
+  font-size: 16px;
+}
+
+.docs-important-flow p,
+.docs-responsibility p,
+.docs-origin-table p,
+.docs-field-map span {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.docs-step-banner strong {
+  font-size: 21px;
+}
+
+.docs-step-banner p {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.docs-field-map code,
+.docs-origin-table code,
+.docs-ref-line {
+  font-size: 13px;
+}
+
+.docs-origin-table strong {
+  font-size: 15px;
+}
+
+/* Journey animation minimum readable sizes */
+.journey-eyebrow {
+  font-size: 12px;
+}
+
+.journey-demo-v2 .journey-toolbar h3 {
+  font-size: 28px;
+}
+
+.journey-demo-v2 .journey-toolbar p {
+  font-size: 14px;
+}
+
+.journey-progress-steps span {
+  font-size: 11px;
+}
+
+.journey-system-label span,
+.journey-system-label small {
+  font-size: 11px;
+}
+
+.journey-course-head small {
+  font-size: 11px;
+}
+
+.journey-course-head strong {
+  font-size: 14px;
+}
+
+.journey-user-chip {
+  font-size: 11px;
+}
+
+.journey-player-bar,
+.journey-player-bar > span,
+.journey-browser-data span,
+.journey-backend-v2 .journey-backend-row b {
+  font-size: 11px;
+}
+
+.journey-player-center span {
+  font-size: 13px;
+}
+
+.journey-backend-row strong,
+.journey-unpirator-card strong,
+.journey-gateway-card strong,
+.journey-request-card strong {
+  font-size: 13px;
+}
+
+.journey-backend-row code,
+.journey-unpirator-card code,
+.journey-gateway-card code,
+.journey-request-card pre {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.journey-request-card small,
+.journey-unpirator-card small,
+.journey-gateway-card small {
+  font-size: 10px;
+}
+
+.journey-caption-v2 > span,
+.journey-caption-status small,
+.journey-caption-status strong,
+.journey-packet {
+  font-size: 11px;
+}
+
+.journey-caption-v2 strong {
+  font-size: 15px;
+}
+
+.journey-caption-v2 p,
+.journey-legend {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Mobile: do not collapse back into tiny text */
+@media (max-width: 760px) {
+  .docs-hero > div:first-child > p,
+  .docs-lead,
+  .docs-section > p {
+    font-size: 15px;
+  }
+
+  .docs-subtitle {
+    font-size: 20px;
+  }
+
+  .docs-sidebar nav a,
+  .docs-callout p,
+  .docs-warning p,
+  .docs-note,
+  .docs-package-grid p,
+  .docs-checklist p,
+  .docs-errors p,
+  .docs-security-grid div,
+  .docs-important-flow p,
+  .docs-responsibility p,
+  .docs-origin-table p,
+  .docs-field-map span {
+    font-size: 13px;
+  }
+
+  .journey-demo-v2 .journey-toolbar p,
+  .journey-caption-v2 p,
+  .journey-legend {
+    font-size: 12px;
+  }
+
+  .journey-backend-row strong,
+  .journey-unpirator-card strong,
+  .journey-gateway-card strong,
+  .journey-request-card strong,
+  .journey-player-center span {
+    font-size: 12px;
+  }
+
+  .journey-backend-row code,
+  .journey-unpirator-card code,
+  .journey-gateway-card code,
+  .journey-request-card pre,
+  .journey-player-bar,
+  .journey-player-bar > span,
+  .journey-browser-data span,
+  .journey-system-label span,
+  .journey-system-label small,
+  .journey-user-chip {
+    font-size: 10.5px;
+  }
+}
