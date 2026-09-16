@@ -829,13 +829,12 @@ export function DocsClient() {
             <BookOpen size={14} /> DEVELOPER DOCUMENTATION · TESTED 0.1.x
           </div>
           <h1>
-            Your video stays private.
-            <br /> Your player gets a reference.
+            Private video.
+            <br /> Protected playback.
           </h1>
           <p>
-            Unpirator is a protected video-delivery layer. Your server keeps the original source,
-            Unpirator turns it into a protected playback reference, and the browser player requests
-            short-lived access only after your application authorizes the viewer.
+            Keep source URLs on your server. Pass the player a playbackRef, authorize the viewer,
+            and let Unpirator handle protected delivery.
           </p>
 
           <div className="hero-stack-picker">
