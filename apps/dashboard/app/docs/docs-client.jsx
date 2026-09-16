@@ -829,12 +829,11 @@ export function DocsClient() {
             <BookOpen size={14} /> DEVELOPER DOCUMENTATION · TESTED 0.1.x
           </div>
           <h1>
-            Private video.
-            <br /> Protected playback.
+            Your videos stay yours.
+            <br /> Playback stays protected.
           </h1>
           <p>
-            Keep source URLs on your server. Pass the player a playbackRef, authorize the viewer,
-            and let Unpirator handle protected delivery.
+            Keep the source on your server. Unpirator handles protected playback.
           </p>
 
           <div className="hero-stack-picker">
