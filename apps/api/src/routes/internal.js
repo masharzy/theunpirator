@@ -17,6 +17,7 @@ import { resolveAssetSource } from "@unpirator/source-manager";
 import { unauthorized, notFound } from "../errors.js";
 import { getPlaybackPolicy } from "../services/entitlements.js";
 import { notifyPlatform } from "../services/admin-notifications.js";
+import { notifyTenant } from "../services/tenant-notifications.js";
 import { riskFor } from "@unpirator/security";
 
 export function internalRouter({
@@ -118,13 +119,22 @@ export function internalRouter({
               updatedAt: new Date(),
             },
           });
+        const providerDedupe = `provider:${asset.provider}:${new Date().toISOString().slice(0, 13)}`;
         await notifyPlatform(db, {
           type: "provider_degraded",
           title: `${asset.provider} provider degraded`,
           body: error.code || "Origin source failure",
           tenantId,
           actionUrl: "/admin/providers",
-          dedupeKey: `provider:${asset.provider}:${new Date().toISOString().slice(0, 13)}`,
+          dedupeKey: providerDedupe,
+        });
+        await notifyTenant(db, {
+          tenantId,
+          type: "provider_degraded",
+          title: "Playback source problem detected",
+          body: `${asset.provider} could not be reached for protected playback. ${error.code || "Origin source failure"}.`,
+          actionUrl: "/dashboard/security",
+          dedupeKey: providerDedupe,
         });
         throw error;
       }
@@ -267,7 +277,7 @@ export function internalRouter({
               metadata: event.metadata || {},
             })
             .returning();
-          if (["high", "critical"].includes(securityEvent.severity))
+          if (["high", "critical"].includes(securityEvent.severity)) {
             await notifyPlatform(db, {
               type: "security_incident",
               title: `${securityEvent.severity} security event`,
@@ -276,6 +286,15 @@ export function internalRouter({
               actionUrl: `/admin/workspaces/${event.tenantId}/security`,
               dedupeKey: `security:${securityEvent.id}`,
             });
+            await notifyTenant(db, {
+              tenantId: event.tenantId,
+              type: "security_incident",
+              title: `${securityEvent.severity === "critical" ? "Critical" : "High"} security alert`,
+              body: String(securityEvent.type).replaceAll("_", " "),
+              actionUrl: "/dashboard/security",
+              dedupeKey: `security:${securityEvent.id}`,
+            });
+          }
         } else
           await db.insert(usageEvents).values({
             tenantId: event.tenantId,
