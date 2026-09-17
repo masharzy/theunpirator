@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+
 test("homepage navigation, protection preview and FAQ", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -20,22 +21,25 @@ test("homepage navigation, protection preview and FAQ", async ({ page }) => {
   await expect(page).toHaveURL(/\/docs$/);
   expect(errors).toEqual([]);
 });
+
 test("mobile homepage fits viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await expect(page.getByRole("link", { name: "Get started" })).toBeVisible();
+  await page.getByRole("button", { name: "Open menu" }).click();
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Get started", exact: true })).toBeVisible();
 });
+
 test("register, open onboarding, create site and inspect DNS verification", async ({ page }) => {
   const email = `browser-${Date.now()}@example.com`;
   await page.goto("/register");
-  await page.getByPlaceholder("Organization").fill("Browser test workspace");
+  await page.getByPlaceholder("Acme Learning").fill("Browser test workspace");
   await page.getByPlaceholder("owner@example.com").fill(email);
-  await page
-    .getByPlaceholder("12+ chars, upper/lowercase and number")
-    .fill("Browser-test-password-2026");
+  await page.getByPlaceholder("12+ characters").fill("Browser-test-password-2026");
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/onboarding$/, { timeout: 20000 });
   await expect(page.getByText("Verify your email.", { exact: true })).toBeVisible();
