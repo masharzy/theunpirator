@@ -9,7 +9,6 @@ export function PublicFooter() {
       [
         ["Features", "/features"],
         ["Pricing", "/pricing"],
-        ["Integrations", "/integrations"],
         ["Security", "/security"],
       ],
     ],
