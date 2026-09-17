@@ -1,0 +1,49 @@
+name: One-shot public polish formatter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-public-polish-format.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format changed public UI files
+        run: |
+          pnpm prettier --write \
+            apps/dashboard/app/about/page.js \
+            apps/dashboard/app/contact/page.js \
+            apps/dashboard/app/features/page.js \
+            apps/dashboard/app/integrations/page.js \
+            apps/dashboard/app/login/page.js \
+            apps/dashboard/app/register/page.js \
+            apps/dashboard/app/security/page.js \
+            apps/dashboard/components/auth-shell.jsx \
+            apps/dashboard/components/public-site.jsx
+      - name: Commit and push
+        run: |
+          git config user.name "chatgpt-public-polish-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/dashboard/app apps/dashboard/components
+          if git diff --cached --quiet; then
+            echo "No formatting changes needed"
+            exit 0
+          fi
+          git commit -m "style: format public site polish"
+          git push origin HEAD:main
