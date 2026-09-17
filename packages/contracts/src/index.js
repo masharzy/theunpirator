@@ -12,7 +12,7 @@ export const emailSchema = z
   .transform((v) => v.toLowerCase());
 export const passwordSchema = z
   .string()
-  .min(12)
+  .min(8, "Password must be at least 8 characters")
   .max(256)
   .regex(/[a-z]/, "Password needs a lowercase letter")
   .regex(/[A-Z]/, "Password needs an uppercase letter")
@@ -36,7 +36,7 @@ export const registerSchema = z
   })
   .strict();
 export const loginSchema = z
-  .object({ email: emailSchema, password: z.string().min(10).max(256) })
+  .object({ email: emailSchema, password: z.string().min(8).max(256) })
   .strict();
 export const siteCreateSchema = z
   .object({
