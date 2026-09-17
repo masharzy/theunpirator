@@ -17,6 +17,7 @@ import { ProtectionPreview } from "@/components/protection-preview";
 import { PublicNav } from "@/components/public-nav";
 import { PublicPlans } from "@/components/public-plans";
 import { PublicFooter } from "@/components/public-site";
+
 const features = [
   [
     LockKeyhole,
@@ -43,6 +44,7 @@ const features = [
     "04 / VISIBILITY",
   ],
 ];
+
 const faqs = [
   [
     "Does this make videos impossible to copy?",
@@ -65,6 +67,7 @@ const faqs = [
     "Public pricing and included features come directly from the active plans configured by the platform administrator.",
   ],
 ];
+
 export default function Home() {
   return (
     <div className="marketing">
@@ -107,7 +110,11 @@ export default function Home() {
               </span>
             </div>
           </div>
-          <ProtectionPreview />
+
+          <div className="hidden md:contents">
+            <ProtectionPreview />
+          </div>
+
           <div className="hero-bottom">
             <span>YOUR LIBRARY. YOUR STACK. MORE CONTROL.</span>
             <div>
@@ -119,6 +126,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
         <section id="platform" className="section-wrap platform-section">
           <div className="section-intro">
             <div>
@@ -146,6 +154,7 @@ export default function Home() {
             ))}
           </div>
         </section>
+
         <section id="how-it-works" className="workflow-section">
           <div className="section-wrap">
             <div className="section-intro">
@@ -206,6 +215,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
         <section id="integrations" className="section-wrap developer-section">
           <div>
             <div className="eyebrow">FITS RIGHT INTO YOUR STACK</div>
@@ -253,6 +263,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
         <section id="security" className="use-cases section-wrap">
           <div className="eyebrow">BUILT FOR CONTENT WORTH PROTECTING</div>
           <div className="use-case-grid">
@@ -281,6 +292,7 @@ export default function Home() {
             ))}
           </div>
         </section>
+
         <section id="plans" className="section-wrap plans-section">
           <div className="section-intro">
             <div>
@@ -299,6 +311,7 @@ export default function Home() {
             </Link>
           </div>
         </section>
+
         <section className="section-wrap faq-section">
           <div>
             <div className="eyebrow">A FEW THINGS TO KNOW</div>
@@ -320,6 +333,7 @@ export default function Home() {
             ))}
           </div>
         </section>
+
         <section className="closing-cta section-wrap">
           <div className="eyebrow">
             <Zap size={15} /> TAKE BACK THE PLAY BUTTON
