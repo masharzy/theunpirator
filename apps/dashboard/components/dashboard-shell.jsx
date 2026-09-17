@@ -10,15 +10,15 @@ import {
   ChevronDown,
   Clapperboard,
   CreditCard,
-  Gauge,
   FileClock,
   FileSearch,
+  FlaskConical,
+  Gauge,
   Headphones,
   KeyRound,
   LogOut,
   Menu,
   MonitorSmartphone,
-  FlaskConical,
   PlugZap,
   ReceiptText,
   Settings,
@@ -93,6 +93,12 @@ const groups = [
   ],
 ];
 
+function quotaRatio(used, limit) {
+  const numericLimit = Number(limit);
+  if (!Number.isFinite(numericLimit) || numericLimit <= 0) return null;
+  return Math.max(0, Number(used || 0) / numericLimit);
+}
+
 export function DashboardShell({ children }) {
   const path = usePathname();
   const router = useRouter();
@@ -101,6 +107,7 @@ export function DashboardShell({ children }) {
   const [billing, setBilling] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [usage, setUsage] = useState(null);
 
   const activeMembership = useMemo(
     () => (auth?.memberships || []).find((m) => m.tenantId === auth?.activeTenantId),
@@ -108,14 +115,16 @@ export function DashboardShell({ children }) {
   );
 
   async function loadChrome() {
-    const [billingData, notificationData, summaryData] = await Promise.all([
+    const [billingData, notificationData, summaryData, usageData] = await Promise.all([
       api("/v1/billing").catch(() => null),
       api("/v1/billing/notifications").catch(() => ({ items: [] })),
       api("/v1/workspace/summary").catch(() => null),
+      api("/v1/usage/summary").catch(() => null),
     ]);
     setBilling(billingData);
     setNotifications(notificationData?.items || []);
     setSummary(summaryData);
+    setUsage(usageData);
   }
 
   useEffect(() => {
@@ -137,6 +146,7 @@ export function DashboardShell({ children }) {
     localStorage.removeItem("unpirator_tenant_id");
     router.replace("/login");
   }
+
   async function endImpersonation() {
     await api("/v1/admin/impersonation", { method: "DELETE" });
     await auth.refresh();
@@ -145,8 +155,23 @@ export function DashboardShell({ children }) {
 
   const unread = notifications.filter((item) => !item.readAt).length;
   const planLabel = billing?.subscription?.planName || "No active plan";
-  const sitesUsed = summary?.counts?.sites ?? 0;
-  const sitesLimit = billing?.entitlements?.max_sites;
+  const entitlements = billing?.entitlements || {};
+  const counts = summary?.counts || {};
+  const metrics = usage?.metrics || {};
+  const sitesUsed = counts.sites ?? 0;
+  const sitesLimit = entitlements.max_sites;
+  const usageRatios = [
+    quotaRatio(metrics.playback_sessions, entitlements.monthly_playback_sessions),
+    quotaRatio(metrics.gateway_requests, entitlements.monthly_gateway_requests),
+    quotaRatio(metrics.egress_bytes, entitlements.monthly_egress_bytes),
+    quotaRatio(metrics.playback_minutes, entitlements.monthly_playback_minutes),
+    quotaRatio(counts.sites, entitlements.max_sites),
+    quotaRatio(counts.assets, entitlements.max_assets),
+  ].filter((value) => value != null);
+  const usagePercent = Math.min(
+    100,
+    Math.round((usageRatios.length ? Math.max(...usageRatios) : 0) * 100),
+  );
 
   const nav = (
     <>
@@ -168,9 +193,9 @@ export function DashboardShell({ children }) {
             value={auth?.activeTenantId || ""}
             onChange={(event) => switchWorkspace(event.target.value)}
           >
-            {(auth?.memberships || []).map((m) => (
-              <option key={m.tenantId} value={m.tenantId}>
-                {m.tenantName}
+            {(auth?.memberships || []).map((membership) => (
+              <option key={membership.tenantId} value={membership.tenantId}>
+                {membership.tenantName}
               </option>
             ))}
           </select>
@@ -279,7 +304,24 @@ export function DashboardShell({ children }) {
             <span className="hidden rounded-full bg-[#edf5d8] px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#536b31] sm:inline-flex">
               {planLabel}
             </span>
-            <Link href="/docs" className="hidden text-xs font-semibold text-[#5f6b58] sm:inline-flex">
+            <Link
+              href="/dashboard/usage"
+              className="w-20 rounded-lg px-1 py-1.5 transition hover:bg-white/70 md:w-24"
+              aria-label={`Plan usage ${usagePercent} percent. Open Usage & Analytics.`}
+              title="Open Usage & Analytics"
+            >
+              <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
+                <div
+                  className="h-full rounded-full bg-[#7d9853]"
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[9px] leading-none text-[#7d8776]">{usagePercent}% usage</p>
+            </Link>
+            <Link
+              href="/docs"
+              className="hidden text-xs font-semibold text-[#5f6b58] sm:inline-flex"
+            >
               Docs
             </Link>
             <Link
