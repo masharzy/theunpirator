@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/one-shot-prettier-fix.yml'
+      - ".github/workflows/one-shot-prettier-fix.yml"
 
 permissions:
   contents: write
@@ -28,8 +28,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Format repository
-        run: pnpm exec prettier --write .
+      - name: Format failed files
+        run: |
+          pnpm exec prettier --write \
+            apps/dashboard/app/docs/docs-client.jsx \
+            apps/dashboard/app/docs/docs-rewrite.css \
+            apps/dashboard/app/docs/page.js \
+            apps/dashboard/app/globals.css \
+            integrations/nextjs/index.js \
+            integrations/nextjs/README.md
 
       - run: pnpm format:check
 
@@ -38,6 +45,12 @@ jobs:
         run: |
           git config user.name "chatgpt-docs-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add \
+            apps/dashboard/app/docs/docs-client.jsx \
+            apps/dashboard/app/docs/docs-rewrite.css \
+            apps/dashboard/app/docs/page.js \
+            apps/dashboard/app/globals.css \
+            integrations/nextjs/index.js \
+            integrations/nextjs/README.md
           git commit -m "style: format docs and integration files"
           git push origin HEAD:main
