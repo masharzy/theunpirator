@@ -4,7 +4,6 @@ import {
   Check,
   Fingerprint,
   Gauge,
-  Layers3,
   LockKeyhole,
   MonitorSmartphone,
   Radio,
