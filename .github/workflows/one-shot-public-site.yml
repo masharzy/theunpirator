@@ -1,0 +1,473 @@
+name: One-shot public site builder
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-public-site.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-public-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build public site and dynamic pricing
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def write(path, text):
+              p = Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(text)
+
+          write('apps/api/src/routes/public.js', '''import { Router } from "express";
+          import { and, eq, isNull } from "drizzle-orm";
+          import { billingPlans } from "@unpirator/db/commerce-schema";
+
+          export function publicRouter({ db }) {
+            const router = Router();
+
+            router.get("/plans", async (_req, res, next) => {
+              try {
+                const items = await db
+                  .select({
+                    id: billingPlans.id,
+                    name: billingPlans.name,
+                    description: billingPlans.description,
+                    priceMinor: billingPlans.priceMinor,
+                    currency: billingPlans.currency,
+                    billingInterval: billingPlans.billingInterval,
+                    durationDays: billingPlans.durationDays,
+                    trialDays: billingPlans.trialDays,
+                    badge: billingPlans.badge,
+                    entitlements: billingPlans.entitlements,
+                  })
+                  .from(billingPlans)
+                  .where(
+                    and(
+                      eq(billingPlans.status, "active"),
+                      eq(billingPlans.isPublic, true),
+                      isNull(billingPlans.archivedAt),
+                    ),
+                  )
+                  .orderBy(billingPlans.sortOrder);
+                res.set("cache-control", "public, max-age=60, stale-while-revalidate=300");
+                res.json({ items });
+              } catch (error) {
+                next(error);
+              }
+            });
+
+            return router;
+          }
+          ''')
+
+          p = Path('apps/api/src/create-app.js')
+          s = p.read_text()
+          marker = 'import { webhooksRouter } from "./routes/webhooks.js";\n'
+          if 'publicRouter' not in s:
+              s = s.replace(marker, marker + 'import { publicRouter } from "./routes/public.js";\n')
+          mount = '  app.use("/health", healthRouter({ dbClient, cache }));\n'
+          if '"/v1/public"' not in s:
+              s = s.replace(mount, mount + '  app.use("/v1/public", publicRouter({ db }));\n')
+          p.write_text(s)
+
+          write('apps/dashboard/components/public-site.jsx', '''import Link from "next/link";
+          import { ArrowUpRight, Check, ShieldCheck } from "lucide-react";
+          import { PublicNav } from "@/components/public-nav";
+
+          export function PublicFooter() {
+            const groups = [
+              ["Product", [["Features", "/features"], ["How it works", "/how-it-works"], ["Integrations", "/integrations"], ["Security", "/security"], ["Use cases", "/use-cases"]]],
+              ["Company", [["About", "/about"], ["Changelog", "/changelog"], ["Status", "/status"], ["Contact", "/contact"]]],
+              ["Resources", [["Pricing", "/pricing"], ["Documentation", "/docs"], ["Sign in", "/login"], ["Create account", "/register"]]],
+              ["Legal", [["Terms", "/terms"], ["Privacy", "/privacy"], ["Billing & refunds", "/refund-policy"], ["Acceptable use", "/acceptable-use"]]],
+            ];
+            return (
+              <footer className="border-t border-[#dde4d5] bg-[#11180f] text-white">
+                <div className="mx-auto grid max-w-7xl gap-10 px-5 py-14 md:grid-cols-[1.2fr_2fr] md:px-8">
+                  <div>
+                    <Link href="/" className="inline-flex items-center gap-2 text-xl font-semibold">
+                      <span className="grid size-9 place-items-center rounded-xl bg-[#dcebbd] text-[#223018]"><ShieldCheck size={19} /></span>
+                      unpirator<span className="text-[#9ab46a]">.</span>
+                    </Link>
+                    <p className="mt-4 max-w-sm text-sm leading-6 text-[#b7c0b1]">Protected video delivery for products that need access control without exposing private media sources to the browser.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+                    {groups.map(([title, links]) => (
+                      <div key={title}>
+                        <h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#8ea17f]">{title}</h3>
+                        <div className="mt-4 space-y-3">
+                          {links.map(([label, href]) => <Link key={href} href={href} className="block text-sm text-[#dce3d8] hover:text-white">{label}</Link>)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 py-5 text-xs text-[#8f9a89] sm:flex-row sm:items-center sm:justify-between md:px-8">
+                  <span>© {new Date().getFullYear()} The Unpirator</span>
+                  <span>Good content deserves good boundaries.</span>
+                </div>
+              </footer>
+            );
+          }
+
+          export function PublicPage({ eyebrow, title, intro, sections = [], children, cta = true }) {
+            return (
+              <div className="min-h-screen bg-[#f7f8f3] text-[#20291d]">
+                <PublicNav />
+                <main>
+                  <section className="border-b border-[#dde4d5] bg-[radial-gradient(circle_at_top_right,#e7efd8,transparent_36%),#f7f8f3]">
+                    <div className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
+                      <p className="text-xs font-black uppercase tracking-[.2em] text-[#718054]">{eyebrow}</p>
+                      <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-[-.045em] text-[#172014] sm:text-6xl lg:text-7xl">{title}</h1>
+                      <p className="mt-6 max-w-2xl text-base leading-7 text-[#65705f] sm:text-lg">{intro}</p>
+                    </div>
+                  </section>
+                  {children}
+                  {sections.length > 0 && (
+                    <section className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24">
+                      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                        {sections.map((section) => (
+                          <article key={section.title} className="rounded-[28px] border border-[#dce3d5] bg-white p-7 shadow-[0_14px_50px_rgba(36,49,29,.05)]">
+                            <span className="grid size-9 place-items-center rounded-xl bg-[#edf4df] text-[#607742]"><Check size={17} /></span>
+                            <h2 className="mt-5 text-xl font-semibold tracking-[-.02em] text-[#20291d]">{section.title}</h2>
+                            <p className="mt-3 text-sm leading-6 text-[#687362]">{section.body}</p>
+                            {section.items?.length > 0 && (
+                              <ul className="mt-5 space-y-2 text-sm text-[#4d5948]">
+                                {section.items.map((item) => <li key={item} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#78944f]" />{item}</li>)}
+                              </ul>
+                            )}
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {cta && (
+                    <section className="mx-auto max-w-7xl px-5 pb-20 md:px-8 md:pb-28">
+                      <div className="rounded-[32px] bg-[#172014] px-7 py-10 text-white md:flex md:items-center md:justify-between md:px-10">
+                        <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#a9bd83]">READY TO INTEGRATE?</p><h2 className="mt-3 text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Protect the next playback session.</h2></div>
+                        <div className="mt-6 flex flex-wrap gap-3 md:mt-0"><Link href="/register" className="inline-flex items-center gap-2 rounded-xl bg-[#dcebbd] px-5 py-3 text-sm font-semibold text-[#1e2919]">Get started <ArrowUpRight size={16} /></Link><Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold">Read docs</Link></div>
+                      </div>
+                    </section>
+                  )}
+                </main>
+                <PublicFooter />
+              </div>
+            );
+          }
+          ''')
+
+          write('apps/dashboard/components/public-plans.jsx', '''"use client";
+          import Link from "next/link";
+          import { Check, ArrowUpRight } from "lucide-react";
+          import { useEffect, useState } from "react";
+
+          const featureLabels = {
+            secure_gateway: "Secure gateway",
+            protected_delivery: "Protected media delivery",
+            player_integrity: "Player integrity verification",
+            secure_browser_restriction: "Secure browser restriction",
+            dynamic_watermark: "Dynamic watermark",
+            device_tracking: "Device tracking",
+            require_device_id: "Required device identity",
+            device_control: "Device block, revoke & limits",
+            concurrent_stream_control: "Concurrent stream control",
+            webhooks: "Webhooks",
+            youtube_custom: "Restricted YouTube provider",
+          };
+          const limitLabels = {
+            max_sites: "sites",
+            max_assets: "assets",
+            max_api_keys: "API keys",
+            max_webhooks: "webhooks",
+            max_team_members: "team members",
+            max_devices_per_user: "devices / viewer",
+            max_concurrent_streams: "concurrent streams",
+            monthly_playback_minutes: "playback minutes / month",
+            monthly_playback_sessions: "playback sessions / month",
+          };
+
+          function price(plan) {
+            if (!Number.isInteger(plan.priceMinor) || plan.priceMinor <= 0) return "Contact";
+            try { return new Intl.NumberFormat(undefined, { style: "currency", currency: plan.currency || "USD", maximumFractionDigits: 0 }).format(plan.priceMinor / 100); }
+            catch { return `${plan.currency || ""} ${plan.priceMinor / 100}`.trim(); }
+          }
+          function planFeatures(plan) {
+            const e = plan.entitlements || {};
+            const features = Object.entries(featureLabels).filter(([key]) => e[key] === true).map(([, label]) => label);
+            const limits = Object.entries(limitLabels).filter(([key]) => Number.isFinite(Number(e[key]))).map(([key, label]) => `${e[key]} ${label}`);
+            return [...limits, ...features].slice(0, 10);
+          }
+
+          export function PublicPlans({ compact = false }) {
+            const [plans, setPlans] = useState(null);
+            const [error, setError] = useState(false);
+            useEffect(() => {
+              fetch("/control-api/v1/public/plans", { cache: "no-store" })
+                .then((response) => { if (!response.ok) throw new Error("plans unavailable"); return response.json(); })
+                .then((data) => setPlans(data.items || []))
+                .catch(() => setError(true));
+            }, []);
+            if (error) return <div className="rounded-2xl border border-[#dce3d5] bg-white p-6 text-sm text-[#687362]">Plans are temporarily unavailable. Please try again shortly.</div>;
+            if (!plans) return <div className="grid gap-5 md:grid-cols-3">{[0,1,2].map((i) => <div key={i} className="h-72 animate-pulse rounded-[28px] border border-[#e0e5da] bg-white" />)}</div>;
+            if (!plans.length) return <div className="rounded-2xl border border-[#dce3d5] bg-white p-6 text-sm text-[#687362]">No public plans are available right now.</div>;
+            return (
+              <div className={`grid gap-5 ${plans.length >= 3 ? "lg:grid-cols-3" : "md:grid-cols-2"}`}>
+                {plans.map((plan, index) => {
+                  const features = planFeatures(plan);
+                  return (
+                    <article key={plan.id} className={`relative rounded-[28px] border p-7 ${index === 1 && plans.length > 2 ? "border-[#718c4a] bg-[#172014] text-white shadow-xl" : "border-[#dce3d5] bg-white text-[#20291d]"}`}>
+                      {plan.badge && <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[.12em] ${index === 1 && plans.length > 2 ? "bg-[#dcebbd] text-[#26331e]" : "bg-[#edf4df] text-[#607742]"}`}>{plan.badge}</span>}
+                      <h3 className="mt-4 text-2xl font-semibold tracking-[-.03em]">{plan.name}</h3>
+                      <p className={`mt-2 min-h-12 text-sm leading-6 ${index === 1 && plans.length > 2 ? "text-[#c7d0c1]" : "text-[#687362]"}`}>{plan.description || "Plan features are configured by the platform administrator."}</p>
+                      <div className="mt-6 flex items-end gap-2"><strong className="text-4xl tracking-[-.04em]">{price(plan)}</strong>{plan.priceMinor > 0 && <span className={`pb-1 text-xs ${index === 1 && plans.length > 2 ? "text-[#a9b5a3]" : "text-[#7b8675]"}`}>/{plan.billingInterval || "period"}</span>}</div>
+                      {plan.trialDays > 0 && <p className="mt-2 text-xs font-semibold text-[#78944f]">{plan.trialDays}-day trial</p>}
+                      <ul className={`mt-7 space-y-2.5 text-sm ${compact ? "min-h-40" : "min-h-56"}`}>{features.map((item) => <li key={item} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#8eaa61]" />{item}</li>)}</ul>
+                      <Link href="/register" className={`mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${index === 1 && plans.length > 2 ? "bg-[#dcebbd] text-[#1e2919]" : "bg-[#172014] text-white"}`}>Get started <ArrowUpRight size={16} /></Link>
+                    </article>
+                  );
+                })}
+              </div>
+            );
+          }
+          ''')
+
+          write('apps/dashboard/components/service-status.jsx', '''"use client";
+          import { useEffect, useState } from "react";
+          import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+          export function ServiceStatus() {
+            const [state, setState] = useState("loading");
+            useEffect(() => {
+              fetch("/control-api/health/ready", { cache: "no-store" })
+                .then((response) => setState(response.ok ? "operational" : "degraded"))
+                .catch(() => setState("degraded"));
+            }, []);
+            const good = state === "operational";
+            return <div className="mx-auto max-w-7xl px-5 py-16 md:px-8"><div className="rounded-[28px] border border-[#dce3d5] bg-white p-8"><div className="flex items-center gap-4">{state === "loading" ? <LoaderCircle className="animate-spin text-[#78944f]" /> : good ? <CheckCircle2 className="text-[#78944f]" /> : <CircleAlert className="text-amber-600" />}<div><h2 className="text-xl font-semibold">{state === "loading" ? "Checking services…" : good ? "Control API operational" : "Service check degraded"}</h2><p className="mt-1 text-sm text-[#687362]">Live readiness check from the Unpirator control API.</p></div></div></div></div>;
+          }
+          ''')
+
+          write('apps/dashboard/lib/public-pages.js', '''export const publicPages = {
+            features: {
+              eyebrow: "PRODUCT",
+              title: "Protection that follows the playback session.",
+              intro: "Build a protected delivery layer around the media you already own, without moving access decisions into the browser.",
+              sections: [
+                { title: "Protected delivery", body: "Keep private media sources server-side and deliver registered assets through the Unpirator gateway.", items: ["Short-lived signed playback", "Revocable sessions", "Registered source boundaries"] },
+                { title: "Viewer accountability", body: "Tie playback to your own viewer identity and the controls included in the purchased plan.", items: ["Dynamic watermark", "Device tracking", "Concurrent stream control"] },
+                { title: "Developer control", body: "Your backend remains the authority for who is allowed to watch.", items: ["API keys stay server-side", "Webhooks when included", "Versioned integration packages"] },
+              ],
+            },
+            howItWorks: {
+              eyebrow: "HOW IT WORKS",
+              title: "Your app decides. Unpirator delivers.",
+              intro: "A protected session starts only after your server connects the viewer, the content reference and the plan features that are actually enabled.",
+              sections: [
+                { title: "1. Register the source", body: "Your server sends private source metadata to Unpirator over server-to-server HTTPS and receives a playbackRef." },
+                { title: "2. Render the player", body: "The browser receives the playbackRef, never your provider credentials or private source configuration." },
+                { title: "3. Authorize the viewer", body: "The player calls your playback endpoint. Your server authenticates the viewer and decides whether access is allowed." },
+                { title: "4. Create a session", body: "Unpirator creates a short-lived protected session with only the features enabled by that customer's plan." },
+                { title: "5. Stream through the gateway", body: "The media gateway validates the session and serves the allowed media response." },
+                { title: "6. Revoke when needed", body: "Where enabled, device and concurrency controls can stop or replace active sessions." },
+              ],
+            },
+            integrations: {
+              eyebrow: "INTEGRATIONS",
+              title: "Keep your stack. Add protected playback.",
+              intro: "Use a small server-side integration plus the Unpirator player. The security boundary stays on your server.",
+              sections: [
+                { title: "Next.js & React", body: "Use the React player and Next.js integration helpers for same-origin playback bootstrap endpoints." },
+                { title: "Node & Express", body: "Authorize viewers in your existing API and create protected sessions server-to-server." },
+                { title: "Laravel & PHP", body: "Keep API keys in backend configuration and return only the playback bootstrap response to the browser." },
+                { title: "Django & Flask", body: "Use your existing authentication and entitlement model before asking Unpirator for playback." },
+                { title: "HTML + backend", body: "The player can live on a plain page, but the API key and authorization decision still belong on a server." },
+                { title: "Storage & providers", body: "Connect supported private HTTP/HLS and object-storage sources without exposing storage credentials to the viewer." },
+              ],
+            },
+            security: {
+              eyebrow: "SECURITY",
+              title: "No magic labels. Concrete controls.",
+              intro: "Unpirator protection is plan-driven. Customers cannot choose Standard, Strict or Maximum; the plan's enabled features define the actual behavior.",
+              sections: [
+                { title: "Server-side source boundary", body: "Private source URLs and provider credentials do not belong in the browser." },
+                { title: "Signed short-lived sessions", body: "Playback uses time-limited signed authorization that can be revoked instead of permanent public media URLs." },
+                { title: "Plan-enforced features", body: "Watermark, device controls, integrity checks, browser restrictions and concurrency controls activate only when included in the purchased plan." },
+                { title: "Fail-closed gateway", body: "Invalid, expired, revoked or mismatched sessions are rejected before protected media delivery." },
+                { title: "Origin restrictions", body: "Registered host boundaries prevent the media gateway from becoming an arbitrary URL proxy." },
+                { title: "Honest limits", body: "No browser system can guarantee prevention of every screen recording. Protection focuses on access control, accountability and reducing casual redistribution." },
+              ],
+            },
+            useCases: {
+              eyebrow: "USE CASES",
+              title: "For video that should stay with the right audience.",
+              intro: "Use the same protected playback layer across learning products, memberships and private media applications.",
+              sections: [
+                { title: "Education platforms", body: "Connect course enrollment checks to viewer authorization, device controls and visible watermarking." },
+                { title: "Membership products", body: "Turn a paid or private membership decision into a short-lived playback session." },
+                { title: "Internal training", body: "Deliver company-only videos without publishing reusable provider URLs to the browser." },
+                { title: "Premium communities", body: "Add session revocation and concurrent stream controls to exclusive video collections." },
+                { title: "SaaS product teams", body: "Embed protected playback into an existing product without replacing the product's own user database." },
+                { title: "Multi-site operators", body: "Use plan limits to manage multiple properties from one workspace." },
+              ],
+            },
+            about: {
+              eyebrow: "COMPANY",
+              title: "Built around one boundary: private video should not become a public URL.",
+              intro: "The Unpirator is a protected video-delivery product for teams that want their own application to keep control of viewer access.",
+              sections: [
+                { title: "What we build", body: "Developer tools, playback infrastructure and customer controls that sit between authorization and media delivery." },
+                { title: "What we do not promise", body: "We do not claim that browser video can be made impossible to record. We focus on enforceable access controls and accountability." },
+                { title: "How we design", body: "Security-sensitive secrets stay server-side, plan features are concrete, and customer applications remain the source of truth for users and content access." },
+              ],
+            },
+          };
+          ''')
+
+          pages = {
+            'features': 'features',
+            'how-it-works': 'howItWorks',
+            'integrations': 'integrations',
+            'security': 'security',
+            'use-cases': 'useCases',
+            'about': 'about',
+          }
+          for route, key in pages.items():
+              write(f'apps/dashboard/app/{route}/page.js', f'''import {{ PublicPage }} from "@/components/public-site";\nimport {{ publicPages }} from "@/lib/public-pages";\nexport default function Page() {{ return <PublicPage {{...publicPages.{key}}} />; }}\n''')
+
+          write('apps/dashboard/app/pricing/page.js', '''import { PublicPage } from "@/components/public-site";
+          import { PublicPlans } from "@/components/public-plans";
+          export const metadata = { title: "Pricing | The Unpirator" };
+          export default function PricingPage() {
+            return <PublicPage eyebrow="PRICING" title="Plans built from real product features." intro="Every public plan below comes directly from the Admin Plans configuration. Change a price, limit or entitlement in Admin and this page follows automatically." cta={false}><section className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24"><PublicPlans /></section></PublicPage>;
+          }
+          ''')
+
+          write('apps/dashboard/app/status/page.js', '''import { PublicPage } from "@/components/public-site";
+          import { ServiceStatus } from "@/components/service-status";
+          export const metadata = { title: "Status | The Unpirator" };
+          export default function StatusPage() { return <PublicPage eyebrow="STATUS" title="Service status." intro="A live readiness check for the Unpirator control API." cta={false}><ServiceStatus /></PublicPage>; }
+          ''')
+
+          write('apps/dashboard/app/changelog/page.js', '''import { PublicPage } from "@/components/public-site";
+          const entries = [
+            ["Plan-driven protection", "Protection controls now come from concrete plan entitlements instead of customer-selectable security levels."],
+            ["Protected playback references", "Customer servers can register private source metadata and render a playbackRef without exposing provider credentials to the browser."],
+            ["Customer console expansion", "Workspace visibility now covers sessions, devices, usage, security events, billing and integration tooling."],
+          ];
+          export default function ChangelogPage() { return <PublicPage eyebrow="CHANGELOG" title="Product updates." intro="A concise record of meaningful changes to the Unpirator platform." cta={false}><section className="mx-auto max-w-4xl px-5 py-16 md:px-8 md:py-24"><div className="space-y-5">{entries.map(([title, body], i) => <article key={title} className="rounded-[26px] border border-[#dce3d5] bg-white p-7"><p className="text-xs font-black uppercase tracking-[.16em] text-[#78944f]">Update {String(i + 1).padStart(2, "0")}</p><h2 className="mt-3 text-2xl font-semibold tracking-[-.03em]">{title}</h2><p className="mt-3 text-sm leading-6 text-[#687362]">{body}</p></article>)}</div></section></PublicPage>; }
+          ''')
+
+          write('apps/dashboard/app/contact/page.js', '''import Link from "next/link";
+          import { PublicPage } from "@/components/public-site";
+          const options = [
+            ["Sales & plan questions", "Review live plan pricing and create a workspace when you're ready.", "/pricing", "View pricing"],
+            ["Integration help", "Start with the implementation guide and stack-specific examples.", "/docs", "Open docs"],
+            ["Existing customers", "Use Support inside your workspace so the request stays connected to the correct account.", "/dashboard/support", "Open support"],
+          ];
+          export default function ContactPage() { return <PublicPage eyebrow="CONTACT" title="Get to the right place quickly." intro="Choose the path that matches what you need. We do not publish a fake sales inbox just to fill a page." cta={false}><section className="mx-auto grid max-w-7xl gap-5 px-5 py-16 md:grid-cols-3 md:px-8 md:py-24">{options.map(([title, body, href, label]) => <article key={title} className="rounded-[28px] border border-[#dce3d5] bg-white p-7"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-3 min-h-20 text-sm leading-6 text-[#687362]">{body}</p><Link className="mt-6 inline-flex rounded-xl bg-[#172014] px-4 py-2.5 text-sm font-semibold text-white" href={href}>{label}</Link></article>)}</section></PublicPage>; }
+          ''')
+
+          legal = {
+            'terms': ('TERMS', 'Terms of Service', 'These terms set the baseline rules for using The Unpirator.', [
+              ('Using the service', 'You must use the service only for media and systems you are authorized to operate, and you are responsible for the viewers and content connected to your workspace.'),
+              ('Accounts and security', 'Keep account credentials and API keys secure. Activity performed through your workspace may be treated as authorized activity unless you report compromise.'),
+              ('Service changes', 'Features, limits and availability may change as the product evolves. Active plan entitlements determine the features available to a workspace.'),
+              ('Availability', 'No online service can promise uninterrupted operation. Status and maintenance information should be read together with these terms.'),
+              ('Liability boundary', 'The service is an access-control and delivery layer, not a guarantee that browser-viewed media can never be copied or recorded.'),
+            ]),
+            'privacy': ('PRIVACY', 'Privacy Policy', 'The Unpirator is designed to minimize the personal information required for protected playback.', [
+              ('Workspace data', 'We process account, workspace, billing and configuration data needed to provide the service.'),
+              ('Viewer identifiers', 'Customer servers may send an opaque external user ID. A display label is optional. Customers should avoid sending unnecessary personal information.'),
+              ('Device identifiers', 'A random application-generated device ID can be used for device controls when included in a plan. Hardware fingerprinting is not required for the normal integration.'),
+              ('Playback and security telemetry', 'Session, usage, device and security-event records may be processed to operate limits, revocation, abuse detection and customer reporting.'),
+              ('Customer responsibility', 'Customers remain responsible for providing appropriate notices and obtaining any permissions required for the end-user data they send to the service.'),
+            ]),
+            'refund-policy': ('BILLING', 'Billing & Refund Policy', 'How plan charges, payment review and refund requests are handled.', [
+              ('Plan pricing', 'Public prices and plan entitlements are taken from the active Admin Plans configuration shown on the Pricing page.'),
+              ('Payment review', 'Where manual payment review is used, access may remain pending until the submitted payment is verified.'),
+              ('Refund requests', 'Refund eligibility depends on the payment circumstances, service usage and applicable law. A payment should not be represented as automatically refundable unless that is explicitly stated during checkout.'),
+              ('Plan changes', 'Changing plans can change enabled features and limits. Customers should review the current plan details before paying.'),
+              ('Billing records', 'Customers can review plan and payment history from the authenticated workspace billing area.'),
+            ]),
+            'acceptable-use': ('ACCEPTABLE USE', 'Acceptable Use Policy', 'The service is for protecting authorized media, not bypassing the rights of others.', [
+              ('Authorized content only', 'Do not use the platform to distribute, proxy or protect media you do not have the right to use.'),
+              ('No abuse infrastructure', 'Do not attempt to turn the media gateway into an open proxy, scanning service, credential relay or attack platform.'),
+              ('No security interference', 'Do not intentionally defeat tenant isolation, rate limits, signed-session controls or other safeguards.'),
+              ('Respect users', 'Do not use viewer identifiers, watermarks or device controls for unlawful surveillance, harassment or deception.'),
+              ('Enforcement', 'Access may be limited or suspended when activity threatens the platform, other customers or third-party rights.'),
+            ]),
+          }
+          for route, (eyebrow, title, intro, sections) in legal.items():
+              items = ',\n'.join([f'{{ title: {t!r}, body: {b!r} }}' for t,b in sections])
+              write(f'apps/dashboard/app/{route}/page.js', f'''import {{ PublicPage }} from "@/components/public-site";\nconst sections = [{items}];\nexport default function Page() {{ return <PublicPage eyebrow={eyebrow!r} title={title!r} intro={intro!r} sections={{sections}} cta={{false}} />; }}\n''')
+
+          write('apps/dashboard/components/public-nav.jsx', '''"use client";
+          import Link from "next/link";
+          import { ArrowRight, ArrowUpRight, Menu, ShieldCheck, X } from "lucide-react";
+          import { usePathname } from "next/navigation";
+          import { useEffect, useRef, useState } from "react";
+          import { useAuth } from "./auth-provider";
+          export function PublicNav() {
+            const [open, setOpen] = useState(false);
+            const menu = useRef(null);
+            const auth = useAuth();
+            const pathname = usePathname();
+            useEffect(() => { setOpen(false); }, [pathname]);
+            useEffect(() => {
+              if (!open) return;
+              const focusable = [...(menu.current?.querySelectorAll("a,button") || [])];
+              focusable[0]?.focus();
+              const keydown = (event) => { if (event.key === "Escape") setOpen(false); };
+              document.addEventListener("keydown", keydown);
+              return () => document.removeEventListener("keydown", keydown);
+            }, [open]);
+            const links = [["Product", "/features"], ["Pricing", "/pricing"], ["Integrations", "/integrations"], ["Security", "/security"], ["Docs", "/docs"], ["Company", "/about"]];
+            return <header className="site-header public-nav"><Link href="/" className="wordmark" aria-label="The Unpirator home"><span className="brand-symbol"><ShieldCheck size={21} /></span>unpirator<span className="brand-dot">.</span></Link><button className="nav-toggle" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button><nav ref={menu} className={open ? "nav-open" : ""} aria-label="Main navigation">{links.map(([label, href]) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>)}</nav><div className="header-actions">{auth?.account ? <><Link href="/dashboard" className="login-link">Dashboard <ArrowUpRight size={14} /></Link><Link href="/dashboard/account" className="account-avatar" aria-label={`Account settings for ${auth.account.email}`}>{auth.account.email.slice(0,1).toUpperCase()}</Link>{auth.account.platformRole && <Link href="/admin" className="small-cta">Admin Console <ArrowRight size={15} /></Link>}</> : <><Link href="/login" className="login-link">Sign in <ArrowUpRight size={14} /></Link><Link href="/register" className="small-cta">Get started <ArrowRight size={15} /></Link></>}</div></header>;
+          }
+          ''')
+
+          p = Path('apps/dashboard/app/page.js')
+          s = p.read_text()
+          if 'PublicPlans' not in s:
+              s = s.replace('import { PublicNav } from "@/components/public-nav";\n', 'import { PublicNav } from "@/components/public-nav";\nimport { PublicPlans } from "@/components/public-plans";\nimport { PublicFooter } from "@/components/public-site";\n')
+          start = s.index('        <section id="plans"')
+          end = s.index('        <section className="section-wrap faq-section">', start)
+          replacement = '''        <section id="plans" className="section-wrap plans-section">\n          <div className="section-intro">\n            <div><div className="eyebrow">ROOM TO GROW</div><h2>Plans that match the controls you need.</h2></div>\n            <p>Pricing, limits and included protection features come directly from the active public plans configured by the platform administrator.</p>\n          </div>\n          <PublicPlans compact />\n          <div className="mt-8"><Link href="/pricing" className="text-cta">Compare all plan details <ArrowUpRight size={18} /></Link></div>\n        </section>\n'''
+          s = s[:start] + replacement + s[end:]
+          s = s.replace('    "Workspace plans define site, device and concurrent stream limits. Paid checkout is not enabled. The comparison describes configured limits, without implying a paid subscription is available.",', '    "Public pricing and included features come directly from the active plans configured by the platform administrator.",')
+          footer_start = s.index('      <footer className="site-footer section-wrap">')
+          footer_end = s.index('      </footer>', footer_start) + len('      </footer>')
+          s = s[:footer_start] + '      <PublicFooter />' + s[footer_end:]
+          p.write_text(s)
+          PY
+          pnpm exec prettier --write apps/api/src apps/dashboard/app apps/dashboard/components apps/dashboard/lib
+      - name: Verify generated site
+        run: |
+          pnpm check:syntax
+          pnpm format:check
+          pnpm lint
+          pnpm --filter @unpirator/dashboard build
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "chatgpt-public-site-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src apps/dashboard/app apps/dashboard/components apps/dashboard/lib
+          git commit -m "feat: build complete public website and dynamic pricing"
+          git push origin HEAD:main
