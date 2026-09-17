@@ -40,6 +40,19 @@ test("dashboard requires a valid signed-in session", async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/);
 });
 
+test("admin route looks like a normal missing page to non-admin visitors", async ({ page }) => {
+  await page.context().clearCookies();
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+  await expect(page.getByText("404", { exact: true })).toBeVisible();
+});
+
+test("unknown routes use the same clean not found page", async ({ page }) => {
+  await page.goto("/this-page-does-not-exist");
+  await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+});
+
 test("auth forms show written validation without browser bubbles", async ({ page }) => {
   await page.goto("/register");
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
