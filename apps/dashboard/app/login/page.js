@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, KeyRound, Mail } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,63 +66,48 @@ export default function LoginPage() {
   return (
     <AuthShell
       mode="login"
-      title={challenge ? "Verify it’s you." : "Sign in to your workspace."}
+      title={challenge ? "Verify your identity" : "Sign in"}
       intro={
         challenge
-          ? "Enter the 6-digit code from your authenticator app to continue."
-          : "Open the control plane for your sites, viewers and protected playback sessions."
+          ? "Enter the 6-digit code from your authenticator app."
+          : "Use your workspace credentials to continue."
       }
     >
-      <form className="space-y-4" onSubmit={submit}>
+      <form className="space-y-5" onSubmit={submit}>
         {!challenge ? (
           <>
             <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
-                Email
-              </span>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#7b8674]" />
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="h-12 rounded-xl border-[#d7ded0] bg-[#fafbf8] pl-10"
-                  required
-                />
-              </div>
+              <span className="mb-2 block text-sm font-medium text-[#30342e]">Email</span>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
+                required
+              />
             </label>
             <label className="block">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
-                  Password
-                </span>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs font-semibold text-[#607742] hover:underline"
-                >
+                <span className="text-sm font-medium text-[#30342e]">Password</span>
+                <Link href="/forgot-password" className="text-sm text-[#666c62] hover:text-[#20251d] hover:underline">
                   Forgot password?
                 </Link>
               </div>
-              <div className="relative">
-                <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#7b8674]" />
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  minLength={10}
-                  className="h-12 rounded-xl border-[#d7ded0] bg-[#fafbf8] pl-10"
-                  required
-                />
-              </div>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                minLength={10}
+                className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
+                required
+              />
             </label>
           </>
         ) : (
           <label className="block">
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
-              Authenticator code
-            </span>
+            <span className="mb-2 block text-sm font-medium text-[#30342e]">Authenticator code</span>
             <Input
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -131,22 +116,19 @@ export default function LoginPage() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="000000"
-              className="h-14 rounded-xl border-[#d7ded0] bg-[#fafbf8] text-center text-xl tracking-[.35em]"
+              className="h-14 rounded-lg border-[#d9dcd6] bg-white text-center text-xl tracking-[.32em] shadow-none focus-visible:ring-[#9aa095]"
               required
             />
           </label>
         )}
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
             {error}
           </div>
         )}
 
-        <Button
-          className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]"
-          disabled={busy}
-        >
+        <Button className="h-12 w-full rounded-lg bg-[#20251d] text-sm font-semibold text-white hover:bg-[#32382e]" disabled={busy}>
           {busy ? "Signing in…" : challenge ? "Verify and continue" : "Sign in"}
           {!busy && <ArrowRight className="ml-2 size-4" />}
         </Button>
@@ -154,15 +136,12 @@ export default function LoginPage() {
 
       {google && !challenge && (
         <>
-          <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[.16em] text-[#9aa391]">
-            <span className="h-px flex-1 bg-[#e0e5da]" /> or{" "}
-            <span className="h-px flex-1 bg-[#e0e5da]" />
+          <div className="my-6 flex items-center gap-3 text-xs text-[#8a8f87]">
+            <span className="h-px flex-1 bg-[#e4e6e0]" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-[#e4e6e0]" />
           </div>
-          <Button
-            asChild
-            variant="outline"
-            className="h-12 w-full rounded-xl border-[#d7ded0] bg-white"
-          >
+          <Button asChild variant="outline" className="h-12 w-full rounded-lg border-[#d9dcd6] bg-white text-sm font-semibold shadow-none hover:bg-[#f7f8f5]">
             <a href="/control-api/v1/auth/google">Continue with Google</a>
           </Button>
         </>
