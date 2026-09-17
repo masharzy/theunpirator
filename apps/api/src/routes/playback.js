@@ -153,7 +153,7 @@ export function playbackRouter({
           durationMs,
         }),
       );
-      res.status(201).json(result);
+      res.set("cache-control", "no-store").status(201).json(result);
     } catch (e) {
       next(e);
     }

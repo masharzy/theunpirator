@@ -59,8 +59,13 @@ export function createUnpiratorPlaybackHandler({
   siteId,
   resolveViewer,
   authorizePlayback,
+  allowGuests = false,
 }) {
   if (!siteId) throw new Error("siteId is required");
+  if (!allowGuests && typeof resolveViewer !== "function")
+    throw new Error("resolveViewer is required unless allowGuests is true");
+  if (!allowGuests && typeof authorizePlayback !== "function")
+    throw new Error("authorizePlayback is required unless allowGuests is true");
   const client = createUnpiratorServerClient({ apiUrl, apiKey });
   return async function POST(request) {
     try {
@@ -71,12 +76,17 @@ export function createUnpiratorPlaybackHandler({
           { status: 403 },
         );
       const body = await request.json();
-      const deviceId = String(body.deviceId || "");
-      if (deviceId.length < 8) throw new Error("A valid device ID is required");
+      const deviceId = body.deviceId ? String(body.deviceId) : undefined;
+      if (deviceId && deviceId.length < 8) throw new Error("Device ID must be at least 8 characters");
       const viewer = resolveViewer ? await resolveViewer(request) : null;
+      if (!viewer?.id && !allowGuests) {
+        const error = new Error("Sign in required");
+        error.status = 401;
+        throw error;
+      }
       const identity = viewer?.id
         ? { id: String(viewer.id), label: viewer.label ? String(viewer.label) : undefined }
-        : { id: `guest:${deviceId.slice(0, 174)}`, label: "Guest viewer" };
+        : { id: `guest:${deviceId || globalThis.crypto.randomUUID()}`, label: "Guest viewer" };
       if (authorizePlayback) {
         const allowed = await authorizePlayback({ request, body, viewer: identity });
         if (!allowed) {
@@ -90,7 +100,7 @@ export function createUnpiratorPlaybackHandler({
         siteId,
         externalUserId: identity.id,
         displayLabel: identity.label,
-        deviceId,
+        ...(deviceId ? { deviceId } : {}),
         client: body.client || {},
       };
       const resolvedAssetId = body.playbackRef || body.assetId;
