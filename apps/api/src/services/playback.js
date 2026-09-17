@@ -12,6 +12,7 @@ import {
 import { signPlaybackToken } from "@unpirator/crypto";
 import { riskFor } from "@unpirator/security";
 import { queueWebhook } from "./webhooks.js";
+import { notifyTenant } from "./tenant-notifications.js";
 import { AppError, notFound } from "../errors.js";
 import { getPlaybackPolicy } from "./entitlements.js";
 
@@ -57,6 +58,40 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       );
     }
   }
+
+  async function directPassthrough({ tenantId, asset, reason, recordTiming }) {
+    await notifyTenant(db, {
+      tenantId,
+      type: "protection_bypassed",
+      title: "Protected playback is unavailable",
+      body:
+        reason === "secure_gateway_disabled"
+          ? "Secure gateway is disabled. Playback is being returned to your original source URL without Unpirator protection."
+          : "Protected delivery is disabled. Playback is being returned to your original source URL without Unpirator protection.",
+      actionUrl: "/dashboard/plans",
+      dedupeKey: `protection-bypass:${reason}:${new Date().toISOString().slice(0, 10)}`,
+    });
+    recordTiming("direct_passthrough");
+    return {
+      sessionId: null,
+      playbackUrl: asset.providerReference,
+      token: null,
+      tokenExpiresIn: 0,
+      features: {
+        protectedDelivery: false,
+        playerIntegrity: false,
+        secureBrowserRestriction: false,
+      },
+      refreshUrl: null,
+      mode: "passthrough",
+      attestation: null,
+      sessionExpiresAt: null,
+      watermark: { enabled: false },
+      protectionBypassed: true,
+      bypassReason: reason,
+    };
+  }
+
   async function createUnlocked({ tenantId, input, ip, userAgent, recordTiming = () => {} }) {
     const [site] = await db
       .select()
@@ -86,7 +121,8 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       if (input.source.provider !== "youtube_custom")
         throw new AppError("SOURCE_INVALID", "Unsupported on-demand provider", 400);
       const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
-      if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
+      if (policy.secure && policy.protectedDelivery && !enabled)
+        throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
       const reference = canonicalYoutubeUrl(input.source.url);
       await db.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${site.id}:youtube:${reference}`}, 2))`,
@@ -134,9 +170,24 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       if (asset.siteId !== input.siteId)
         throw new AppError("ASSET_SITE_MISMATCH", "Asset does not belong to this site", 403);
     }
+
     const secure = policy.secure;
     recordTiming("asset");
-    if (!secure) throw new AppError("FEATURE_DISABLED", "Secure gateway is disabled", 403);
+    if (!secure)
+      return directPassthrough({
+        tenantId,
+        asset,
+        reason: "secure_gateway_disabled",
+        recordTiming,
+      });
+    if (!policy.protectedDelivery)
+      return directPassthrough({
+        tenantId,
+        asset,
+        reason: "protected_delivery_disabled",
+        recordTiming,
+      });
+
     if (asset.provider === "youtube_custom") {
       const enabled = config.YOUTUBE_CUSTOM_GLOBAL && policy.youtube;
       if (!enabled) throw new AppError("PROVIDER_DISABLED", "Restricted provider disabled", 403);
@@ -145,12 +196,6 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     const entitlements = policy.entitlements;
     if (policy.requireDeviceId && !input.deviceId)
       throw new AppError("DEVICE_ID_REQUIRED", "This plan requires a device ID", 400);
-    if (asset.provider === "youtube_custom" && !policy.protectedDelivery)
-      throw new AppError(
-        "FEATURE_DISABLED",
-        "Protected delivery must be enabled for the YouTube provider",
-        403,
-      );
     const playbackFeatures = {
       protectedDelivery: policy.protectedDelivery,
       playerIntegrity: policy.playerIntegrity,
@@ -343,9 +388,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         asset.provider === "youtube_custom"
           ? "protected_segments"
           : protectedHls
-            ? policy.protectedDelivery
-              ? "protected_hls"
-              : "hls"
+            ? "protected_hls"
             : "native",
       attestation:
         asset.provider === "youtube_custom"
