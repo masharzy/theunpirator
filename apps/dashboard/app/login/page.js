@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuthShell } from "@/components/auth-shell";
 
+const emailLooksValid = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [google, setGoogle] = useState(false);
@@ -29,10 +32,25 @@ export default function LoginPage() {
       );
   }, []);
 
+  function validate() {
+    const next = {};
+    if (challenge) {
+      if (!/^\d{6}$/.test(code)) next.code = "Enter the 6-digit authenticator code.";
+    } else {
+      if (!email.trim()) next.email = "Enter your email address.";
+      else if (!emailLooksValid(email)) next.email = "Enter a valid email address.";
+      if (!password) next.password = "Enter your password.";
+      else if (password.length < 8) next.password = "Password must be at least 8 characters.";
+    }
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function submit(e) {
     e.preventDefault();
-    setBusy(true);
     setError("");
+    if (!validate()) return;
+    setBusy(true);
     try {
       const data = challenge
         ? await api("/v1/auth/mfa/challenge", {
@@ -41,23 +59,28 @@ export default function LoginPage() {
           })
         : await api("/v1/auth/login", {
             method: "POST",
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email: email.trim(), password }),
           });
       if (data.mfaRequired) {
         setChallenge(data.challenge);
+        setCode("");
+        setFieldErrors({});
         return;
       }
       const me = await api("/v1/auth/me");
       if (me.activeTenantId) localStorage.setItem("unpirator_tenant_id", me.activeTenantId);
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("next");
+      const safeNext = requested?.startsWith("/dashboard") ? requested : null;
       window.location.assign(
         data.account.mfaSetupRequired
           ? "/dashboard/account?setup=mfa"
           : data.account.platformRole
             ? "/admin"
-            : "/dashboard",
+            : safeNext || "/dashboard",
       );
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "We could not sign you in. Check your details and try again.");
     } finally {
       setBusy(false);
     }
@@ -73,7 +96,7 @@ export default function LoginPage() {
           : "Use your workspace credentials to continue."
       }
     >
-      <form className="space-y-5" onSubmit={submit}>
+      <form className="space-y-5" onSubmit={submit} noValidate>
         {!challenge ? (
           <>
             <label className="block">
@@ -81,11 +104,16 @@ export default function LoginPage() {
               <Input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setFieldErrors((old) => ({ ...old, email: "" }));
+                }}
                 placeholder="you@example.com"
+                autoComplete="email"
+                aria-invalid={Boolean(fieldErrors.email)}
                 className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
-                required
               />
+              {fieldErrors.email && <p className="mt-2 text-sm text-red-600">{fieldErrors.email}</p>}
             </label>
             <label className="block">
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -97,12 +125,16 @@ export default function LoginPage() {
               <Input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((old) => ({ ...old, password: "" }));
+                }}
                 placeholder="Password"
-                minLength={10}
+                autoComplete="current-password"
+                aria-invalid={Boolean(fieldErrors.password)}
                 className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
-                required
               />
+              {fieldErrors.password && <p className="mt-2 text-sm text-red-600">{fieldErrors.password}</p>}
             </label>
           </>
         ) : (
@@ -111,19 +143,22 @@ export default function LoginPage() {
             <Input
               inputMode="numeric"
               autoComplete="one-time-code"
-              pattern="[0-9]{6}"
               maxLength={6}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                setFieldErrors((old) => ({ ...old, code: "" }));
+              }}
               placeholder="000000"
+              aria-invalid={Boolean(fieldErrors.code)}
               className="h-14 rounded-lg border-[#d9dcd6] bg-white text-center text-xl tracking-[.32em] shadow-none focus-visible:ring-[#9aa095]"
-              required
             />
+            {fieldErrors.code && <p className="mt-2 text-sm text-red-600">{fieldErrors.code}</p>}
           </label>
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
             {error}
           </div>
         )}
