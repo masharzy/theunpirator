@@ -241,15 +241,18 @@ export function AdminShell({ children }) {
           <span className="ml-auto rounded-full border border-[#cad7b6] bg-[#eff6df] px-3 py-1.5 text-[9px] font-black uppercase tracking-[.14em] text-[#557034]">
             {process.env.NEXT_PUBLIC_APP_ENV || "Production"}
           </span>
-          <span
-            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase tracking-[.14em] ${
+          <Link
+            href="/admin/system"
+            aria-label={`System health: ${health}. Open System`}
+            title="Open System"
+            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase tracking-[.14em] transition hover:opacity-80 ${
               health === "operational"
                 ? "bg-[#e6f3c8] text-[#4f6c29]"
                 : "bg-[#fde2d8] text-[#99482f]"
             }`}
           >
             {health}
-          </span>
+          </Link>
           <Link
             href="/admin/notifications"
             className="relative rounded-xl border border-[#d8ded0] bg-white p-2"
