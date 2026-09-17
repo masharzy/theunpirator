@@ -15,19 +15,59 @@ import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-site";
 
 const capabilities = [
-  [LockKeyhole, "Private source boundary", "Your storage credentials and private media source stay server-side."],
-  [ShieldCheck, "Signed playback sessions", "Access is short-lived, scoped and revocable instead of a reusable public link."],
-  [Fingerprint, "Viewer accountability", "When enabled by plan, device identity and watermarking make sharing easier to trace."],
-  [MonitorSmartphone, "Device controls", "Track, limit, block or revoke devices when the purchased plan includes those controls."],
-  [Gauge, "Concurrency limits", "Prevent uncontrolled simultaneous playback when concurrent stream control is enabled."],
-  [Radio, "Playback visibility", "See active and recent sessions, usage and security events from one workspace."],
+  [
+    LockKeyhole,
+    "Private source boundary",
+    "Your storage credentials and private media source stay server-side.",
+  ],
+  [
+    ShieldCheck,
+    "Signed playback sessions",
+    "Access is short-lived, scoped and revocable instead of a reusable public link.",
+  ],
+  [
+    Fingerprint,
+    "Viewer accountability",
+    "When enabled by plan, device identity and watermarking make sharing easier to trace.",
+  ],
+  [
+    MonitorSmartphone,
+    "Device controls",
+    "Track, limit, block or revoke devices when the purchased plan includes those controls.",
+  ],
+  [
+    Gauge,
+    "Concurrency limits",
+    "Prevent uncontrolled simultaneous playback when concurrent stream control is enabled.",
+  ],
+  [
+    Radio,
+    "Playback visibility",
+    "See active and recent sessions, usage and security events from one workspace.",
+  ],
 ];
 
 const flow = [
-  ["01", "Your app loads the video", "Your own database remains the source of truth for content and access."],
-  ["02", "Your server authorizes the viewer", "Authentication and entitlement checks happen in your application, not in the browser."],
-  ["03", "Unpirator creates protected access", "The enabled plan features are applied to the playback session."],
-  ["04", "The gateway delivers media", "The browser receives protected playback, not provider credentials or a permanent private source URL."],
+  [
+    "01",
+    "Your app loads the video",
+    "Your own database remains the source of truth for content and access.",
+  ],
+  [
+    "02",
+    "Your server authorizes the viewer",
+    "Authentication and entitlement checks happen in your application, not in the browser.",
+  ],
+  [
+    "03",
+    "Unpirator creates protected access",
+    "The enabled plan features are applied to the playback session.",
+  ],
+  [
+    "04",
+    "The gateway delivers media",
+    "The browser receives protected playback, not provider credentials or a permanent private source URL.",
+  ],
 ];
 
 export const metadata = { title: "Product | The Unpirator" };
@@ -47,13 +87,21 @@ export default function FeaturesPage() {
                 One protected path from your app to the player.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-[#bdc8b7] sm:text-lg">
-                Unpirator sits between your authorization decision and media delivery. Your app keeps control of users and content; the playback layer handles short-lived protected access.
+                Unpirator sits between your authorization decision and media delivery. Your app
+                keeps control of users and content; the playback layer handles short-lived protected
+                access.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl bg-[#dcebbd] px-5 py-3 text-sm font-semibold text-[#1f2a19]">
+                <Link
+                  href="/docs"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#dcebbd] px-5 py-3 text-sm font-semibold text-[#1f2a19]"
+                >
                   Read integration docs <ArrowRight size={16} />
                 </Link>
-                <Link href="/pricing" className="inline-flex items-center rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white">
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white"
+                >
                   See plans
                 </Link>
               </div>
@@ -64,17 +112,33 @@ export default function FeaturesPage() {
               <div className="relative rounded-[30px] border border-white/10 bg-[#202b1d] p-5 shadow-2xl">
                 <div className="flex items-center justify-between border-b border-white/10 pb-4 text-[10px] font-bold uppercase tracking-[.17em] text-[#8d9987]">
                   <span>Protected playback path</span>
-                  <span className="flex items-center gap-1.5 text-[#b7d47e]"><span className="size-1.5 rounded-full bg-[#a7c66d]" /> active</span>
+                  <span className="flex items-center gap-1.5 text-[#b7d47e]">
+                    <span className="size-1.5 rounded-full bg-[#a7c66d]" /> active
+                  </span>
                 </div>
                 <div className="mt-5 space-y-3">
-                  {["Your application", "Authorization boundary", "Protected session", "Media gateway"].map((item, index) => (
-                    <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/7 bg-white/[.035] p-4">
-                      <span className="grid size-8 place-items-center rounded-xl bg-[#dcebbd] text-xs font-black text-[#23301d]">{index + 1}</span>
+                  {[
+                    "Your application",
+                    "Authorization boundary",
+                    "Protected session",
+                    "Media gateway",
+                  ].map((item, index) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-3 rounded-2xl border border-white/7 bg-white/[.035] p-4"
+                    >
+                      <span className="grid size-8 place-items-center rounded-xl bg-[#dcebbd] text-xs font-black text-[#23301d]">
+                        {index + 1}
+                      </span>
                       <div className="flex-1">
                         <div className="text-sm font-semibold text-[#edf2e9]">{item}</div>
                         <div className="mt-1 h-1.5 w-2/3 rounded-full bg-white/7" />
                       </div>
-                      {index < 3 ? <ArrowRight size={16} className="text-[#7f8d78]" /> : <ShieldCheck size={17} className="text-[#b9d583]" />}
+                      {index < 3 ? (
+                        <ArrowRight size={16} className="text-[#7f8d78]" />
+                      ) : (
+                        <ShieldCheck size={17} className="text-[#b9d583]" />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -88,7 +152,9 @@ export default function FeaturesPage() {
             {capabilities.map(([Icon, title, body]) => (
               <article key={title} className="border-t border-[#cfd8c7] pt-6">
                 <div className="flex items-start gap-4">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#e8efdc] text-[#607742]"><Icon size={19} /></span>
+                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#e8efdc] text-[#607742]">
+                    <Icon size={19} />
+                  </span>
                   <div>
                     <h2 className="text-lg font-semibold tracking-[-.02em]">{title}</h2>
                     <p className="mt-2 text-sm leading-6 text-[#697363]">{body}</p>
@@ -103,9 +169,16 @@ export default function FeaturesPage() {
           <div className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
             <div className="grid gap-10 lg:grid-cols-[.8fr_1.2fr]">
               <div>
-                <p className="text-xs font-black uppercase tracking-[.18em] text-[#718054]">How it works</p>
-                <h2 className="mt-4 text-4xl font-semibold tracking-[-.045em] sm:text-5xl">The browser is never the trust boundary.</h2>
-                <p className="mt-5 max-w-md text-sm leading-7 text-[#687362]">The protected path starts from your own backend decision and stays server-led until the media gateway authorizes delivery.</p>
+                <p className="text-xs font-black uppercase tracking-[.18em] text-[#718054]">
+                  How it works
+                </p>
+                <h2 className="mt-4 text-4xl font-semibold tracking-[-.045em] sm:text-5xl">
+                  The browser is never the trust boundary.
+                </h2>
+                <p className="mt-5 max-w-md text-sm leading-7 text-[#687362]">
+                  The protected path starts from your own backend decision and stays server-led
+                  until the media gateway authorizes delivery.
+                </p>
               </div>
               <div className="divide-y divide-[#dfe5d9] border-y border-[#dfe5d9]">
                 {flow.map(([n, title, body]) => (
@@ -126,12 +199,24 @@ export default function FeaturesPage() {
           <div className="rounded-[34px] bg-[#e9efdf] p-6 sm:p-9 lg:p-12">
             <div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr]">
               <div>
-                <p className="text-xs font-black uppercase tracking-[.18em] text-[#6b7d4e]">Where it fits</p>
-                <h2 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Different products. Same boundary.</h2>
+                <p className="text-xs font-black uppercase tracking-[.18em] text-[#6b7d4e]">
+                  Where it fits
+                </p>
+                <h2 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">
+                  Different products. Same boundary.
+                </h2>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {["Education platforms", "Membership products", "Premium communities", "Internal training"].map((item) => (
-                  <div key={item} className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-4 text-sm font-semibold">
+                {[
+                  "Education platforms",
+                  "Membership products",
+                  "Premium communities",
+                  "Internal training",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-4 text-sm font-semibold"
+                  >
                     <Check className="size-4 text-[#708c4a]" /> {item}
                   </div>
                 ))}

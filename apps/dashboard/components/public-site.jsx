@@ -58,10 +58,16 @@ export function PublicFooter() {
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {groups.map(([title, links]) => (
             <div key={title}>
-              <h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#8ea17f]">{title}</h3>
+              <h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#8ea17f]">
+                {title}
+              </h3>
               <div className="mt-4 space-y-3">
                 {links.map(([label, href]) => (
-                  <Link key={href} href={href} className="block text-sm text-[#dce3d8] hover:text-white">
+                  <Link
+                    key={href}
+                    href={href}
+                    className="block text-sm text-[#dce3d8] hover:text-white"
+                  >
                     {label}
                   </Link>
                 ))}
@@ -107,7 +113,9 @@ export function PublicPage({ eyebrow, title, intro, sections = [], children, cta
                   <span className="grid size-9 place-items-center rounded-xl bg-[#edf4df] text-[#607742]">
                     <Check size={17} />
                   </span>
-                  <h2 className="mt-5 text-xl font-semibold tracking-[-.02em] text-[#20291d]">{section.title}</h2>
+                  <h2 className="mt-5 text-xl font-semibold tracking-[-.02em] text-[#20291d]">
+                    {section.title}
+                  </h2>
                   <p className="mt-3 text-sm leading-6 text-[#687362]">{section.body}</p>
                   {section.items?.length > 0 && (
                     <ul className="mt-5 space-y-2 text-sm text-[#4d5948]">
@@ -129,7 +137,9 @@ export function PublicPage({ eyebrow, title, intro, sections = [], children, cta
           <section className="mx-auto max-w-7xl px-5 pb-20 md:px-8 md:pb-28">
             <div className="rounded-[32px] bg-[#172014] px-7 py-10 text-white md:flex md:items-center md:justify-between md:px-10">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.18em] text-[#a9bd83]">READY TO INTEGRATE?</p>
+                <p className="text-xs font-bold uppercase tracking-[.18em] text-[#a9bd83]">
+                  READY TO INTEGRATE?
+                </p>
                 <h2 className="mt-3 text-2xl font-semibold tracking-[-.03em] sm:text-3xl">
                   Protect the next playback session.
                 </h2>
