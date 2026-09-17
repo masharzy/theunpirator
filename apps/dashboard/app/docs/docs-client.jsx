@@ -39,8 +39,7 @@ const STACKS = {
     label: "Next.js",
     short: "Next.js",
     packages: "@unpirator/react @unpirator/integration-nextjs",
-    install:
-      "npm install @unpirator/react@0.1.12 @unpirator/integration-nextjs@0.1.1",
+    install: "npm install @unpirator/react@0.1.12 @unpirator/integration-nextjs@0.1.1",
     serverLabel: "Your class page / server loader",
     server: `import { createUnpiratorServerClient } from "@unpirator/integration-nextjs";
 
@@ -503,11 +502,13 @@ const animationSteps = [
   },
   {
     label: "Private source stays out of the browser",
-    caption: "The source URL remains server-side and is sent only over server-to-server HTTPS to Unpirator.",
+    caption:
+      "The source URL remains server-side and is sent only over server-to-server HTTPS to Unpirator.",
   },
   {
     label: "Server calls Unpirator",
-    caption: "The server sends content ID, title, provider and private source over server-to-server HTTPS.",
+    caption:
+      "The server sends content ID, title, provider and private source over server-to-server HTTPS.",
   },
   {
     label: "Unpirator returns playbackRef",
@@ -519,7 +520,8 @@ const animationSteps = [
   },
   {
     label: "Player requests a session",
-    caption: "After mount, the player automatically POSTs playbackRef + device data to the customer's playback endpoint.",
+    caption:
+      "After mount, the player automatically POSTs playbackRef + device data to the customer's playback endpoint.",
   },
   {
     label: "Customer authorizes the viewer",
@@ -599,7 +601,9 @@ function StackPicker({ stack, onChange, dense = false }) {
 function Responsibility({ type, title, children }) {
   return (
     <div className={`docs-responsibility docs-responsibility-${type}`}>
-      <span>{type === "customer" ? "YOUR APP" : type === "automatic" ? "AUTOMATIC" : "UNPIRATOR"}</span>
+      <span>
+        {type === "customer" ? "YOUR APP" : type === "automatic" ? "AUTOMATIC" : "UNPIRATOR"}
+      </span>
       <strong>{title}</strong>
       <p>{children}</p>
     </div>
@@ -630,13 +634,16 @@ function JourneyAnimation() {
     setRunning(true);
 
     animationSteps.forEach((_, index) => {
-      const timer = window.setTimeout(() => {
-        setStep(index);
-        if (index === animationSteps.length - 1) {
-          const doneTimer = window.setTimeout(() => setRunning(false), 1200);
-          timers.current.push(doneTimer);
-        }
-      }, 1250 * index + 250);
+      const timer = window.setTimeout(
+        () => {
+          setStep(index);
+          if (index === animationSteps.length - 1) {
+            const doneTimer = window.setTimeout(() => setRunning(false), 1200);
+            timers.current.push(doneTimer);
+          }
+        },
+        1250 * index + 250,
+      );
 
       timers.current.push(timer);
     });
@@ -650,9 +657,7 @@ function JourneyAnimation() {
         <div>
           <span className="journey-eyebrow">INTERACTIVE ARCHITECTURE</span>
           <h3>Watch one student open one existing class.</h3>
-          <p>
-            This is the complete path — from your database record to the first protected frame.
-          </p>
+          <p>This is the complete path — from your database record to the first protected frame.</p>
         </div>
         <div className="journey-actions">
           <button type="button" className="primary-cta" onClick={play} disabled={running}>
@@ -667,20 +672,28 @@ function JourneyAnimation() {
       <div className="journey-stage" aria-live="polite">
         <div className="journey-browser">
           <div className="journey-browser-top">
-            <span><i /><i /><i /></span>
+            <span>
+              <i />
+              <i />
+              <i />
+            </span>
             <div>academy.example.com/classes/physics-12</div>
           </div>
 
           <div className="journey-browser-page">
             <div className="journey-course-head">
-              <div className="journey-avatar"><UserRound size={16} /></div>
+              <div className="journey-avatar">
+                <UserRound size={16} />
+              </div>
               <div>
                 <small>PHYSICS · CLASS 12</small>
                 <strong>Wave motion & oscillation</strong>
               </div>
             </div>
 
-            <div className={`journey-video ${step >= 5 ? "is-player" : ""} ${step >= 8 ? "is-playing" : ""}`}>
+            <div
+              className={`journey-video ${step >= 5 ? "is-player" : ""} ${step >= 8 ? "is-playing" : ""}`}
+            >
               {step < 5 ? (
                 <>
                   <Video size={28} />
@@ -693,7 +706,9 @@ function JourneyAnimation() {
                   </div>
                   <div className="journey-player-center">
                     {step >= 8 ? <Play size={28} fill="currentColor" /> : <LockKeyhole size={28} />}
-                    <span>{step >= 8 ? "Protected playback started" : "Requesting protected session…"}</span>
+                    <span>
+                      {step >= 8 ? "Protected playback started" : "Requesting protected session…"}
+                    </span>
                   </div>
                   <div className="journey-player-progress">
                     <i className={step >= 8 ? "is-playing" : ""} />
@@ -803,9 +818,15 @@ function JourneyAnimation() {
       </div>
 
       <div className="journey-legend">
-        <span><i className="customer" /> Customer code</span>
-        <span><i className="unpirator" /> Unpirator</span>
-        <span><i className="private" /> Private — browser never receives this</span>
+        <span>
+          <i className="customer" /> Customer code
+        </span>
+        <span>
+          <i className="unpirator" /> Unpirator
+        </span>
+        <span>
+          <i className="private" /> Private — browser never receives this
+        </span>
       </div>
     </div>
   );
@@ -817,7 +838,9 @@ export function DocsClient() {
 
   return (
     <div className="marketing docs-shell">
-      <a className="skip-link" href="#docs-content">Skip to documentation</a>
+      <a className="skip-link" href="#docs-content">
+        Skip to documentation
+      </a>
       <PublicNav />
 
       <header className="docs-hero section-wrap">
@@ -830,8 +853,8 @@ export function DocsClient() {
             <br /> Playback stays protected.
           </h1>
           <p>
-            Keep source URLs out of the browser. Your server sends them privately to Unpirator,
-            and Unpirator handles protected playback.
+            Keep source URLs out of the browser. Your server sends them privately to Unpirator, and
+            Unpirator handles protected playback.
           </p>
 
           <div className="hero-stack-picker">
@@ -851,7 +874,11 @@ export function DocsClient() {
 
         <div className="docs-terminal" aria-label="Quick installation example">
           <div className="docs-terminal-top">
-            <span><i /><i /><i /></span>
+            <span>
+              <i />
+              <i />
+              <i />
+            </span>
             install · {s.short}
           </div>
           <code>
@@ -884,7 +911,10 @@ export function DocsClient() {
           <div className="docs-side-help">
             <ShieldCheck size={19} />
             <strong>Need workspace values?</strong>
-            <p>Open your site&apos;s Integration page to copy Site ID, API URL and create a server API key.</p>
+            <p>
+              Open your site&apos;s Integration page to copy Site ID, API URL and create a server
+              API key.
+            </p>
             <Link href="/dashboard/integration">
               Open integration <ArrowUpRight size={14} />
             </Link>
@@ -896,8 +926,8 @@ export function DocsClient() {
             <div className="docs-kicker">01 · START HERE</div>
             <h2>One class page. Two server calls. No source URL in the browser.</h2>
             <p className="docs-lead">
-              You do <strong>not</strong> need to move your existing video library into an
-              Unpirator admin panel. Your own database remains the source of truth.
+              You do <strong>not</strong> need to move your existing video library into an Unpirator
+              admin panel. Your own database remains the source of truth.
             </p>
 
             <div className="docs-important-flow">
@@ -905,13 +935,17 @@ export function DocsClient() {
                 <span>1</span>
                 <ServerCog size={21} />
                 <strong>Load your existing video on your server</strong>
-                <p>Your server already knows the class ID, title, provider and private source URL.</p>
+                <p>
+                  Your server already knows the class ID, title, provider and private source URL.
+                </p>
               </article>
               <article>
                 <span>2</span>
                 <KeyRound size={21} />
                 <strong>Send that server-side video data to Unpirator</strong>
-                <p>Unpirator finds/updates the asset and returns <code>playbackRef</code>.</p>
+                <p>
+                  Unpirator finds/updates the asset and returns <code>playbackRef</code>.
+                </p>
               </article>
               <article>
                 <span>3</span>
@@ -923,30 +957,40 @@ export function DocsClient() {
                 <span>4</span>
                 <ShieldCheck size={21} />
                 <strong>The player requests playback automatically</strong>
-                <p>Your playback endpoint checks the logged-in user before Unpirator creates a session.</p>
+                <p>
+                  Your playback endpoint checks the logged-in user before Unpirator creates a
+                  session.
+                </p>
               </article>
             </div>
 
             <div className="docs-callout">
               <LockKeyhole size={20} />
               <div>
-                <strong>Important: “lesson”, “video”, “course” and your database functions belong to YOUR application.</strong>
+                <strong>
+                  Important: “lesson”, “video”, “course” and your database functions belong to YOUR
+                  application.
+                </strong>
                 <p>
-                  Unpirator does not magically know your <code>lesson.id</code>, source URL or course
-                  permissions. The examples below show where your existing app data maps into the integration.
+                  Unpirator does not magically know your <code>lesson.id</code>, source URL or
+                  course permissions. The examples below show where your existing app data maps into
+                  the integration.
                 </p>
               </div>
             </div>
 
             <div className="docs-responsibility-grid">
               <Responsibility type="customer" title="Your existing application">
-                Loads the class/video, knows the private source, knows who the student is and decides whether that student can watch.
+                Loads the class/video, knows the private source, knows who the student is and
+                decides whether that student can watch.
               </Responsibility>
               <Responsibility type="unpirator" title="Unpirator">
-                Registers/resolves the source, returns playbackRef, creates short-lived playback sessions and protects media delivery.
+                Registers/resolves the source, returns playbackRef, creates short-lived playback
+                sessions and protects media delivery.
               </Responsibility>
               <Responsibility type="automatic" title="The player package">
-                Receives playbackRef, creates stable device metadata, calls your playback endpoint and handles the protected playback lifecycle.
+                Receives playbackRef, creates stable device metadata, calls your playback endpoint
+                and handles the protected playback lifecycle.
               </Responsibility>
             </div>
           </section>
@@ -970,11 +1014,14 @@ export function DocsClient() {
 
             <div className="docs-step-banner">
               <span>STEP 1 · SERVER-SIDE</span>
-              <strong>Wherever your app already loads a class/video, send that private video data to Unpirator and receive playbackRef.</strong>
+              <strong>
+                Wherever your app already loads a class/video, send that private video data to
+                Unpirator and receive playbackRef.
+              </strong>
               <p>
-                You choose the file/controller/loader. This runs on your server because the private source
-                URL and API key must never enter the browser. Unpirator receives and stores the source only
-                on its server side as protected asset metadata.
+                You choose the file/controller/loader. This runs on your server because the private
+                source URL and API key must never enter the browser. Unpirator receives and stores
+                the source only on its server side as protected asset metadata.
               </p>
             </div>
 
@@ -1000,11 +1047,13 @@ export function DocsClient() {
 
             <div className="docs-step-banner">
               <span>STEP 2 · SERVER-SIDE SECURITY BOUNDARY</span>
-              <strong>Create one playback endpoint that authenticates and authorizes the student.</strong>
+              <strong>
+                Create one playback endpoint that authenticates and authorizes the student.
+              </strong>
               <p>
                 The player calls this endpoint automatically. Any functions such as
-                <code> getLoggedInUser</code> or <code>hasCourseAccess</code> are intentionally marked
-                as YOUR APP because only your application knows its auth and purchase rules.
+                <code> getLoggedInUser</code> or <code>hasCourseAccess</code> are intentionally
+                marked as YOUR APP because only your application knows its auth and purchase rules.
               </p>
             </div>
 
@@ -1012,13 +1061,15 @@ export function DocsClient() {
 
             <div className="docs-note">
               The Next.js helper is deny-by-default: <code>resolveViewer</code> and
-              <code>authorizePlayback</code> are required. Only intentionally public/guest playback should
-              opt in with <code>allowGuests: true</code>.
+              <code>authorizePlayback</code> are required. Only intentionally public/guest playback
+              should opt in with <code>allowGuests: true</code>.
             </div>
 
             <div className="docs-step-banner">
               <span>STEP 3 · BROWSER</span>
-              <strong>Render the player with playbackRef — never with the private source URL.</strong>
+              <strong>
+                Render the player with playbackRef — never with the private source URL.
+              </strong>
               <p>
                 The <code>playbackRef</code> came from Step 1. After mount, the player automatically
                 calls the endpoint from Step 2.
@@ -1041,17 +1092,27 @@ export function DocsClient() {
               <div>
                 <code>deviceId</code>
                 <strong>Optional · recommended</strong>
-                <p>The SDK generates a random stable UUID automatically. It is not a hardware fingerprint. Sending it enables accurate device limits, device revocation and device history.</p>
+                <p>
+                  The SDK generates a random stable UUID automatically. It is not a hardware
+                  fingerprint. Sending it enables accurate device limits, device revocation and
+                  device history.
+                </p>
               </div>
               <div>
                 <code>externalUserId</code>
                 <strong>From YOUR server authentication</strong>
-                <p>Use a stable opaque account ID from your server session. It does not need to be a name or email, and browser-supplied identity must never be trusted.</p>
+                <p>
+                  Use a stable opaque account ID from your server session. It does not need to be a
+                  name or email, and browser-supplied identity must never be trusted.
+                </p>
               </div>
               <div>
                 <code>displayLabel</code>
                 <strong>Optional user label</strong>
-                <p>Only send a name/email/account label if you want readable labels in protection features or dashboards. Unpirator does not require it for identity.</p>
+                <p>
+                  Only send a name/email/account label if you want readable labels in protection
+                  features or dashboards. Unpirator does not require it for identity.
+                </p>
               </div>
               <div>
                 <code>siteId</code>
@@ -1073,10 +1134,11 @@ Content-Type: application/json
 }`}</CodeBlock>
 
             <div className="docs-note">
-              Your server adds the trusted <code>externalUserId</code>, <code>siteId</code> and server-only
-              API key before calling Unpirator. <code>displayLabel</code> is optional. <code>deviceId</code> is
-              also optional for custom clients, but recommended; without it playback still works while precise
-              per-device limits, revocation and history are unavailable.
+              Your server adds the trusted <code>externalUserId</code>, <code>siteId</code> and
+              server-only API key before calling Unpirator. <code>displayLabel</code> is optional.{" "}
+              <code>deviceId</code> is also optional for custom clients, but recommended; without it
+              playback still works while precise per-device limits, revocation and history are
+              unavailable.
             </div>
 
             <div className="docs-callout">
@@ -1084,7 +1146,8 @@ Content-Type: application/json
               <div>
                 <strong>Why Cache-Control: no-store?</strong>
                 <p>
-                  A playback-session response contains short-lived authorization material. <code>no-store</code>
+                  A playback-session response contains short-lived authorization material.{" "}
+                  <code>no-store</code>
                   tells browsers, proxies and CDNs not to cache and reuse that response.
                 </p>
               </div>
@@ -1098,7 +1161,9 @@ Content-Type: application/json
             <div className="docs-package-grid">
               {packages.map(([name, title, description], index) => (
                 <article key={name}>
-                  <div><Boxes size={18} /> 0{index + 1}</div>
+                  <div>
+                    <Boxes size={18} /> 0{index + 1}
+                  </div>
                   <code>{name}</code>
                   <h3>{title}</h3>
                   <p>{description}</p>
@@ -1115,11 +1180,19 @@ Content-Type: application/json
               {[
                 ["Create a site", "Use the exact production hostname where the player will run."],
                 ["Verify the hostname", "Complete one of the offered verification methods."],
-                ["Enable your provider", "Configure the provider/connection used by your video source."],
-                ["Create a server API key", "Keep it in server-only secret storage. Never expose it with NEXT_PUBLIC_ or VITE_."],
+                [
+                  "Enable your provider",
+                  "Configure the provider/connection used by your video source.",
+                ],
+                [
+                  "Create a server API key",
+                  "Keep it in server-only secret storage. Never expose it with NEXT_PUBLIC_ or VITE_.",
+                ],
               ].map(([title, text], index) => (
                 <article key={title}>
-                  <span><Check size={15} /></span>
+                  <span>
+                    <Check size={15} />
+                  </span>
                   <div>
                     <small>STEP {index + 1}</small>
                     <h3>{title}</h3>
@@ -1151,10 +1224,27 @@ UNPIRATOR_SITE_ID=00000000-0000-0000-0000-000000000000`}</CodeBlock>
             </div>
 
             <div className="docs-security-grid">
-              <div><ShieldCheck size={18} /><span>It is returned by Unpirator after server-side asset resolution.</span></div>
-              <div><ShieldCheck size={18} /><span>It is safe to pass to the authorized playback page.</span></div>
-              <div><ShieldCheck size={18} /><span>It does not contain the private source URL or provider Authorization header.</span></div>
-              <div><LockKeyhole size={18} /><span>It is not the permission check. Your server still authorizes the logged-in viewer for every session.</span></div>
+              <div>
+                <ShieldCheck size={18} />
+                <span>It is returned by Unpirator after server-side asset resolution.</span>
+              </div>
+              <div>
+                <ShieldCheck size={18} />
+                <span>It is safe to pass to the authorized playback page.</span>
+              </div>
+              <div>
+                <ShieldCheck size={18} />
+                <span>
+                  It does not contain the private source URL or provider Authorization header.
+                </span>
+              </div>
+              <div>
+                <LockKeyhole size={18} />
+                <span>
+                  It is not the permission check. Your server still authorizes the logged-in viewer
+                  for every session.
+                </span>
+              </div>
             </div>
           </section>
 
@@ -1163,10 +1253,14 @@ UNPIRATOR_SITE_ID=00000000-0000-0000-0000-000000000000`}</CodeBlock>
             <h2>The four rules that should never be optional.</h2>
 
             <ol className="docs-numbered">
-              <li>Keep <code>UNPIRATOR_API_KEY</code> on your server only.</li>
+              <li>
+                Keep <code>UNPIRATOR_API_KEY</code> on your server only.
+              </li>
               <li>Keep the original private source URL on your server only.</li>
               <li>Authenticate and authorize the viewer before each protected playback session.</li>
-              <li>Return playback-session responses with <code>Cache-Control: no-store</code>.</li>
+              <li>
+                Return playback-session responses with <code>Cache-Control: no-store</code>.
+              </li>
             </ol>
           </section>
 
