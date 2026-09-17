@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { and, desc, eq } from "drizzle-orm";
-import { devices, endUsers, securityEvents, playbackSessions } from "@unpirator/db/schema";
+import {
+  assets,
+  devices,
+  endUsers,
+  playbackSessions,
+  securityEvents,
+  sites,
+} from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 import { notFound } from "../errors.js";
 
@@ -18,6 +25,100 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
           .orderBy(desc(securityEvents.createdAt))
           .limit(300),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/events/:id", async (req, res, next) => {
+    try {
+      const [event] = await db
+        .select()
+        .from(securityEvents)
+        .where(and(eq(securityEvents.id, req.params.id), eq(securityEvents.tenantId, req.tenantId)))
+        .limit(1);
+      if (!event) throw notFound();
+
+      const [site, asset, viewer, session] = await Promise.all([
+        event.siteId
+          ? db
+              .select({ id: sites.id, name: sites.name, domain: sites.domain, status: sites.status })
+              .from(sites)
+              .where(and(eq(sites.id, event.siteId), eq(sites.tenantId, req.tenantId)))
+              .limit(1)
+              .then((rows) => rows[0] || null)
+          : null,
+        event.assetId
+          ? db
+              .select({
+                id: assets.id,
+                title: assets.title,
+                provider: assets.provider,
+                status: assets.status,
+                externalContentId: assets.externalContentId,
+              })
+              .from(assets)
+              .where(and(eq(assets.id, event.assetId), eq(assets.tenantId, req.tenantId)))
+              .limit(1)
+              .then((rows) => rows[0] || null)
+          : null,
+        event.endUserId
+          ? db
+              .select({
+                id: endUsers.id,
+                externalUserId: endUsers.externalUserId,
+                displayLabel: endUsers.displayLabel,
+                status: endUsers.status,
+              })
+              .from(endUsers)
+              .where(and(eq(endUsers.id, event.endUserId), eq(endUsers.tenantId, req.tenantId)))
+              .limit(1)
+              .then((rows) => rows[0] || null)
+          : null,
+        event.sessionId
+          ? db
+              .select({
+                id: playbackSessions.id,
+                deviceId: playbackSessions.deviceId,
+                status: playbackSessions.status,
+                ip: playbackSessions.ip,
+                userAgent: playbackSessions.userAgent,
+                startedAt: playbackSessions.startedAt,
+                lastHeartbeatAt: playbackSessions.lastHeartbeatAt,
+                expiresAt: playbackSessions.expiresAt,
+                endedAt: playbackSessions.endedAt,
+              })
+              .from(playbackSessions)
+              .where(
+                and(
+                  eq(playbackSessions.id, event.sessionId),
+                  eq(playbackSessions.tenantId, req.tenantId),
+                ),
+              )
+              .limit(1)
+              .then((rows) => rows[0] || null)
+          : null,
+      ]);
+
+      const device = session?.deviceId
+        ? await db
+            .select({
+              id: devices.id,
+              externalDeviceId: devices.externalDeviceId,
+              deviceName: devices.deviceName,
+              browser: devices.browser,
+              os: devices.os,
+              status: devices.status,
+              firstSeenAt: devices.firstSeenAt,
+              lastSeenAt: devices.lastSeenAt,
+            })
+            .from(devices)
+            .where(and(eq(devices.id, session.deviceId), eq(devices.tenantId, req.tenantId)))
+            .limit(1)
+            .then((rows) => rows[0] || null)
+        : null;
+
+      res.json({ event, site, asset, viewer, session, device });
     } catch (error) {
       next(error);
     }
