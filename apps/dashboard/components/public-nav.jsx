@@ -9,6 +9,7 @@ import { useAuth } from "./auth-provider";
 export function PublicNav() {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
   const menu = useRef(null);
   const lastY = useRef(0);
   const auth = useAuth();
@@ -23,6 +24,8 @@ export function PublicNav() {
       const currentY = window.scrollY;
       const delta = currentY - lastY.current;
 
+      setScrolled(currentY > 8);
+
       if (currentY <= 24) {
         setVisible(true);
       } else if (Math.abs(delta) > 4) {
@@ -33,6 +36,7 @@ export function PublicNav() {
     };
 
     lastY.current = window.scrollY;
+    setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -52,7 +56,6 @@ export function PublicNav() {
   const links = [
     ["Product", "/features"],
     ["Pricing", "/pricing"],
-    ["Integrations", "/integrations"],
     ["Security", "/security"],
     ["Docs", "/docs"],
     ["About", "/about"],
@@ -65,8 +68,16 @@ export function PublicNav() {
         position: "sticky",
         top: 0,
         zIndex: 60,
+        width: "100%",
+        maxWidth: "none",
+        margin: 0,
+        paddingInline: "max(20px, calc((100vw - 1344px) / 2))",
+        backgroundColor: "#ffffff",
+        borderBottomColor: scrolled || open ? "#dedfd6" : "#eceee8",
+        boxShadow: scrolled && (visible || open) ? "0 10px 30px rgba(24, 31, 20, 0.06)" : "none",
         transform: visible || open ? "translateY(0)" : "translateY(-110%)",
-        transition: "transform 280ms cubic-bezier(.22,.8,.24,1), box-shadow 220ms ease",
+        transition:
+          "transform 280ms cubic-bezier(.22,.8,.24,1), box-shadow 220ms ease, border-color 220ms ease",
         willChange: "transform",
       }}
     >
@@ -81,7 +92,7 @@ export function PublicNav() {
         ref={menu}
         className={`${
           open ? "!flex" : "!hidden"
-        } !absolute left-0 right-0 top-full z-50 !flex-col gap-1 border-t border-[#dfe5d9] bg-[#f8f9f4]/[.98] px-5 py-4 shadow-[0_18px_45px_rgba(24,32,20,.12)] backdrop-blur-xl md:!static md:!flex md:!flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-0`}
+        } !absolute left-0 right-0 top-full z-50 !flex-col gap-1 border-t border-[#e3e5df] bg-white px-5 py-4 shadow-[0_18px_45px_rgba(24,32,20,.10)] md:!static md:!flex md:!flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
         aria-label="Main navigation"
       >
         {links.map(([label, href]) => (
@@ -95,18 +106,18 @@ export function PublicNav() {
           </Link>
         ))}
 
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#dfe5d9] pt-4 md:!hidden">
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#e3e5df] pt-4 md:!hidden">
           {auth?.account ? (
             <>
               <Link
                 href="/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#172014] px-4 py-3 text-sm font-semibold text-white"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20251d] px-4 py-3 text-sm font-semibold text-white"
               >
                 Dashboard <ArrowUpRight size={15} />
               </Link>
               <Link
                 href="/dashboard/account"
-                className="inline-flex items-center justify-center rounded-xl border border-[#ccd5c3] px-4 py-3 text-sm font-semibold text-[#263020]"
+                className="inline-flex items-center justify-center rounded-xl border border-[#d6d9d2] bg-white px-4 py-3 text-sm font-semibold text-[#242820]"
               >
                 Account
               </Link>
@@ -115,13 +126,13 @@ export function PublicNav() {
             <>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-xl border border-[#ccd5c3] px-4 py-3 text-sm font-semibold text-[#263020]"
+                className="inline-flex items-center justify-center rounded-xl border border-[#d6d9d2] bg-white px-4 py-3 text-sm font-semibold text-[#242820]"
               >
                 Sign in
               </Link>
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#172014] px-4 py-3 text-sm font-semibold text-white"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20251d] px-4 py-3 text-sm font-semibold text-white"
               >
                 Get started <ArrowRight size={15} />
               </Link>
