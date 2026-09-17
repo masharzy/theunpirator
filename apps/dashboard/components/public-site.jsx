@@ -8,25 +8,21 @@ export function PublicFooter() {
       "Product",
       [
         ["Features", "/features"],
-        ["How it works", "/how-it-works"],
+        ["Pricing", "/pricing"],
         ["Integrations", "/integrations"],
         ["Security", "/security"],
-        ["Use cases", "/use-cases"],
       ],
     ],
     [
       "Company",
       [
         ["About", "/about"],
-        ["Changelog", "/changelog"],
-        ["Status", "/status"],
         ["Contact", "/contact"],
       ],
     ],
     [
       "Resources",
       [
-        ["Pricing", "/pricing"],
         ["Documentation", "/docs"],
         ["Sign in", "/login"],
         ["Create account", "/register"],
@@ -42,6 +38,7 @@ export function PublicFooter() {
       ],
     ],
   ];
+
   return (
     <footer className="border-t border-[#dde4d5] bg-[#11180f] text-white">
       <div className="mx-auto grid max-w-7xl gap-10 px-5 py-14 md:grid-cols-[1.2fr_2fr] md:px-8">
@@ -57,19 +54,14 @@ export function PublicFooter() {
             media sources to the browser.
           </p>
         </div>
+
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {groups.map(([title, links]) => (
             <div key={title}>
-              <h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#8ea17f]">
-                {title}
-              </h3>
+              <h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#8ea17f]">{title}</h3>
               <div className="mt-4 space-y-3">
                 {links.map(([label, href]) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="block text-sm text-[#dce3d8] hover:text-white"
-                  >
+                  <Link key={href} href={href} className="block text-sm text-[#dce3d8] hover:text-white">
                     {label}
                   </Link>
                 ))}
@@ -78,6 +70,7 @@ export function PublicFooter() {
           ))}
         </div>
       </div>
+
       <div className="mx-auto flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 py-5 text-xs text-[#8f9a89] sm:flex-row sm:items-center sm:justify-between md:px-8">
         <span>© {new Date().getFullYear()} The Unpirator</span>
         <span>Good content deserves good boundaries.</span>
@@ -100,7 +93,9 @@ export function PublicPage({ eyebrow, title, intro, sections = [], children, cta
             <p className="mt-6 max-w-2xl text-base leading-7 text-[#65705f] sm:text-lg">{intro}</p>
           </div>
         </section>
+
         {children}
+
         {sections.length > 0 && (
           <section className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24">
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -112,9 +107,7 @@ export function PublicPage({ eyebrow, title, intro, sections = [], children, cta
                   <span className="grid size-9 place-items-center rounded-xl bg-[#edf4df] text-[#607742]">
                     <Check size={17} />
                   </span>
-                  <h2 className="mt-5 text-xl font-semibold tracking-[-.02em] text-[#20291d]">
-                    {section.title}
-                  </h2>
+                  <h2 className="mt-5 text-xl font-semibold tracking-[-.02em] text-[#20291d]">{section.title}</h2>
                   <p className="mt-3 text-sm leading-6 text-[#687362]">{section.body}</p>
                   {section.items?.length > 0 && (
                     <ul className="mt-5 space-y-2 text-sm text-[#4d5948]">
@@ -131,13 +124,12 @@ export function PublicPage({ eyebrow, title, intro, sections = [], children, cta
             </div>
           </section>
         )}
+
         {cta && (
           <section className="mx-auto max-w-7xl px-5 pb-20 md:px-8 md:pb-28">
             <div className="rounded-[32px] bg-[#172014] px-7 py-10 text-white md:flex md:items-center md:justify-between md:px-10">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.18em] text-[#a9bd83]">
-                  READY TO INTEGRATE?
-                </p>
+                <p className="text-xs font-bold uppercase tracking-[.18em] text-[#a9bd83]">READY TO INTEGRATE?</p>
                 <h2 className="mt-3 text-2xl font-semibold tracking-[-.03em] sm:text-3xl">
                   Protect the next playback session.
                 </h2>
