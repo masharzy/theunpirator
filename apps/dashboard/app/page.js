@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { ProtectionPreview } from "@/components/protection-preview";
 import { PublicNav } from "@/components/public-nav";
+import { PublicPlans } from "@/components/public-plans";
+import { PublicFooter } from "@/components/public-site";
 const features = [
   [
     LockKeyhole,
@@ -60,7 +62,7 @@ const faqs = [
   ],
   [
     "What is included in the plans?",
-    "Workspace plans define site, device and concurrent stream limits. Paid checkout is not enabled. The comparison describes configured limits, without implying a paid subscription is available.",
+    "Public pricing and included features come directly from the active plans configured by the platform administrator.",
   ],
 ];
 export default function Home() {
@@ -283,65 +285,18 @@ export default function Home() {
           <div className="section-intro">
             <div>
               <div className="eyebrow">ROOM TO GROW</div>
-              <h2>
-                Start with your first site.
-                <br />
-                Grow on your terms.
-              </h2>
+              <h2>Plans that match the controls you need.</h2>
             </div>
             <p>
-              Workspace tiers for different playback needs. These are configured access limits; paid
-              checkout is not yet available.
+              Pricing, limits and included protection features come directly from the active public
+              plans configured by the platform administrator.
             </p>
           </div>
-          <div className="plan-grid">
-            {[
-              [
-                "Starter",
-                "For your first protected library.",
-                "1 site",
-                "2 devices per viewer",
-                "1 concurrent stream",
-                "Block additional streams",
-              ],
-              [
-                "Pro",
-                "For a growing learning platform.",
-                "3 sites",
-                "4 devices per viewer",
-                "2 concurrent streams",
-                "Replace older sessions",
-              ],
-              [
-                "Business",
-                "For multiple content properties.",
-                "10 sites",
-                "8 devices per viewer",
-                "3 concurrent streams",
-                "Replace older sessions",
-              ],
-            ].map(([name, desc, ...items], i) => (
-              <article key={name} className={`plan-card ${i === 1 ? "featured-plan" : ""}`}>
-                <div className="plan-heading">
-                  <h3>{name}</h3>
-                  {i === 1 && <span>MORE FLEXIBILITY</span>}
-                </div>
-                <p>{desc}</p>
-                <div className="plan-label">Workspace tier</div>
-                <ul>
-                  {[...items, "Protected playback", "Dynamic watermark"].map((item) => (
-                    <li key={item}>
-                      <Check size={16} />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link href={i === 0 ? "/register" : "/docs#plans"}>
-                  {i === 0 ? "Create a workspace" : "Explore plan limits"}
-                  <ArrowUpRight size={18} />
-                </Link>
-              </article>
-            ))}
+          <PublicPlans compact />
+          <div className="mt-8">
+            <Link href="/pricing" className="text-cta">
+              Compare all plan details <ArrowUpRight size={18} />
+            </Link>
           </div>
         </section>
         <section className="section-wrap faq-section">
@@ -380,23 +335,7 @@ export default function Home() {
           <p>Connect your site. Register your media. Control the stream.</p>
         </section>
       </main>
-      <footer className="site-footer section-wrap">
-        <Link href="/" className="wordmark">
-          <span className="brand-symbol">
-            <ShieldCheck size={20} />
-          </span>
-          unpirator.
-        </Link>
-        <p>Good content deserves good boundaries.</p>
-        <div>
-          <Link href="/docs">Documentation</Link>
-          <a href="#platform">Platform</a>
-          <Link href="/login">
-            Dashboard <ArrowUpRight size={13} />
-          </Link>
-        </div>
-        <small>© {new Date().getFullYear()} The Unpirator</small>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

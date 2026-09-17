@@ -35,6 +35,7 @@ import { internalRouter } from "./routes/internal.js";
 import { billingRouter } from "./routes/billing.js";
 import { workspaceRouter } from "./routes/workspace.js";
 import { webhooksRouter } from "./routes/webhooks.js";
+import { publicRouter } from "./routes/public.js";
 
 export function createApp(overrides = {}) {
   const config = overrides.config || loadConfig();
@@ -70,6 +71,7 @@ export function createApp(overrides = {}) {
   app.use(cookieParser());
 
   app.use("/health", healthRouter({ dbClient, cache }));
+  app.use("/v1/public", publicRouter({ db }));
   app.use(
     "/v1/auth",
     createRateLimiter(cache, { prefix: "auth", limit: 20, windowSeconds: 60 }),
