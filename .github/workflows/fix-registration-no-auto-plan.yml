@@ -29,14 +29,15 @@ jobs:
               raise SystemExit("subscriptions import not found")
           text = text.replace(import_line, "", 1)
 
-          block = '''  await tx.insert(subscriptions).values({
-    tenantId: tenant.id,
-    planId: "starter",
-    status: "trialing",
-    periodStart: new Date(),
-    periodEnd: new Date(Date.now() + 14 * 86400_000),
-  });
-'''
+          block = (
+              "  await tx.insert(subscriptions).values({\n"
+              "    tenantId: tenant.id,\n"
+              "    planId: \"starter\",\n"
+              "    status: \"trialing\",\n"
+              "    periodStart: new Date(),\n"
+              "    periodEnd: new Date(Date.now() + 14 * 86400_000),\n"
+              "  });\n"
+          )
           if block not in text:
               raise SystemExit("hardcoded starter trial block not found")
           text = text.replace(block, "", 1)
