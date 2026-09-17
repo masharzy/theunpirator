@@ -1,11 +1,13 @@
 "use client";
+
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowRight, KeyRound, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import Link from "next/link";
-import { PublicNav } from "@/components/public-nav";
+import { AuthShell } from "@/components/auth-shell";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,6 +16,7 @@ export default function LoginPage() {
   const [google, setGoogle] = useState(false);
   const [challenge, setChallenge] = useState("");
   const [code, setCode] = useState("");
+
   useEffect(() => {
     api("/v1/auth/capabilities")
       .then((v) => setGoogle(v.google))
@@ -25,6 +28,7 @@ export default function LoginPage() {
         "That email already has an account. Sign in with your password, then link Google from account settings.",
       );
   }, []);
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -58,67 +62,100 @@ export default function LoginPage() {
       setBusy(false);
     }
   }
+
   return (
-    <>
-      <PublicNav />
-      <main className="auth-stage">
-        <Card className="auth-panel">
-          <CardHeader>
-            <CardTitle>The Unpirator</CardTitle>
-            <CardDescription>Sign in to your protected media control plane.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={submit}>
-              {!challenge && (
-                <>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                  />
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password"
-                    minLength={10}
-                    required
-                  />
-                </>
-              )}
-              {challenge && (
+    <AuthShell
+      mode="login"
+      title={challenge ? "Verify it’s you." : "Sign in to your workspace."}
+      intro={
+        challenge
+          ? "Enter the 6-digit code from your authenticator app to continue."
+          : "Open the control plane for your sites, viewers and protected playback sessions."
+      }
+    >
+      <form className="space-y-4" onSubmit={submit}>
+        {!challenge ? (
+          <>
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
+                Email
+              </span>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#7b8674]" />
                 <Input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="6-digit authenticator code"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="h-12 rounded-xl border-[#d7ded0] bg-[#fafbf8] pl-10"
                   required
                 />
-              )}
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              <Button className="w-full" disabled={busy}>
-                {busy ? "Signing in…" : "Sign in"}
-              </Button>
-            </form>
-            {!challenge && (
-              <div className="auth-links">
-                <Link href="/forgot-password">Forgot password?</Link>
-                <Link href="/register">Create workspace</Link>
               </div>
-            )}
-            {google && !challenge && (
-              <Button asChild variant="outline" className="mt-4 w-full">
-                <a href="/control-api/v1/auth/google">Continue with Google</a>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </>
+            </label>
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
+                  Password
+                </span>
+                <Link href="/forgot-password" className="text-xs font-semibold text-[#607742] hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#7b8674]" />
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  minLength={10}
+                  className="h-12 rounded-xl border-[#d7ded0] bg-[#fafbf8] pl-10"
+                  required
+                />
+              </div>
+            </label>
+          </>
+        ) : (
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
+              Authenticator code
+            </span>
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="000000"
+              className="h-14 rounded-xl border-[#d7ded0] bg-[#fafbf8] text-center text-xl tracking-[.35em]"
+              required
+            />
+          </label>
+        )}
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
+            {error}
+          </div>
+        )}
+
+        <Button className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]" disabled={busy}>
+          {busy ? "Signing in…" : challenge ? "Verify and continue" : "Sign in"}
+          {!busy && <ArrowRight className="ml-2 size-4" />}
+        </Button>
+      </form>
+
+      {google && !challenge && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[.16em] text-[#9aa391]">
+            <span className="h-px flex-1 bg-[#e0e5da]" /> or <span className="h-px flex-1 bg-[#e0e5da]" />
+          </div>
+          <Button asChild variant="outline" className="h-12 w-full rounded-xl border-[#d7ded0] bg-white">
+            <a href="/control-api/v1/auth/google">Continue with Google</a>
+          </Button>
+        </>
+      )}
+    </AuthShell>
   );
 }
