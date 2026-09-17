@@ -9,9 +9,12 @@ export const POST = createUnpiratorPlaybackHandler({
   apiUrl: process.env.UNPIRATOR_API_URL,
   apiKey: process.env.UNPIRATOR_API_KEY,
   siteId: process.env.UNPIRATOR_SITE_ID,
+  resolveViewer: async (request) => ({ id: await resolveUserId(request) }),
+  authorizePlayback: async ({ body, viewer }) =>
+    canViewPlayback(viewer.id, body.playbackRef),
 });
 ```
 
-Add `resolveViewer` to authorize signed-in viewers. Keep every configuration value server-side.
+`resolveViewer` and `authorizePlayback` are required by default. Set `allowGuests: true` only for intentionally public playback. `deviceId` is optional at the API boundary, but recommended for accurate device controls. Keep every configuration value server-side.
 
 See the [complete integration guide](https://github.com/masharzy/theunpirator/blob/main/docs/PACKAGE-INTEGRATION.md).

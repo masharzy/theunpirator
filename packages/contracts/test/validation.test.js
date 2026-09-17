@@ -41,6 +41,15 @@ describe("public input validation", () => {
       }).success,
     ).toBe(false);
   });
+  it("accepts playback without a device id", () => {
+    expect(
+      playbackSessionSchema.safeParse({
+        siteId: "site",
+        assetId: "asset",
+        externalUserId: "user",
+      }).success,
+    ).toBe(true);
+  });
   it("normalizes verbose client metadata instead of rejecting playback", () => {
     const browser =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +

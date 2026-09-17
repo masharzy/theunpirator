@@ -96,7 +96,7 @@ export const playbackSessionSchema = z
       .strict()
       .optional(),
     externalUserId: z.string().min(1).max(180),
-    deviceId: z.string().min(8).max(180),
+    deviceId: z.string().min(8).max(180).optional(),
     displayLabel: z.string().max(180).optional(),
     client: playbackClientSchema.default({}),
   })

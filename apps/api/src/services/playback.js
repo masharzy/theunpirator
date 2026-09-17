@@ -178,6 +178,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         .returning();
     if (user.status !== "active") throw new AppError("USER_BLOCKED", "User is blocked", 403);
     recordTiming("user");
+    const externalDeviceId = input.deviceId || "unidentified";
     let [device] = await db
       .select()
       .from(devices)
@@ -185,7 +186,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         and(
           eq(devices.tenantId, tenantId),
           eq(devices.endUserId, user.id),
-          eq(devices.externalDeviceId, input.deviceId),
+          eq(devices.externalDeviceId, externalDeviceId),
         ),
       )
       .limit(1);
@@ -201,6 +202,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           ),
         );
       if (
+        input.deviceId &&
         entitlements.device_control &&
         existing.length >= Number(entitlements.max_devices_per_user || 2)
       ) {
@@ -221,8 +223,10 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         .values({
           tenantId,
           endUserId: user.id,
-          externalDeviceId: input.deviceId,
-          deviceName: input.client.deviceName,
+          externalDeviceId,
+          deviceName: input.deviceId
+            ? input.client.deviceName
+            : input.client.deviceName || "Unidentified device",
           browser: input.client.browser,
           os: input.client.os,
         })
