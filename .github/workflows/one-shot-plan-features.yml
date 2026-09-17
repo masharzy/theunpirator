@@ -1,0 +1,276 @@
+name: One-shot plan feature migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-plan-features.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: unpirator
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Replace security levels with plan features
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import re
+
+          def read(path):
+              return Path(path).read_text()
+
+          def write(path, text):
+              Path(path).write_text(text)
+
+          def replace_once(text, old, new, path):
+              if old not in text:
+                  raise SystemExit(f"pattern not found in {path}: {old[:120]!r}")
+              return text.replace(old, new, 1)
+
+          # Contracts: assets no longer accept a customer-selected security level.
+          p = "packages/contracts/src/index.js"
+          s = read(p)
+          s = s.replace('    securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),\n', '')
+          write(p, s)
+
+          # DB schema: remove obsolete security-level columns.
+          p = "packages/db/src/schema.js"
+          s = read(p).replace('    securityPolicy: text("security_policy").default("strict").notNull(),\n', '')
+          write(p, s)
+
+          p = "packages/db/src/commerce-schema.js"
+          s = read(p).replace('  defaultSecurityPolicy: text("default_security_policy").default("strict").notNull(),\n', '')
+          write(p, s)
+
+          migration = '''-- Security behavior is now composed exclusively from plan entitlements.\nALTER TABLE assets DROP COLUMN IF EXISTS security_policy;\nALTER TABLE tenant_settings DROP COLUMN IF EXISTS default_security_policy;\n\nUPDATE plans\nSET entitlements = (\n  entitlements - 'max_security_policy' - 'advanced_security'\n) || jsonb_build_object(\n  'secure_gateway', COALESCE((entitlements->>'secure_gateway')::boolean, true),\n  'protected_delivery', COALESCE((entitlements->>'protected_delivery')::boolean, true),\n  'player_integrity', COALESCE((entitlements->>'player_integrity')::boolean, true),\n  'secure_browser_restriction', COALESCE((entitlements->>'secure_browser_restriction')::boolean, true),\n  'dynamic_watermark', COALESCE((entitlements->>'dynamic_watermark')::boolean, true),\n  'device_tracking', COALESCE((entitlements->>'device_tracking')::boolean, true),\n  'require_device_id', COALESCE((entitlements->>'require_device_id')::boolean, false),\n  'device_control', COALESCE((entitlements->>'device_control')::boolean, true),\n  'concurrent_stream_control', COALESCE((entitlements->>'concurrent_stream_control')::boolean, true),\n  'webhooks', COALESCE((entitlements->>'webhooks')::boolean, true),\n  'youtube_custom', COALESCE((entitlements->>'youtube_custom')::boolean, false)\n);\n'''
+          write("packages/db/migrations/0010_plan_feature_entitlements.sql", migration)
+
+          # Entitlements: concrete plan features, no policy ceiling.
+          p = "apps/api/src/services/entitlements.js"
+          s = read(p)
+          s = replace_once(s,
+          '''const DEFAULTS = {\n  secure_gateway: true,\n  dynamic_watermark: true,\n  device_control: true,\n  max_sites: 1,\n  max_devices_per_user: 2,\n  max_concurrent_streams: 1,\n  session_policy: "block_new",\n  // Legacy subscriptions predate policy ceilings and historically allowed Strict.\n  max_security_policy: "strict",\n  youtube_custom: false,\n};''',
+          '''const DEFAULTS = {\n  secure_gateway: false,\n  protected_delivery: false,\n  player_integrity: false,\n  secure_browser_restriction: false,\n  dynamic_watermark: false,\n  device_tracking: false,\n  require_device_id: false,\n  device_control: false,\n  concurrent_stream_control: false,\n  webhooks: false,\n  max_sites: 1,\n  max_devices_per_user: 2,\n  max_concurrent_streams: 1,\n  session_policy: "block_new",\n  youtube_custom: false,\n};''', p)
+          s = replace_once(s,
+          '''  return { ...DEFAULTS, ...subscription.entitlements };''',
+          '''  return { ...DEFAULTS, ...subscription.entitlements };''', p)
+          s = s.replace('      dynamic_watermark: false,\n      device_control: true,\n', '      dynamic_watermark: false,\n      device_tracking: false,\n      require_device_id: false,\n      device_control: false,\n      concurrent_stream_control: false,\n      webhooks: false,\n')
+          s = s.replace('  return evaluateRestricted(flags, key, tenantId);', '  const entitlements = await getEntitlements(db, tenantId);\n  return evaluateRestricted(flags, entitlements, key, tenantId);')
+          s = s.replace('function evaluateRestricted(flags, key, tenantId) {', 'function evaluateRestricted(flags, entitlements, key, tenantId) {')
+          s = s.replace('  const globalFlag = flags.find((f) => f.scopeType === "global" && f.scopeId === "global");\n  const tenantFlag = flags.find((f) => f.scopeType === "tenant" && f.scopeId === String(tenantId));\n  return globalFlag?.enabled === true && tenantFlag?.enabled === true;\n}', '  const globalFlag = flags.find((f) => f.scopeType === "global" && f.scopeId === "global");\n  const tenantFlag = flags.find((f) => f.scopeType === "tenant" && f.scopeId === String(tenantId));\n  return (\n    entitlements[key] === true && globalFlag?.enabled === true && tenantFlag?.enabled === true\n  );\n}')
+          old = '''  return {\n    entitlements,\n    secure: evaluateFeature(flags, entitlements, "secure_gateway", tenantId, true),\n    watermark: evaluateFeature(flags, entitlements, "dynamic_watermark", tenantId, true),\n    youtube: evaluateRestricted(flags, "youtube_custom", tenantId),\n  };'''
+          new = '''  return {\n    entitlements,\n    secure: evaluateFeature(flags, entitlements, "secure_gateway", tenantId, true),\n    protectedDelivery: entitlements.protected_delivery === true,\n    playerIntegrity: entitlements.player_integrity === true,\n    secureBrowserRestriction: entitlements.secure_browser_restriction === true,\n    watermark: evaluateFeature(flags, entitlements, "dynamic_watermark", tenantId, true),\n    deviceTracking: entitlements.device_tracking === true,\n    requireDeviceId: entitlements.require_device_id === true,\n    deviceControl: entitlements.device_control === true,\n    concurrentStreamControl: entitlements.concurrent_stream_control === true,\n    webhooks: entitlements.webhooks === true,\n    youtube: evaluateRestricted(flags, entitlements, "youtube_custom", tenantId),\n  };'''
+          s = replace_once(s, old, new, p)
+          write(p, s)
+
+          # Playback service: every behavior is switched by plan features.
+          p = "apps/api/src/services/playback.js"
+          s = read(p)
+          s = re.sub(r'export function effectiveSecurityPolicy\([\s\S]*?\n}\n\nexport function createPlaybackService', 'export function createPlaybackService', s, count=1)
+          s = s.replace('            securityPolicy: "strict",\n', '')
+          old = '''    const protectedHls = isHlsAsset(asset);\n    const entitlements = policy.entitlements;\n    const planPolicy = entitlements.max_security_policy || "strict";\n    // Plans define a security ceiling. A lower plan still plays every supported\n    // source; it receives the strongest policy included in that plan. Progressive\n    // MP4 currently uses native range delivery, whose effective ceiling is Standard.\n    const effectivePolicy = effectiveSecurityPolicy(\n      asset.securityPolicy,\n      planPolicy,\n      asset.provider === "youtube_custom" || protectedHls,\n    );'''
+          new = '''    const protectedHls = isHlsAsset(asset);\n    const entitlements = policy.entitlements;\n    if (policy.requireDeviceId && !input.deviceId)\n      throw new AppError("DEVICE_ID_REQUIRED", "This plan requires a device ID", 400);\n    if (asset.provider === "youtube_custom" && !policy.protectedDelivery)\n      throw new AppError(\n        "FEATURE_DISABLED",\n        "Protected delivery must be enabled for the YouTube provider",\n        403,\n      );\n    const playbackFeatures = {\n      protectedDelivery: policy.protectedDelivery,\n      playerIntegrity: policy.playerIntegrity,\n      secureBrowserRestriction: policy.secureBrowserRestriction,\n    };'''
+          s = replace_once(s, old, new, p)
+          s = s.replace('    const externalDeviceId = input.deviceId || "unidentified";', '    const externalDeviceId =\n      policy.deviceTracking && input.deviceId ? input.deviceId : "unidentified";')
+          s = s.replace('        input.deviceId &&\n        entitlements.device_control &&', '        policy.deviceTracking &&\n        input.deviceId &&\n        policy.deviceControl &&')
+          s = s.replace('      if (device.status !== "active")\n        throw new AppError("DEVICE_BLOCKED", "Device is blocked", 403);', '      if (policy.deviceControl && device.status !== "active")\n        throw new AppError("DEVICE_BLOCKED", "Device is blocked", 403);')
+          s = s.replace('          deviceName: input.deviceId\n            ? input.client.deviceName\n            : input.client.deviceName || "Unidentified device",', '          deviceName:\n            policy.deviceTracking && input.deviceId\n              ? input.client.deviceName\n              : input.client.deviceName || "Unidentified device",')
+          old = '''    if (activeSessions.length >= maxStreams) {'''
+          s = replace_once(s, old, '''    if (policy.concurrentStreamControl && activeSessions.length >= maxStreams) {''', p)
+          s = s.replace('      policy: effectivePolicy,\n', '      features: playbackFeatures,\n')
+          s = s.replace('    await gatewayControl.syncSession(session.id, "active", 8 * 3600);', '    await gatewayControl.syncSession(session.id, "active", 8 * 3600, playbackFeatures);', 1)
+          s = s.replace('    await queueWebhook(db, tenantId, "playback.started", {\n      sessionId: session.id,\n      assetId: asset.id,\n      externalUserId: input.externalUserId,\n    });', '    if (policy.webhooks)\n      await queueWebhook(db, tenantId, "playback.started", {\n        sessionId: session.id,\n        assetId: asset.id,\n        externalUserId: input.externalUserId,\n      });')
+          s = s.replace('      securityPolicy: effectivePolicy,\n', '      features: playbackFeatures,\n')
+          s = s.replace('      mode:\n        asset.provider === "youtube_custom"\n          ? "protected_segments"\n          : protectedHls\n            ? "protected_hls"\n            : "native",', '      mode:\n        asset.provider === "youtube_custom"\n          ? "protected_segments"\n          : protectedHls\n            ? policy.protectedDelivery\n              ? "protected_hls"\n              : "hls"\n            : "native",')
+          s = s.replace('    await queueWebhook(db, tenantId, "playback.revoked", {\n      sessionId: session.id,\n      assetId: session.assetId,\n    });', '    const policy = await getPlaybackPolicy(db, tenantId);\n    if (policy.webhooks)\n      await queueWebhook(db, tenantId, "playback.revoked", {\n        sessionId: session.id,\n        assetId: session.assetId,\n      });')
+          write(p, s)
+
+          # Gateway control carries feature snapshot into session state.
+          p = "apps/api/src/services/gateway-control.js"
+          s = read(p)
+          s = s.replace('  async function syncSession(sessionId, status, ttlSeconds = 300) {', '  async function syncSession(sessionId, status, ttlSeconds = 300, features = undefined) {')
+          s = s.replace('        body: JSON.stringify({ sessionId, status, ttlSeconds }),', '        body: JSON.stringify({ sessionId, status, ttlSeconds, features }),')
+          write(p, s)
+
+          # Playback asset sync never stores customer-selected security levels.
+          p = "apps/api/src/routes/playback.js"
+          s = read(p)
+          s = s.replace('          securityPolicy: input.securityPolicy,\n', '')
+          s = s.replace('            securityPolicy: input.securityPolicy,\n', '')
+          write(p, s)
+
+          # Asset CRUD: remove security policy from customer API/UI surface.
+          p = "apps/api/src/routes/assets.js"
+          s = read(p)
+          s = s.replace('          securityPolicy: assets.securityPolicy,\n', '')
+          s = s.replace('            securityPolicy: input.securityPolicy,\n', '')
+          s = s.replace('          securityPolicy: z.enum(["standard", "strict", "maximum"]).optional(),\n', '')
+          s = s.replace('            ...(input.securityPolicy ? { securityPolicy: input.securityPolicy } : {}),\n', '')
+          s = s.replace('            securityPolicy: assets.securityPolicy,\n', '')
+          write(p, s)
+
+          # Workspace settings: remove obsolete customer security posture selector.
+          p = "apps/api/src/routes/workspace.js"
+          s = read(p)
+          s = s.replace('    defaultSecurityPolicy: z.enum(["standard", "strict", "maximum"]).optional(),\n', '')
+          s = s.replace('            defaultSecurityPolicy: input.defaultSecurityPolicy || "strict",\n', '')
+          s = re.sub(r'\n\s*\.\.\.\(input\.defaultSecurityPolicy && \{\n\s*defaultSecurityPolicy: input\.defaultSecurityPolicy,\n\s*\}\),', '', s)
+          write(p, s)
+
+          # Internal refresh signs a fresh plan-feature snapshot instead of a policy string.
+          p = "apps/api/src/routes/internal.js"
+          s = read(p)
+          s = s.replace('import { restrictedFeatureEnabled, featureEnabled } from "../services/entitlements.js";', 'import { getPlaybackPolicy } from "../services/entitlements.js";')
+          s = s.replace('      if (!(await featureEnabled(db, "secure_gateway", tenantId, true)))\n        throw notFound("Playback unavailable");', '      const playbackPolicy = await getPlaybackPolicy(db, tenantId);\n      if (!playbackPolicy.secure) throw notFound("Playback unavailable");', 1)
+          s = s.replace('          config.YOUTUBE_CUSTOM_GLOBAL &&\n          (await restrictedFeatureEnabled(db, "youtube_custom", tenantId))', '          config.YOUTUBE_CUSTOM_GLOBAL && playbackPolicy.youtube')
+          s = s.replace('      const { tenantId, sessionId, assetId, siteId, userId, deviceId, policy } = req.body || {};', '      const { tenantId, sessionId, assetId, siteId, userId, deviceId } = req.body || {};')
+          s = s.replace('      if (\n        activeRows.some((rows) => !rows.length) ||\n        !(await featureEnabled(db, "secure_gateway", tenantId, true))\n      )\n        throw notFound("Playback unavailable");', '      const playbackPolicy = await getPlaybackPolicy(db, tenantId);\n      const [deviceRows, userRows, assetRows, tenantRows, siteRows] = activeRows;\n      if (\n        !userRows.length ||\n        !assetRows.length ||\n        !tenantRows.length ||\n        !siteRows.length ||\n        (playbackPolicy.deviceControl && !deviceRows.length) ||\n        !playbackPolicy.secure\n      )\n        throw notFound("Playback unavailable");')
+          s = s.replace('        policy: policy || "strict",\n', '        features: {\n          protectedDelivery: playbackPolicy.protectedDelivery,\n          playerIntegrity: playbackPolicy.playerIntegrity,\n          secureBrowserRestriction: playbackPolicy.secureBrowserRestriction,\n        },\n')
+          write(p, s)
+
+          # Gateway refresh forwards the feature snapshot; native HLS is allowed when protected delivery is off.
+          p = "workers/media-gateway/src/index.js"
+          s = read(p)
+          s = s.replace('        assertAllowedProtectedBrowser(request);\n        await assertProtectedOrigin(request, env, claims, assetId);\n        const body = await request.json();\n        if (body?.playerBuild !== PROTECTED_PLAYER_BUILD)', '        if (claims.features?.secureBrowserRestriction !== false)\n          assertAllowedProtectedBrowser(request);\n        await assertProtectedOrigin(request, env, claims, assetId);\n        const body = await request.json();\n        if (claims.features?.playerIntegrity !== false && body?.playerBuild !== PROTECTED_PLAYER_BUILD)')
+          s = s.replace('            policy: claims.policy,\n', '            features: claims.features,\n')
+          write(p, s)
+
+          p = "workers/media-gateway/src/proxy.js"
+          s = read(p)
+          s = s.replace('  if (source.delivery?.mode === "protected_segments")', '  if (claims.features?.protectedDelivery !== false && source.delivery?.mode === "protected_segments")')
+          s = s.replace('  if (source.manifestType === "hls")\n    throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");', '  if (claims.features?.protectedDelivery !== false && source.manifestType === "hls")\n    throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");')
+          write(p, s)
+
+          # Durable session state enforces integrity only when the plan includes it.
+          p = "workers/media-gateway/src/session-state.js"
+          s = read(p)
+          s = s.replace('        allowedSequence: 8,\n', '        allowedSequence: 8,\n        features: body.features || {},\n')
+          s = s.replace('      if (body.tampered === true) {', '      if (body.tampered === true && session.features?.playerIntegrity !== false) {')
+          s = s.replace('        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||', '        (session.features?.playerIntegrity !== false &&\n          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||')
+          s = s.replace('        Date.now() - session.lastIntegrityAt > 15000', '(session.features?.playerIntegrity !== false && Date.now() - session.lastIntegrityAt > 15000)')
+          write(p, s)
+
+          # Gateway receives feature snapshot when the session is created.
+          p = "workers/media-gateway/src/index.js"
+          s = read(p)
+          s = s.replace('          body: JSON.stringify({ status: body.status, ttlSeconds: body.ttlSeconds }),', '          body: JSON.stringify({\n            status: body.status,\n            ttlSeconds: body.ttlSeconds,\n            features: body.features || {},\n          }),')
+          write(p, s)
+
+          # Admin plan editor: every concrete feature is a checkbox; no level selector.
+          p = "apps/dashboard/app/admin/plans/page.js"
+          s = read(p)
+          old = '''const booleanEntitlements = [\n  ["secure_gateway", "Secure gateway"],\n  ["dynamic_watermark", "Dynamic watermark"],\n  ["device_control", "Device control"],\n  ["advanced_security", "Advanced security"],\n  ["webhooks", "Webhooks"],\n];'''
+          new = '''const booleanEntitlements = [\n  ["secure_gateway", "Secure gateway"],\n  ["protected_delivery", "Protected media delivery"],\n  ["player_integrity", "Player integrity verification"],\n  ["secure_browser_restriction", "Secure browser restriction"],\n  ["dynamic_watermark", "Dynamic watermark"],\n  ["device_tracking", "Device identity / tracking"],\n  ["require_device_id", "Require device ID"],\n  ["device_control", "Device block / revoke + device limits"],\n  ["concurrent_stream_control", "Concurrent stream control"],\n  ["webhooks", "Webhooks"],\n  ["youtube_custom", "Restricted YouTube provider"],\n];'''
+          s = replace_once(s, old, new, p)
+          old = '''  entitlements: {\n    secure_gateway: true,\n    dynamic_watermark: true,\n    device_control: true,\n    max_sites: 1,\n    max_devices_per_user: 2,\n    max_concurrent_streams: 1,\n    session_policy: "block_new",\n    max_security_policy: "standard",\n  },'''
+          new = '''  entitlements: {\n    secure_gateway: false,\n    protected_delivery: false,\n    player_integrity: false,\n    secure_browser_restriction: false,\n    dynamic_watermark: false,\n    device_tracking: false,\n    require_device_id: false,\n    device_control: false,\n    concurrent_stream_control: false,\n    webhooks: false,\n    youtube_custom: false,\n    max_sites: 1,\n    max_devices_per_user: 2,\n    max_concurrent_streams: 1,\n    session_policy: "block_new",\n  },'''
+          s = replace_once(s, old, new, p)
+          s = re.sub(r'\n\s*<label className="mt-4 block text-xs font-medium text-\[#5f6b58\]">\n\s*Maximum security policy[\s\S]*?</label>', '', s, count=1)
+          write(p, s)
+
+          # Customer asset page: no security-level control.
+          p = "apps/dashboard/app/dashboard/assets/[assetId]/page.js"
+          s = read(p)
+          s = s.replace('  const [policy, setPolicy] = useState("strict");\n', '')
+          s = s.replace('    setPolicy(assetData.asset.securityPolicy);\n', '')
+          s = s.replace('          securityPolicy: policy,\n', '')
+          s = re.sub(r'\n\s*<label className="block text-sm font-medium">\n\s*Security policy[\s\S]*?</label>', '', s, count=1)
+          s = s.replace('description="Control this source, connection and baseline security policy."', 'description="Control this source and its saved provider connection."')
+          write(p, s)
+
+          # Customer settings page: remove security-level selector entirely.
+          p = "apps/dashboard/app/dashboard/settings/page.js"
+          s = read(p)
+          s = s.replace(',\n    [policy, setPolicy] = useState("strict")', '')
+          s = s.replace('        setPolicy(d.settings?.defaultSecurityPolicy || "strict");\n', '')
+          s = s.replace('        body: JSON.stringify({ name, timezone, defaultSecurityPolicy: policy }),', '        body: JSON.stringify({ name, timezone }),')
+          s = re.sub(r'\n\s*<label className="block text-sm font-medium">\n\s*Default security policy[\s\S]*?</label>', '', s, count=1)
+          s = s.replace('description="Manage workspace identity, timezone and default security posture."', 'description="Manage workspace identity and timezone. Protection features come from the active plan."')
+          write(p, s)
+
+          # Replace obsolete policy-ceiling tests with plan-feature tests.
+          p = "apps/api/test/security-policy-ceiling.test.js"
+          write(p, '''import { describe, expect, it, vi } from "vitest";\nimport { getPlaybackPolicy } from "../src/services/entitlements.js";\n\nfunction database(entitlements, flags = []) {\n  const query = {\n    from: () => query,\n    innerJoin: () => query,\n    where: () => query,\n    orderBy: () => query,\n    limit: async () => (entitlements ? [{ entitlements }] : []),\n    then: (resolve, reject) => Promise.resolve(flags).then(resolve, reject),\n  };\n  return { select: vi.fn(() => query) };\n}\n\ndescribe("plan-driven playback features", () => {\n  it("enables only features present in the plan", async () => {\n    const policy = await getPlaybackPolicy(\n      database({\n        secure_gateway: true,\n        protected_delivery: true,\n        player_integrity: false,\n        secure_browser_restriction: false,\n        dynamic_watermark: true,\n        device_tracking: true,\n        require_device_id: false,\n        device_control: false,\n        concurrent_stream_control: true,\n        webhooks: false,\n      }),\n      "tenant-1",\n    );\n    expect(policy).toMatchObject({\n      secure: true,\n      protectedDelivery: true,\n      playerIntegrity: false,\n      secureBrowserRestriction: false,\n      watermark: true,\n      deviceTracking: true,\n      requireDeviceId: false,\n      deviceControl: false,\n      concurrentStreamControl: true,\n      webhooks: false,\n    });\n  });\n\n  it("disables playback features when there is no active plan", async () => {\n    const policy = await getPlaybackPolicy(database(null), "tenant-1");\n    expect(policy).toMatchObject({\n      secure: false,\n      protectedDelivery: false,\n      playerIntegrity: false,\n      watermark: false,\n      deviceControl: false,\n    });\n  });\n});\n''')
+
+          # Docs should not expose the removed level names. Replace common wording safely.
+          for path in ["apps/dashboard/app/docs/docs-client.jsx", "docs/SECURITY.md", "docs/API.md", "docs/INTEGRATION.md"]:
+              f = Path(path)
+              if not f.exists():
+                  continue
+              s = f.read_text()
+              s = s.replace('Standard / Strict / Maximum', 'plan-enabled protection features')
+              s = s.replace('standard / strict / maximum', 'plan-enabled protection features')
+              s = s.replace('security policy ceiling', 'plan feature entitlements')
+              s = s.replace('Security policy', 'Plan protection features')
+              f.write_text(s)
+          PY
+
+      - name: Format
+        run: pnpm exec prettier --write packages/contracts/src/index.js packages/db/src/schema.js packages/db/src/commerce-schema.js apps/api/src/services/entitlements.js apps/api/src/services/playback.js apps/api/src/services/gateway-control.js apps/api/src/routes/playback.js apps/api/src/routes/assets.js apps/api/src/routes/workspace.js apps/api/src/routes/internal.js workers/media-gateway/src/index.js workers/media-gateway/src/proxy.js workers/media-gateway/src/session-state.js apps/dashboard/app/admin/plans/page.js apps/dashboard/app/dashboard/assets/[assetId]/page.js apps/dashboard/app/dashboard/settings/page.js apps/api/test/security-policy-ceiling.test.js apps/dashboard/app/docs/docs-client.jsx docs/SECURITY.md docs/API.md docs/INTEGRATION.md
+
+      - name: Local verification
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/unpirator
+          REDIS_URL: redis://localhost:6379
+        run: |
+          node scripts/setup-local.js
+          pnpm db:migrate
+          pnpm check:syntax
+          pnpm format:check
+          pnpm lint
+          pnpm test
+          pnpm --filter @unpirator/dashboard build
+          pnpm --filter @unpirator/media-gateway build
+          echo "Remaining legacy security-level references:"
+          grep -RniE "securityPolicy|max_security_policy|defaultSecurityPolicy|effectiveSecurityPolicy" apps packages workers docs integrations || true
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "chatgpt-plan-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps packages workers docs integrations
+          git commit -m "feat: make protection fully plan-driven"
+          git push origin HEAD:main
