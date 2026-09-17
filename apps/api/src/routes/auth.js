@@ -10,7 +10,6 @@ import {
   oauthIdentities,
   tenantMembers,
   tenants,
-  subscriptions,
   platformBootstrapState,
 } from "@unpirator/db/schema";
 import {
@@ -75,13 +74,6 @@ async function makeToken(db, accountId, kind, ttl) {
 async function provision(tx, accountId, name) {
   const [tenant] = await tx.insert(tenants).values({ name }).returning();
   await tx.insert(tenantMembers).values({ tenantId: tenant.id, accountId, role: "owner" });
-  await tx.insert(subscriptions).values({
-    tenantId: tenant.id,
-    planId: "starter",
-    status: "trialing",
-    periodStart: new Date(),
-    periodEnd: new Date(Date.now() + 14 * 86400_000),
-  });
   await tx.update(accounts).set({ lastTenantId: tenant.id }).where(eq(accounts.id, accountId));
   return tenant;
 }
