@@ -11,6 +11,7 @@ import {
   assets,
   auditLogs,
   featureFlags,
+  plans,
   siteDomains,
   subscriptions,
 } from "@unpirator/db/schema";
@@ -283,6 +284,26 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     expect(a.body.playbackUrl).not.toContain("media.example.com");
   });
   it("creates and reuses an internal YouTube asset on demand", async () => {
+    const [subscription] = await database.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.tenantId, tenant))
+      .limit(1);
+    const [plan] = await database.db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, subscription.planId))
+      .limit(1);
+    await database.db
+      .update(plans)
+      .set({
+        entitlements: {
+          ...(plan.entitlements || {}),
+          youtube_custom: true,
+          protected_delivery: true,
+        },
+      })
+      .where(eq(plans.id, plan.id));
     for (const [scopeType, scopeId] of [
       ["global", "global"],
       ["tenant", tenant],
