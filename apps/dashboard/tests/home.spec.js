@@ -34,12 +34,39 @@ test("mobile homepage fits viewport", async ({ page }) => {
   await expect(nav.getByRole("link", { name: "Get started", exact: true })).toBeVisible();
 });
 
+test("dashboard requires a valid signed-in session", async ({ page }) => {
+  await page.context().clearCookies();
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/);
+});
+
+test("auth forms show written validation without browser bubbles", async ({ page }) => {
+  await page.goto("/register");
+  await page.getByRole("button", { name: "Create workspace", exact: true }).click();
+  await expect(page.getByText("Organization name must be at least 2 characters.")).toBeVisible();
+  await expect(page.getByText("Enter your email address.")).toBeVisible();
+  await expect(page.getByText("Create a password.")).toBeVisible();
+
+  const password = page.getByPlaceholder("8+ characters");
+  await password.fill("Abcdef1");
+  await expect(page.getByText("At least 8 characters").locator(".."))
+    .not.toHaveClass(/text-emerald-700/);
+  await password.fill("Abcdefg1");
+  await expect(page.getByText("At least 8 characters").locator(".."))
+    .toHaveClass(/text-emerald-700/);
+
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("Enter your email address.")).toBeVisible();
+  await expect(page.getByText("Enter your password.")).toBeVisible();
+});
+
 test("registration starts without an active plan", async ({ page }) => {
   const email = `browser-${Date.now()}@example.com`;
   await page.goto("/register");
   await page.getByPlaceholder("Acme Learning").fill("Browser test workspace");
   await page.getByPlaceholder("owner@example.com").fill(email);
-  await page.getByPlaceholder("12+ characters").fill("Browser-test-password-2026");
+  await page.getByPlaceholder("8+ characters").fill("Browser-test-password-2026");
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/onboarding$/, { timeout: 20000 });
   await expect(page.getByText("Verify your email.", { exact: true })).toBeVisible();
