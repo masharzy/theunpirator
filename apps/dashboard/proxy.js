@@ -23,20 +23,23 @@ async function getSession(request) {
 
 export async function proxy(request) {
   const pathname = request.nextUrl.pathname;
-  const protectedRoute = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+  const dashboardRoute = pathname.startsWith("/dashboard");
+  const adminRoute = pathname.startsWith("/admin");
   const authRoute = pathname === "/login" || pathname === "/register";
-  if (!protectedRoute && !authRoute) return NextResponse.next();
+  if (!dashboardRoute && !adminRoute && !authRoute) return NextResponse.next();
 
   const session = await getSession(request);
 
-  if (protectedRoute && !session) {
+  // Admin routes stay undiscoverable to unauthenticated and non-admin visitors.
+  // The URL remains /admin while the public 404 experience is rendered instead.
+  if (adminRoute && !session?.account?.platformRole) {
+    return NextResponse.rewrite(new URL("/not-found", request.url));
+  }
+
+  if (dashboardRoute && !session) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (pathname.startsWith("/admin") && !session?.account?.platformRole) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   if (authRoute && session) {
