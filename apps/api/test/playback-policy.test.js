@@ -21,7 +21,7 @@ const flag = (key, enabled, scopeType = "global", scopeId = "global") => ({
 
 describe("request-local playback policy", () => {
   it("reads policy twice in total while preserving all opt-ins", async () => {
-    const db = database({ secure_gateway: true, dynamic_watermark: true }, [
+    const db = database({ secure_gateway: true, dynamic_watermark: true, youtube_custom: true }, [
       flag("youtube_custom", true),
       flag("youtube_custom", true, "tenant", "t1"),
     ]);

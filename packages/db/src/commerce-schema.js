@@ -146,7 +146,6 @@ export const tenantSettings = pgTable("tenant_settings", {
     .references(() => tenants.id, { onDelete: "cascade" })
     .primaryKey(),
   timezone: text("timezone").default("Asia/Dhaka").notNull(),
-  defaultSecurityPolicy: text("default_security_policy").default("strict").notNull(),
   notificationPreferences: jsonb("notification_preferences").default({}).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

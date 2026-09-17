@@ -33,6 +33,7 @@ export class SessionState {
         lastIntegrityAt: Date.now(),
         startedAt: Date.now(),
         allowedSequence: 8,
+        features: body.features || {},
       });
       return Response.json({ ok: true });
     }
@@ -51,7 +52,7 @@ export class SessionState {
       const session = await this.state.storage.get("session");
       if (!session || session.status !== "active" || session.expiresAt <= Date.now())
         return Response.json({ error: "inactive" }, { status: 403 });
-      if (body.tampered === true) {
+      if (body.tampered === true && session.features?.playerIntegrity !== false) {
         session.status = "blocked";
         await this.state.storage.put("session", session);
         await this.state.storage.delete("mediaKey");
@@ -80,7 +81,8 @@ export class SessionState {
         !session ||
         session.status !== "active" ||
         session.expiresAt <= Date.now() ||
-        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        (session.features?.playerIntegrity !== false &&
+          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
         !["video", "audio"].includes(body.track) ||
         !Number.isInteger(body.variant) ||
         body.variant < 0 ||
@@ -123,7 +125,8 @@ export class SessionState {
         !session ||
         session.status !== "active" ||
         session.expiresAt <= Date.now() ||
-        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        (session.features?.playerIntegrity !== false &&
+          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
         !ticket ||
         ticket.expiresAt <= Date.now() ||
         ticket.track !== body.track ||
@@ -144,7 +147,8 @@ export class SessionState {
         !session ||
         session.status !== "active" ||
         session.expiresAt <= Date.now() ||
-        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        (session.features?.playerIntegrity !== false &&
+          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
         !/^(root|[a-f0-9]{40})$/.test(resourceId)
       )
         return Response.json({ error: "denied" }, { status: 403 });
@@ -174,7 +178,8 @@ export class SessionState {
         !session ||
         session.status !== "active" ||
         session.expiresAt <= Date.now() ||
-        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000 ||
+        (session.features?.playerIntegrity !== false &&
+          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
         !ticket ||
         ticket.expiresAt <= Date.now() ||
         ticket.resourceId !== body.resourceId ||
@@ -191,7 +196,8 @@ export class SessionState {
         !session ||
         session.status !== "active" ||
         session.expiresAt <= Date.now() ||
-        Date.now() - session.lastIntegrityAt > 15000
+        (session.features?.playerIntegrity !== false &&
+          Date.now() - session.lastIntegrityAt > 15000)
       )
         return Response.json({ error: "inactive" }, { status: 403 });
       const bytes = body.bytes;

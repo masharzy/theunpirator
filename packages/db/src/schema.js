@@ -270,7 +270,6 @@ export const assets = pgTable(
     providerReference: text("provider_reference").notNull(),
     allowedHosts: jsonb("allowed_hosts").default([]).notNull(),
     encryptedProviderConfig: text("encrypted_provider_config"),
-    securityPolicy: text("security_policy").default("strict").notNull(),
     status: text("status").default("active").notNull(),
     ...timestamps,
   },

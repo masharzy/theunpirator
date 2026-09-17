@@ -18,7 +18,6 @@ export default function AssetDetailPage() {
   const [connections, setConnections] = useState([]);
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("active");
-  const [policy, setPolicy] = useState("strict");
   const [connectionId, setConnectionId] = useState("");
   const [message, setMessage] = useState("");
 
@@ -31,7 +30,6 @@ export default function AssetDetailPage() {
     setConnection(assetData.connection || null);
     setTitle(assetData.asset.title);
     setStatus(assetData.asset.status);
-    setPolicy(assetData.asset.securityPolicy);
     setConnectionId(assetData.asset.connectionId || "");
     setConnections(
       (connectionData.items || []).filter((item) => item.provider === assetData.asset.provider),
@@ -49,7 +47,6 @@ export default function AssetDetailPage() {
         body: JSON.stringify({
           title,
           status,
-          securityPolicy: policy,
           connectionId: connectionId || null,
         }),
       });
@@ -95,7 +92,7 @@ export default function AssetDetailPage() {
       <PageHeader
         eyebrow={asset.provider}
         title={asset.title}
-        description="Control this source, connection and baseline security policy."
+        description="Control this source and its saved provider connection."
         action={<StatusPill status={asset.status} />}
       />
       {message && (
@@ -121,18 +118,6 @@ export default function AssetDetailPage() {
               >
                 <option value="active">Active</option>
                 <option value="disabled">Disabled</option>
-              </select>
-            </label>
-            <label className="block text-sm font-medium">
-              Security policy
-              <select
-                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
-                value={policy}
-                onChange={(e) => setPolicy(e.target.value)}
-              >
-                <option value="standard">Standard</option>
-                <option value="strict">Strict</option>
-                <option value="maximum">Maximum</option>
               </select>
             </label>
             <label className="block text-sm font-medium">

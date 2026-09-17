@@ -15,13 +15,6 @@ import { queueWebhook } from "./webhooks.js";
 import { AppError, notFound } from "../errors.js";
 import { getPlaybackPolicy } from "./entitlements.js";
 
-export function effectiveSecurityPolicy(requested, ceiling, supportsProtectedDelivery) {
-  const rank = { standard: 1, strict: 2, maximum: 3 };
-  const byRank = [null, "standard", "strict", "maximum"];
-  if (!supportsProtectedDelivery) return "standard";
-  return byRank[Math.min(rank[requested] || 1, rank[ceiling] || 1)];
-}
-
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
     const started = performance.now();
@@ -121,7 +114,6 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
             provider: "youtube_custom",
             providerReference: reference,
             allowedHosts: [],
-            securityPolicy: "strict",
             status: "active",
           })
           .returning();
@@ -151,15 +143,19 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     }
     const protectedHls = isHlsAsset(asset);
     const entitlements = policy.entitlements;
-    const planPolicy = entitlements.max_security_policy || "strict";
-    // Plans define a security ceiling. A lower plan still plays every supported
-    // source; it receives the strongest policy included in that plan. Progressive
-    // MP4 currently uses native range delivery, whose effective ceiling is Standard.
-    const effectivePolicy = effectiveSecurityPolicy(
-      asset.securityPolicy,
-      planPolicy,
-      asset.provider === "youtube_custom" || protectedHls,
-    );
+    if (policy.requireDeviceId && !input.deviceId)
+      throw new AppError("DEVICE_ID_REQUIRED", "This plan requires a device ID", 400);
+    if (asset.provider === "youtube_custom" && !policy.protectedDelivery)
+      throw new AppError(
+        "FEATURE_DISABLED",
+        "Protected delivery must be enabled for the YouTube provider",
+        403,
+      );
+    const playbackFeatures = {
+      protectedDelivery: policy.protectedDelivery,
+      playerIntegrity: policy.playerIntegrity,
+      secureBrowserRestriction: policy.secureBrowserRestriction,
+    };
     let [user] = await db
       .select()
       .from(endUsers)
@@ -178,7 +174,8 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         .returning();
     if (user.status !== "active") throw new AppError("USER_BLOCKED", "User is blocked", 403);
     recordTiming("user");
-    const externalDeviceId = input.deviceId || "unidentified";
+    const externalDeviceId =
+      policy.deviceTracking && input.deviceId ? input.deviceId : "unidentified";
     let [device] = await db
       .select()
       .from(devices)
@@ -202,8 +199,9 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           ),
         );
       if (
+        policy.deviceTracking &&
         input.deviceId &&
-        entitlements.device_control &&
+        policy.deviceControl &&
         existing.length >= Number(entitlements.max_devices_per_user || 2)
       ) {
         await db.insert(securityEvents).values({
@@ -224,15 +222,16 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           tenantId,
           endUserId: user.id,
           externalDeviceId,
-          deviceName: input.deviceId
-            ? input.client.deviceName
-            : input.client.deviceName || "Unidentified device",
+          deviceName:
+            policy.deviceTracking && input.deviceId
+              ? input.client.deviceName
+              : input.client.deviceName || "Unidentified device",
           browser: input.client.browser,
           os: input.client.os,
         })
         .returning();
     } else {
-      if (device.status !== "active")
+      if (policy.deviceControl && device.status !== "active")
         throw new AppError("DEVICE_BLOCKED", "Device is blocked", 403);
       await db
         .update(devices)
@@ -257,7 +256,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       );
     const maxStreams = Number(entitlements.max_concurrent_streams || 1);
     recordTiming("active_sessions");
-    if (activeSessions.length >= maxStreams) {
+    if (policy.concurrentStreamControl && activeSessions.length >= maxStreams) {
       if (entitlements.session_policy === "revoke_old") {
         for (const old of activeSessions) {
           await db
@@ -307,7 +306,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       aid: asset.id,
       did: device.id,
       psid: session.id,
-      policy: effectivePolicy,
+      features: playbackFeatures,
       iat: now,
       exp: now + tokenTtl,
     };
@@ -317,7 +316,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     });
     await cache.set(`playback:session:${session.id}`, "active", { ex: 8 * 3600 });
     recordTiming("token_and_cache");
-    await gatewayControl.syncSession(session.id, "active", 8 * 3600);
+    await gatewayControl.syncSession(session.id, "active", 8 * 3600, playbackFeatures);
     recordTiming("gateway_sync");
     await db.insert(usageEvents).values({
       tenantId,
@@ -326,24 +325,27 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       assetId: asset.id,
       sessionId: session.id,
     });
-    await queueWebhook(db, tenantId, "playback.started", {
-      sessionId: session.id,
-      assetId: asset.id,
-      externalUserId: input.externalUserId,
-    });
+    if (policy.webhooks)
+      await queueWebhook(db, tenantId, "playback.started", {
+        sessionId: session.id,
+        assetId: asset.id,
+        externalUserId: input.externalUserId,
+      });
     recordTiming("usage_and_webhook");
     return {
       sessionId: session.id,
       playbackUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/media?token=${encodeURIComponent(token)}`,
       token,
       tokenExpiresIn: tokenTtl,
-      securityPolicy: effectivePolicy,
+      features: playbackFeatures,
       refreshUrl: `${config.GATEWAY_PUBLIC_URL}/v/${asset.id}/refresh`,
       mode:
         asset.provider === "youtube_custom"
           ? "protected_segments"
           : protectedHls
-            ? "protected_hls"
+            ? policy.protectedDelivery
+              ? "protected_hls"
+              : "hls"
             : "native",
       attestation:
         asset.provider === "youtube_custom"
@@ -370,10 +372,12 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     if (!session) throw notFound("Playback session not found");
     await cache.set(`playback:session:${session.id}`, "revoked", { ex: 8 * 3600 });
     await gatewayControl.syncSession(session.id, "revoked", 8 * 3600);
-    await queueWebhook(db, tenantId, "playback.revoked", {
-      sessionId: session.id,
-      assetId: session.assetId,
-    });
+    const policy = await getPlaybackPolicy(db, tenantId);
+    if (policy.webhooks)
+      await queueWebhook(db, tenantId, "playback.revoked", {
+        sessionId: session.id,
+        assetId: session.assetId,
+      });
     return session;
   }
   return { create, createUnlocked, revoke };
