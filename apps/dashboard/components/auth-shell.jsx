@@ -26,7 +26,9 @@ export function AuthShell({ mode = "login", title, intro, children }) {
                 <ShieldCheck size={14} /> Protected playback control plane
               </div>
               <h1 className="mt-8 max-w-md text-4xl font-semibold leading-[1.03] tracking-[-.045em]">
-                {registering ? "Build the boundary before you press play." : "Your media controls, in one place."}
+                {registering
+                  ? "Build the boundary before you press play."
+                  : "Your media controls, in one place."}
               </h1>
               <p className="mt-5 max-w-md text-sm leading-6 text-[#b7c1b1]">
                 {registering
@@ -49,7 +51,9 @@ export function AuthShell({ mode = "login", title, intro, children }) {
             <div className="relative rounded-[26px] border border-white/10 bg-[#202b1d] p-5 shadow-2xl">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[.16em] text-[#89987f]">
                 <span>Playback session</span>
-                <span className="flex items-center gap-1.5 text-[#b7d47e]"><span className="size-1.5 rounded-full bg-[#a9ca6a]" /> live</span>
+                <span className="flex items-center gap-1.5 text-[#b7d47e]">
+                  <span className="size-1.5 rounded-full bg-[#a9ca6a]" /> live
+                </span>
               </div>
               <div className="mt-5 grid grid-cols-[1fr_auto] items-center gap-5">
                 <div>
@@ -62,8 +66,13 @@ export function AuthShell({ mode = "login", title, intro, children }) {
               </div>
               <div className="mt-5 grid grid-cols-3 gap-2">
                 {["viewer", "device", "session"].map((label, index) => (
-                  <div key={label} className="rounded-xl border border-white/5 bg-white/[.035] px-3 py-2.5">
-                    <div className="text-[9px] uppercase tracking-[.14em] text-[#76816f]">{label}</div>
+                  <div
+                    key={label}
+                    className="rounded-xl border border-white/5 bg-white/[.035] px-3 py-2.5"
+                  >
+                    <div className="text-[9px] uppercase tracking-[.14em] text-[#76816f]">
+                      {label}
+                    </div>
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#d8dfd4]">
                       {index === 1 ? <Fingerprint size={12} /> : <ShieldCheck size={12} />}
                       verified
@@ -85,7 +94,9 @@ export function AuthShell({ mode = "login", title, intro, children }) {
                 <p className="text-xs font-black uppercase tracking-[.18em] text-[#77865e]">
                   {registering ? "Create workspace" : "Welcome back"}
                 </p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] text-[#182015] sm:text-4xl">{title}</h2>
+                <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] text-[#182015] sm:text-4xl">
+                  {title}
+                </h2>
                 <p className="mt-3 text-sm leading-6 text-[#687261]">{intro}</p>
               </div>
 

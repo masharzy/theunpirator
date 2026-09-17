@@ -97,7 +97,10 @@ export default function LoginPage() {
                 <span className="text-xs font-bold uppercase tracking-[.12em] text-[#687261]">
                   Password
                 </span>
-                <Link href="/forgot-password" className="text-xs font-semibold text-[#607742] hover:underline">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-[#607742] hover:underline"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -140,7 +143,10 @@ export default function LoginPage() {
           </div>
         )}
 
-        <Button className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]" disabled={busy}>
+        <Button
+          className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]"
+          disabled={busy}
+        >
           {busy ? "Signing in…" : challenge ? "Verify and continue" : "Sign in"}
           {!busy && <ArrowRight className="ml-2 size-4" />}
         </Button>
@@ -149,9 +155,14 @@ export default function LoginPage() {
       {google && !challenge && (
         <>
           <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[.16em] text-[#9aa391]">
-            <span className="h-px flex-1 bg-[#e0e5da]" /> or <span className="h-px flex-1 bg-[#e0e5da]" />
+            <span className="h-px flex-1 bg-[#e0e5da]" /> or{" "}
+            <span className="h-px flex-1 bg-[#e0e5da]" />
           </div>
-          <Button asChild variant="outline" className="h-12 w-full rounded-xl border-[#d7ded0] bg-white">
+          <Button
+            asChild
+            variant="outline"
+            className="h-12 w-full rounded-xl border-[#d7ded0] bg-white"
+          >
             <a href="/control-api/v1/auth/google">Continue with Google</a>
           </Button>
         </>

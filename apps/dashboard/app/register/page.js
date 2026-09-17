@@ -100,14 +100,18 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <Button className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]" disabled={busy}>
+        <Button
+          className="h-12 w-full rounded-xl bg-[#172014] text-white hover:bg-[#24301f]"
+          disabled={busy}
+        >
           {busy ? "Creating workspace…" : "Create workspace"}
           {!busy && <ArrowRight className="ml-2 size-4" />}
         </Button>
       </form>
 
       <div className="mt-5 rounded-xl bg-[#f4f6ef] px-4 py-3 text-xs leading-5 text-[#677160]">
-        After signup, onboarding walks you through site verification, provider connection and your first protected playback.
+        After signup, onboarding walks you through site verification, provider connection and your
+        first protected playback.
       </div>
     </AuthShell>
   );
