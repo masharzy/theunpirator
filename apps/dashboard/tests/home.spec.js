@@ -34,7 +34,7 @@ test("mobile homepage fits viewport", async ({ page }) => {
   await expect(nav.getByRole("link", { name: "Get started", exact: true })).toBeVisible();
 });
 
-test("register, open onboarding, create site and inspect DNS verification", async ({ page }) => {
+test("registration starts without an active plan", async ({ page }) => {
   const email = `browser-${Date.now()}@example.com`;
   await page.goto("/register");
   await page.getByPlaceholder("Acme Learning").fill("Browser test workspace");
@@ -43,13 +43,19 @@ test("register, open onboarding, create site and inspect DNS verification", asyn
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/onboarding$/, { timeout: 20000 });
   await expect(page.getByText("Verify your email.", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Sites", exact: true }).click();
-  await page.getByLabel("Site name", { exact: true }).fill("Learning portal");
-  await page.getByLabel("Domain", { exact: true }).fill("learn.example.com");
-  await page.getByRole("button", { name: "Add site", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Learning portal", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Verify domain", exact: true }).click();
-  await expect(page.getByText("unpirator-verification=", { exact: false })).toBeVisible();
+
+  const billing = await page.evaluate(async () => {
+    const response = await fetch("/control-api/v1/billing", { credentials: "include" });
+    if (!response.ok) throw new Error(`Billing request failed: ${response.status}`);
+    return response.json();
+  });
+  expect(billing.subscription).toBeNull();
+  expect(billing.entitlements.max_sites).toBe(0);
+
+  await page.getByRole("link", { name: "Plan", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/plans$/);
+  await expect(page.getByText("Current plan", { exact: true })).toHaveCount(0);
+
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
