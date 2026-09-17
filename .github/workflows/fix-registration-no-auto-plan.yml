@@ -1,0 +1,54 @@
+name: Fix registration auto plan
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-registration-no-auto-plan.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove implicit starter trial from registration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("apps/api/src/routes/auth.js")
+          text = path.read_text()
+
+          import_line = "  subscriptions,\n"
+          if import_line not in text:
+              raise SystemExit("subscriptions import not found")
+          text = text.replace(import_line, "", 1)
+
+          block = '''  await tx.insert(subscriptions).values({
+    tenantId: tenant.id,
+    planId: "starter",
+    status: "trialing",
+    periodStart: new Date(),
+    periodEnd: new Date(Date.now() + 14 * 86400_000),
+  });
+'''
+          if block not in text:
+              raise SystemExit("hardcoded starter trial block not found")
+          text = text.replace(block, "", 1)
+
+          path.write_text(text)
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/routes/auth.js
+          git diff --cached --check
+          git commit -m "fix: do not auto-activate plan on registration"
+          git push origin HEAD:main
