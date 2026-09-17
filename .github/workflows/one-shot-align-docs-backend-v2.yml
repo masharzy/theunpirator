@@ -1,0 +1,136 @@
+name: One-shot align docs and backend v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-align-docs-backend-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch docs and backend
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new, count=1):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              if old not in s:
+                  raise SystemExit(f'Missing expected block in {path}: {old[:100]!r}')
+              s = s.replace(old, new, count)
+              p.write_text(s, encoding='utf-8')
+
+          patch('packages/contracts/src/index.js',
+                '    deviceId: z.string().min(8).max(180),',
+                '    deviceId: z.string().min(8).max(180).optional(),')
+
+          p = Path('packages/contracts/test/validation.test.js')
+          s = p.read_text(encoding='utf-8')
+          marker = '  it("normalizes verbose client metadata instead of rejecting playback", () => {'
+          test = '''  it("accepts playback without a device id", () => {\n    expect(\n      playbackSessionSchema.safeParse({\n        siteId: "site",\n        assetId: "asset",\n        externalUserId: "user",\n      }).success,\n    ).toBe(true);\n  });\n'''
+          if test not in s:
+              if marker not in s: raise SystemExit('contracts test marker missing')
+              p.write_text(s.replace(marker, test + marker, 1), encoding='utf-8')
+
+          patch('integrations/nextjs/index.js',
+                '''  authorizePlayback,\n}) {\n  if (!siteId) throw new Error("siteId is required");\n  const client = createUnpiratorServerClient({ apiUrl, apiKey });''',
+                '''  authorizePlayback,\n  allowGuests = false,\n}) {\n  if (!siteId) throw new Error("siteId is required");\n  if (!allowGuests && typeof resolveViewer !== "function")\n    throw new Error("resolveViewer is required unless allowGuests is true");\n  if (!allowGuests && typeof authorizePlayback !== "function")\n    throw new Error("authorizePlayback is required unless allowGuests is true");\n  const client = createUnpiratorServerClient({ apiUrl, apiKey });''')
+
+          patch('integrations/nextjs/index.js',
+                '''      const deviceId = String(body.deviceId || "");\n      if (deviceId.length < 8) throw new Error("A valid device ID is required");\n      const viewer = resolveViewer ? await resolveViewer(request) : null;\n      const identity = viewer?.id\n        ? { id: String(viewer.id), label: viewer.label ? String(viewer.label) : undefined }\n        : { id: `guest:${deviceId.slice(0, 174)}`, label: "Guest viewer" };''',
+                '''      const deviceId = body.deviceId ? String(body.deviceId) : undefined;\n      if (deviceId && deviceId.length < 8) throw new Error("Device ID must be at least 8 characters");\n      const viewer = resolveViewer ? await resolveViewer(request) : null;\n      if (!viewer?.id && !allowGuests) {\n        const error = new Error("Sign in required");\n        error.status = 401;\n        throw error;\n      }\n      const identity = viewer?.id\n        ? { id: String(viewer.id), label: viewer.label ? String(viewer.label) : undefined }\n        : { id: `guest:${deviceId || globalThis.crypto.randomUUID()}`, label: "Guest viewer" };''')
+
+          patch('integrations/nextjs/index.js',
+                '''        deviceId,\n        client: body.client || {},''',
+                '''        ...(deviceId ? { deviceId } : {}),\n        client: body.client || {},''')
+
+          patch('apps/api/src/services/playback.js',
+                '''    recordTiming("user");\n    let [device] = await db''',
+                '''    recordTiming("user");\n    const externalDeviceId = input.deviceId || "unidentified";\n    let [device] = await db''')
+          patch('apps/api/src/services/playback.js',
+                '          eq(devices.externalDeviceId, input.deviceId),',
+                '          eq(devices.externalDeviceId, externalDeviceId),')
+          patch('apps/api/src/services/playback.js',
+                '''        entitlements.device_control &&\n        existing.length >= Number(entitlements.max_devices_per_user || 2)''',
+                '''        input.deviceId &&\n        entitlements.device_control &&\n        existing.length >= Number(entitlements.max_devices_per_user || 2)''')
+          patch('apps/api/src/services/playback.js',
+                '''          externalDeviceId: input.deviceId,\n          deviceName: input.client.deviceName,''',
+                '''          externalDeviceId,\n          deviceName: input.deviceId\n            ? input.client.deviceName\n            : input.client.deviceName || "Unidentified device",''')
+
+          patch('apps/api/src/routes/playback.js',
+                '      res.status(201).json(result);',
+                '      res.set("cache-control", "no-store").status(201).json(result);')
+
+          docs = Path('apps/dashboard/app/docs/docs-client.jsx')
+          s = docs.read_text(encoding='utf-8')
+          docs_replacements = [
+            ('''          <p>\n            Keep the source on your server. Unpirator handles protected playback.\n          </p>''',
+             '''          <p>\n            Keep source URLs out of the browser. Your server sends them privately to Unpirator,\n            and Unpirator handles protected playback.\n          </p>'''),
+            ('''    label: "Private source stays server-side",\n    caption: "The source URL is available to the server but is never rendered into the page.",''',
+             '''    label: "Private source stays out of the browser",\n    caption: "The source URL remains server-side and is sent only over server-to-server HTTPS to Unpirator.",'''),
+            ('''                You choose the file/controller/loader. The rule is only that this runs on your server,\n                because this is where your private source URL and API key are available.''',
+             '''                You choose the file/controller/loader. This runs on your server because the private source\n                URL and API key must never enter the browser. Unpirator receives and stores the source only\n                on its server side as protected asset metadata.'''),
+            ('''                <code>deviceId</code>\n                <strong>From the player/SDK</strong>\n                <p>A stable browser device identifier generated by the Unpirator client runtime.</p>''',
+             '''                <code>deviceId</code>\n                <strong>Optional · recommended</strong>\n                <p>The SDK generates a random stable UUID automatically. It is not a hardware fingerprint. Sending it enables accurate device limits, device revocation and device history.</p>'''),
+            ('''                <code>externalUserId</code>\n                <strong>From YOUR authentication</strong>\n                <p>Your server uses the real logged-in account ID. Never trust a browser-supplied user ID.</p>''',
+             '''                <code>externalUserId</code>\n                <strong>From YOUR server authentication</strong>\n                <p>Use a stable opaque account ID from your server session. It does not need to be a name or email, and browser-supplied identity must never be trusted.</p>'''),
+            ('''                <code>displayLabel</code>\n                <strong>From YOUR user record</strong>\n                <p>Email/account label used where the selected protection policy needs it.</p>''',
+             '''                <code>displayLabel</code>\n                <strong>Optional user label</strong>\n                <p>Only send a name/email/account label if you want readable labels in protection features or dashboards. Unpirator does not require it for identity.</p>'''),
+            ('''              Your server then adds the trusted <code>externalUserId</code>, <code>displayLabel</code>,\n              <code>siteId</code> and server-only API key before calling Unpirator.''',
+             '''              Your server adds the trusted <code>externalUserId</code>, <code>siteId</code> and server-only\n              API key before calling Unpirator. <code>displayLabel</code> is optional. <code>deviceId</code> is\n              also optional for custom clients, but recommended; without it playback still works while precise\n              per-device limits, revocation and history are unavailable.'''),
+            ('''            <CodeBlock label={s.routeLabel}>{s.route}</CodeBlock>\n\n            <div className="docs-step-banner">\n              <span>STEP 3 · BROWSER</span>''',
+             '''            <CodeBlock label={s.routeLabel}>{s.route}</CodeBlock>\n\n            <div className="docs-note">\n              The Next.js helper is deny-by-default: <code>resolveViewer</code> and\n              <code>authorizePlayback</code> are required. Only intentionally public/guest playback should\n              opt in with <code>allowGuests: true</code>.\n            </div>\n\n            <div className="docs-step-banner">\n              <span>STEP 3 · BROWSER</span>'''),
+          ]
+          for old, new in docs_replacements:
+              if old not in s: raise SystemExit(f'docs block missing: {old[:100]!r}')
+              s = s.replace(old, new, 1)
+
+          old = '''    return {\n      id: session.user.id,\n      label: session.user.email || session.user.id,\n    };'''
+          new = '''    return {\n      id: session.user.id,\n      // label is optional; omit it if you do not want to send a name/email.\n    };'''
+          if old not in s: raise SystemExit('Next.js viewer sample missing')
+          s = s.replace(old, new, 1)
+          s = s.replace('        displayLabel: viewer.email || String(viewer.id),\n', '', 1)
+          s = s.replace("            'displayLabel' => $viewer->email,\n", '', 1)
+          s = s.replace('            "displayLabel": viewer.email,\n', '', 1)
+          docs.write_text(s, encoding='utf-8')
+
+          r = Path('integrations/nextjs/README.md')
+          s = r.read_text(encoding='utf-8')
+          old = '''export const POST = createUnpiratorPlaybackHandler({\n  apiUrl: process.env.UNPIRATOR_API_URL,\n  apiKey: process.env.UNPIRATOR_API_KEY,\n  siteId: process.env.UNPIRATOR_SITE_ID,\n});'''
+          new = '''export const POST = createUnpiratorPlaybackHandler({\n  apiUrl: process.env.UNPIRATOR_API_URL,\n  apiKey: process.env.UNPIRATOR_API_KEY,\n  siteId: process.env.UNPIRATOR_SITE_ID,\n  resolveViewer: async (request) => ({ id: await resolveUserId(request) }),\n  authorizePlayback: async ({ body, viewer }) =>\n    canViewPlayback(viewer.id, body.playbackRef),\n});'''
+          if old not in s: raise SystemExit('README sample missing')
+          s = s.replace(old, new, 1)
+          s = s.replace(
+            'Add `resolveViewer` to authorize signed-in viewers. Keep every configuration value server-side.',
+            '`resolveViewer` and `authorizePlayback` are required by default. Set `allowGuests: true` only for intentionally public playback. `deviceId` is optional at the API boundary, but recommended for accurate device controls. Keep every configuration value server-side.',
+            1,
+          )
+          r.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Syntax check modified JavaScript
+        run: |
+          node --check packages/contracts/src/index.js
+          node --check integrations/nextjs/index.js
+          node --check apps/api/src/services/playback.js
+          node --check apps/api/src/routes/playback.js
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "chatgpt-docs-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/routes/playback.js apps/api/src/services/playback.js apps/dashboard/app/docs/docs-client.jsx integrations/nextjs/index.js integrations/nextjs/README.md packages/contracts/src/index.js packages/contracts/test/validation.test.js
+          git commit -m "fix: align docs and playback security contract"
+          git push origin HEAD:main
