@@ -32,13 +32,6 @@ export function NotFoundView() {
               <Home size={16} />
               Go home
             </Link>
-            <button
-              type="button"
-              onClick={undefined}
-              className="hidden"
-              aria-hidden="true"
-              tabIndex={-1}
-            />
             <Link
               href="/docs"
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#dfe3dc] bg-white px-5 text-sm font-semibold text-[#343a31] transition hover:bg-[#f8f9f6]"
