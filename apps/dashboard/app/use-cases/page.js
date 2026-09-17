@@ -1,5 +1,5 @@
-import { PublicPage } from "@/components/public-site";
-import { publicPages } from "@/lib/public-pages";
-export default function Page() {
-  return <PublicPage {...publicPages.useCases} />;
+import { redirect } from "next/navigation";
+
+export default function UseCasesPage() {
+  redirect("/features#use-cases");
 }
