@@ -1,121 +1,94 @@
 import Link from "next/link";
-import { ArrowUpRight, Check, Fingerprint, LockKeyhole, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, Check, ShieldCheck } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
 
 const points = [
-  "Private sources stay server-side",
-  "Short-lived playback sessions",
-  "Plan-driven protection controls",
+  "Private source URLs stay on your server",
+  "Viewer access is authorized before playback",
+  "Sessions stay short-lived and revocable",
 ];
 
 export function AuthShell({ mode = "login", title, intro, children }) {
   const registering = mode === "register";
+
   return (
-    <div className="min-h-screen bg-[#eef1e8] text-[#182015]">
+    <div
+      className="min-h-screen bg-white text-[#20251d]"
+      style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+    >
       <PublicNav />
-      <main className="relative isolate min-h-[calc(100vh-72px)] overflow-hidden px-4 py-6 sm:px-6 md:py-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_12%_14%,rgba(190,214,145,.4),transparent_24%),radial-gradient(circle_at_88%_84%,rgba(71,91,57,.13),transparent_28%)]" />
-        <div className="mx-auto grid min-h-[720px] max-w-6xl overflow-hidden rounded-[34px] border border-[#cfd7c6] bg-white shadow-[0_30px_90px_rgba(33,45,27,.16)] lg:grid-cols-[.95fr_1.05fr]">
-          <section className="relative hidden overflow-hidden bg-[#172014] p-10 text-white lg:flex lg:flex-col lg:justify-between">
-            <div className="absolute -right-24 -top-24 size-72 rounded-full border border-white/10" />
-            <div className="absolute -right-10 top-16 size-48 rounded-full border border-[#a9c274]/20" />
-            <div className="absolute bottom-20 left-12 size-36 rounded-full bg-[#9db36f]/10 blur-3xl" />
+      <main className="mx-auto grid min-h-[calc(100vh-88px)] max-w-7xl items-stretch lg:grid-cols-[.92fr_1.08fr]">
+        <section className="hidden border-r border-[#e4e6e0] px-10 py-16 lg:flex lg:flex-col lg:justify-between xl:px-16 xl:py-20">
+          <div>
+            <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#646a5f]">
+              <ShieldCheck size={16} className="text-[#6f873e]" />
+              The Unpirator workspace
+            </div>
 
-            <div className="relative">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[.18em] text-[#b9ca9b]">
-                <ShieldCheck size={14} /> Protected playback control plane
+            <h1 className="mt-8 max-w-lg text-[44px] font-semibold leading-[1.04] tracking-[-.05em] text-[#20251d] xl:text-[52px]">
+              {registering ? "Set up protected playback without changing your product." : "Everything behind playback, without the noise."}
+            </h1>
+            <p className="mt-6 max-w-lg text-base leading-7 text-[#666c62]">
+              {registering
+                ? "Create the workspace, connect your site, then follow the guided integration. Your application remains the source of truth for users and content."
+                : "Open your workspace to manage sites, sessions, viewers, devices and the protection controls included in your plan."}
+            </p>
+          </div>
+
+          <div className="mt-14 max-w-lg border-t border-[#e4e6e0] pt-7">
+            <div className="space-y-4">
+              {points.map((item) => (
+                <div key={item} className="flex items-start gap-3 text-sm leading-6 text-[#535a50]">
+                  <span className="mt-1 grid size-5 shrink-0 place-items-center rounded-full border border-[#cfd5c7] bg-white text-[#60783a]">
+                    <Check size={12} strokeWidth={2.4} />
+                  </span>
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 grid grid-cols-3 border-y border-[#e4e6e0] text-xs text-[#7a8076]">
+              <div className="py-4 pr-4">
+                <div className="font-semibold text-[#2b3028]">01</div>
+                <div className="mt-1">Authorize</div>
               </div>
-              <h1 className="mt-8 max-w-md text-4xl font-semibold leading-[1.03] tracking-[-.045em]">
-                {registering
-                  ? "Build the boundary before you press play."
-                  : "Your media controls, in one place."}
-              </h1>
-              <p className="mt-5 max-w-md text-sm leading-6 text-[#b7c1b1]">
-                {registering
-                  ? "Create the workspace that connects your application, viewers and protected media delivery."
-                  : "Manage sites, sessions, viewers, devices, usage and the protection features included in your plan."}
+              <div className="border-x border-[#e4e6e0] px-4 py-4">
+                <div className="font-semibold text-[#2b3028]">02</div>
+                <div className="mt-1">Create session</div>
+              </div>
+              <div className="py-4 pl-4">
+                <div className="font-semibold text-[#2b3028]">03</div>
+                <div className="mt-1">Deliver</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex items-center justify-center px-5 py-12 sm:px-8 lg:px-12 lg:py-16 xl:px-20">
+          <div className="w-full max-w-[460px]">
+            <div className="mb-9">
+              <p className="text-sm font-medium text-[#6c7268]">
+                {registering ? "Create workspace" : "Welcome back"}
               </p>
-
-              <div className="mt-9 space-y-3">
-                {points.map((item) => (
-                  <div key={item} className="flex items-center gap-3 text-sm text-[#dfe6db]">
-                    <span className="grid size-7 place-items-center rounded-lg bg-[#dcebbd] text-[#223018]">
-                      <Check size={15} strokeWidth={2.4} />
-                    </span>
-                    {item}
-                  </div>
-                ))}
-              </div>
+              <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-[-.04em] text-[#20251d] sm:text-[38px]">
+                {title}
+              </h2>
+              <p className="mt-4 max-w-md text-sm leading-6 text-[#6b7167]">{intro}</p>
             </div>
 
-            <div className="relative rounded-[26px] border border-white/10 bg-[#202b1d] p-5 shadow-2xl">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[.16em] text-[#89987f]">
-                <span>Playback session</span>
-                <span className="flex items-center gap-1.5 text-[#b7d47e]">
-                  <span className="size-1.5 rounded-full bg-[#a9ca6a]" /> live
-                </span>
-              </div>
-              <div className="mt-5 grid grid-cols-[1fr_auto] items-center gap-5">
-                <div>
-                  <div className="h-2.5 w-3/4 rounded-full bg-white/10" />
-                  <div className="mt-2 h-2 w-1/2 rounded-full bg-white/5" />
-                </div>
-                <div className="grid size-12 place-items-center rounded-2xl border border-[#91aa64]/25 bg-[#91aa64]/10 text-[#cfe4a6]">
-                  <LockKeyhole size={21} />
-                </div>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-2">
-                {["viewer", "device", "session"].map((label, index) => (
-                  <div
-                    key={label}
-                    className="rounded-xl border border-white/5 bg-white/[.035] px-3 py-2.5"
-                  >
-                    <div className="text-[9px] uppercase tracking-[.14em] text-[#76816f]">
-                      {label}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#d8dfd4]">
-                      {index === 1 ? <Fingerprint size={12} /> : <ShieldCheck size={12} />}
-                      verified
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div>{children}</div>
+
+            <div className="mt-7 border-t border-[#e4e6e0] pt-6 text-sm text-[#6b7167]">
+              <span>{registering ? "Already have a workspace? " : "New to Unpirator? "}</span>
+              <Link
+                href={registering ? "/login" : "/register"}
+                className="inline-flex items-center gap-1 font-semibold text-[#20251d] hover:underline"
+              >
+                {registering ? "Sign in" : "Create one"} <ArrowUpRight size={13} />
+              </Link>
             </div>
-          </section>
-
-          <section className="relative flex items-center justify-center bg-[linear-gradient(180deg,#fbfcf8_0%,#f5f7f0_100%)] p-5 sm:p-10 lg:p-14">
-            <div className="w-full max-w-md">
-              <div className="mb-8 lg:hidden">
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#d5ddcb] bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[.16em] text-[#718054] shadow-sm">
-                  <ShieldCheck size={13} /> protected workspace
-                </span>
-              </div>
-              <div className="mb-8">
-                <p className="text-xs font-black uppercase tracking-[.18em] text-[#77865e]">
-                  {registering ? "Create workspace" : "Welcome back"}
-                </p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] text-[#182015] sm:text-4xl">
-                  {title}
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-[#687261]">{intro}</p>
-              </div>
-
-              <div className="rounded-[26px] border border-[#dbe1d4] bg-white p-5 shadow-[0_18px_55px_rgba(35,48,28,.08)] sm:p-7">
-                {children}
-              </div>
-
-              <div className="mt-6 flex items-center justify-between gap-4 text-xs text-[#6f7969]">
-                <span>{registering ? "Already have a workspace?" : "New to Unpirator?"}</span>
-                <Link
-                  href={registering ? "/login" : "/register"}
-                  className="inline-flex items-center gap-1.5 font-semibold text-[#26351f] hover:text-[#5f7642]"
-                >
-                  {registering ? "Sign in" : "Create one"} <ArrowUpRight size={13} />
-                </Link>
-              </div>
-            </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </main>
     </div>
   );
