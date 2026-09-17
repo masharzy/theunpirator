@@ -147,7 +147,6 @@ export function DashboardShell({ children }) {
   const planLabel = billing?.subscription?.planName || "No active plan";
   const sitesUsed = summary?.counts?.sites ?? 0;
   const sitesLimit = billing?.entitlements?.max_sites;
-  const usagePercent = sitesLimit ? Math.min(100, Math.round((sitesUsed / sitesLimit) * 100)) : 0;
 
   const nav = (
     <>
@@ -276,51 +275,41 @@ export function DashboardShell({ children }) {
               ))}
             </select>
           </div>
-          <span className="hidden rounded-full bg-[#edf5d8] px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#536b31] sm:inline-flex">
-            {planLabel}
-          </span>
-          <div
-            className="hidden w-24 md:block"
-            aria-label={`${usagePercent}% of site allowance used`}
-          >
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
-              <div
-                className="h-full rounded-full bg-[#7d9853]"
-                style={{ width: `${usagePercent}%` }}
-              />
-            </div>
-            <p className="mt-1 text-[9px] text-[#7d8776]">{usagePercent}% usage</p>
-          </div>
-          <Link href="/docs" className="hidden text-xs font-semibold text-[#5f6b58] sm:inline-flex">
-            Docs
-          </Link>
-          <Link
-            href="/dashboard/notifications"
-            className="relative rounded-xl border border-[#dce2d4] bg-white p-2.5 text-[#56634e]"
-            aria-label={`${unread} unread notifications`}
-          >
-            <Bell size={17} />
-            {unread > 0 && (
-              <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[#7d9853] text-[9px] font-bold text-white">
-                {Math.min(unread, 9)}
-              </span>
-            )}
-          </Link>
-          {auth?.account?.platformRole && (
-            <Link
-              href="/admin"
-              className="hidden rounded-xl bg-[#172014] px-3 py-2 text-xs font-semibold text-white sm:inline-flex"
-            >
-              Admin Console
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+            <span className="hidden rounded-full bg-[#edf5d8] px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#536b31] sm:inline-flex">
+              {planLabel}
+            </span>
+            <Link href="/docs" className="hidden text-xs font-semibold text-[#5f6b58] sm:inline-flex">
+              Docs
             </Link>
-          )}
-          <Link
-            href="/dashboard/account"
-            className="grid size-9 place-items-center rounded-full bg-[#172014] text-xs font-bold uppercase text-white"
-            aria-label="Open account settings"
-          >
-            {auth?.account?.email?.slice(0, 1) || "A"}
-          </Link>
+            <Link
+              href="/dashboard/notifications"
+              className="relative rounded-xl border border-[#dce2d4] bg-white p-2.5 text-[#56634e]"
+              aria-label={`${unread} unread notifications`}
+            >
+              <Bell size={17} />
+              {unread > 0 && (
+                <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[#7d9853] text-[9px] font-bold text-white">
+                  {Math.min(unread, 9)}
+                </span>
+              )}
+            </Link>
+            {auth?.account?.platformRole && (
+              <Link
+                href="/admin"
+                className="hidden rounded-xl bg-[#172014] px-3 py-2 text-xs font-semibold text-white sm:inline-flex"
+              >
+                Admin Console
+              </Link>
+            )}
+            <Link
+              href="/dashboard/account"
+              className="grid size-9 place-items-center rounded-full bg-[#172014] text-xs font-bold uppercase text-white"
+              aria-label="Open account settings"
+            >
+              {auth?.account?.email?.slice(0, 1) || "A"}
+            </Link>
+          </div>
         </header>
         <main className="p-4 md:p-8 lg:p-10">
           {auth?.account && !auth.account.emailVerified && (
