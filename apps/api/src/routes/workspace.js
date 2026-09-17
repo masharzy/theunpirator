@@ -40,7 +40,6 @@ const settingsInput = z
   .object({
     name: z.string().trim().min(2).max(120).optional(),
     timezone: z.string().trim().min(2).max(80).optional(),
-    defaultSecurityPolicy: z.enum(["standard", "strict", "maximum"]).optional(),
     notificationPreferences: z.record(z.string(), z.boolean()).optional(),
   })
   .strict();
@@ -345,7 +344,6 @@ export function workspaceRouter({
           .values({
             tenantId: req.tenantId,
             timezone: input.timezone || "Asia/Dhaka",
-            defaultSecurityPolicy: input.defaultSecurityPolicy || "strict",
             notificationPreferences: input.notificationPreferences || {},
             updatedAt: new Date(),
           })
@@ -353,9 +351,6 @@ export function workspaceRouter({
             target: tenantSettings.tenantId,
             set: {
               ...(input.timezone && { timezone: input.timezone }),
-              ...(input.defaultSecurityPolicy && {
-                defaultSecurityPolicy: input.defaultSecurityPolicy,
-              }),
               ...(input.notificationPreferences && {
                 notificationPreferences: input.notificationPreferences,
               }),

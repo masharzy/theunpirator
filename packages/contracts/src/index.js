@@ -54,7 +54,6 @@ export const assetCreateSchema = z
     allowedHosts: z.array(domainSchema).min(1).max(20),
     providerConfig: z.record(z.string(), z.unknown()).default({}),
     connectionId: idSchema.optional().nullable(),
-    securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
   })
   .strict();
 export const assetSyncSchema = z
@@ -66,7 +65,6 @@ export const assetSyncSchema = z
     sourceUrl: z.string().url().max(4096),
     allowedHosts: z.array(domainSchema).max(20).default([]),
     providerConfig: z.record(z.string(), z.unknown()).default({}),
-    securityPolicy: z.enum(["standard", "strict", "maximum"]).default("strict"),
   })
   .strict();
 const clientMetadataSchema = z

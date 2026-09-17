@@ -15,7 +15,7 @@ import {
 import { signPlaybackToken, decodeKeyRing } from "@unpirator/crypto";
 import { resolveAssetSource } from "@unpirator/source-manager";
 import { unauthorized, notFound } from "../errors.js";
-import { restrictedFeatureEnabled, featureEnabled } from "../services/entitlements.js";
+import { getPlaybackPolicy } from "../services/entitlements.js";
 import { notifyPlatform } from "../services/admin-notifications.js";
 import { riskFor } from "@unpirator/security";
 
@@ -48,8 +48,8 @@ export function internalRouter({
         .limit(1);
       if (!session || session.expiresAt < new Date())
         throw notFound("Active playback session not found");
-      if (!(await featureEnabled(db, "secure_gateway", tenantId, true)))
-        throw notFound("Playback unavailable");
+      const playbackPolicy = await getPlaybackPolicy(db, tenantId);
+      if (!playbackPolicy.secure) throw notFound("Playback unavailable");
       const [asset] = await db
         .select()
         .from(assets)
@@ -64,10 +64,7 @@ export function internalRouter({
       if (!asset) throw notFound("Asset not found");
       if (
         asset.provider === "youtube_custom" &&
-        !(
-          config.YOUTUBE_CUSTOM_GLOBAL &&
-          (await restrictedFeatureEnabled(db, "youtube_custom", tenantId))
-        )
+        !(config.YOUTUBE_CUSTOM_GLOBAL && playbackPolicy.youtube)
       )
         throw notFound("Provider unavailable");
       const [health] = await db
@@ -158,7 +155,7 @@ export function internalRouter({
 
   router.post("/playback/refresh", async (req, res, next) => {
     try {
-      const { tenantId, sessionId, assetId, siteId, userId, deviceId, policy } = req.body || {};
+      const { tenantId, sessionId, assetId, siteId, userId, deviceId } = req.body || {};
       const [session] = await db
         .select()
         .from(playbackSessions)
@@ -203,9 +200,15 @@ export function internalRouter({
           .where(and(eq(sites.id, siteId), eq(sites.status, "active")))
           .limit(1),
       ]);
+      const playbackPolicy = await getPlaybackPolicy(db, tenantId);
+      const [deviceRows, userRows, assetRows, tenantRows, siteRows] = activeRows;
       if (
-        activeRows.some((rows) => !rows.length) ||
-        !(await featureEnabled(db, "secure_gateway", tenantId, true))
+        !userRows.length ||
+        !assetRows.length ||
+        !tenantRows.length ||
+        !siteRows.length ||
+        (playbackPolicy.deviceControl && !deviceRows.length) ||
+        !playbackPolicy.secure
       )
         throw notFound("Playback unavailable");
       const ttl = 90;
@@ -218,7 +221,11 @@ export function internalRouter({
         aid: assetId,
         did: deviceId,
         psid: sessionId,
-        policy: policy || "strict",
+        features: {
+          protectedDelivery: playbackPolicy.protectedDelivery,
+          playerIntegrity: playbackPolicy.playerIntegrity,
+          secureBrowserRestriction: playbackPolicy.secureBrowserRestriction,
+        },
         iat: now,
         exp: now + ttl,
       };

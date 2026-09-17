@@ -61,7 +61,6 @@ export function playbackRouter({
           providerReference: input.sourceUrl,
           allowedHosts: input.allowedHosts,
           encryptedProviderConfig,
-          securityPolicy: input.securityPolicy,
           status: "active",
         })
         .onConflictDoUpdate({
@@ -72,7 +71,6 @@ export function playbackRouter({
             providerReference: input.sourceUrl,
             allowedHosts: input.allowedHosts,
             encryptedProviderConfig,
-            securityPolicy: input.securityPolicy,
             status: "active",
             updatedAt: new Date(),
           },

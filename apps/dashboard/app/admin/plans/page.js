@@ -25,10 +25,16 @@ const numericEntitlements = [
 
 const booleanEntitlements = [
   ["secure_gateway", "Secure gateway"],
+  ["protected_delivery", "Protected media delivery"],
+  ["player_integrity", "Player integrity verification"],
+  ["secure_browser_restriction", "Secure browser restriction"],
   ["dynamic_watermark", "Dynamic watermark"],
-  ["device_control", "Device control"],
-  ["advanced_security", "Advanced security"],
+  ["device_tracking", "Device identity / tracking"],
+  ["require_device_id", "Require device ID"],
+  ["device_control", "Device block / revoke + device limits"],
+  ["concurrent_stream_control", "Concurrent stream control"],
   ["webhooks", "Webhooks"],
+  ["youtube_custom", "Restricted YouTube provider"],
 ];
 
 const empty = {
@@ -45,14 +51,21 @@ const empty = {
   sortOrder: 0,
   badge: "",
   entitlements: {
-    secure_gateway: true,
-    dynamic_watermark: true,
-    device_control: true,
+    secure_gateway: false,
+    protected_delivery: false,
+    player_integrity: false,
+    secure_browser_restriction: false,
+    dynamic_watermark: false,
+    device_tracking: false,
+    require_device_id: false,
+    device_control: false,
+    concurrent_stream_control: false,
+    webhooks: false,
+    youtube_custom: false,
     max_sites: 1,
     max_devices_per_user: 2,
     max_concurrent_streams: 1,
     session_policy: "block_new",
-    max_security_policy: "standard",
   },
 };
 
@@ -279,18 +292,6 @@ export default function AdminPlansPage() {
                   </label>
                 ))}
               </div>
-              <label className="mt-4 block text-xs font-medium text-[#5f6b58]">
-                Maximum security policy
-                <select
-                  className="mt-1.5 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
-                  value={form.entitlements?.max_security_policy || "standard"}
-                  onChange={(event) => setEntitlement("max_security_policy", event.target.value)}
-                >
-                  <option value="standard">Standard</option>
-                  <option value="strict">Strict</option>
-                  <option value="maximum">Maximum</option>
-                </select>
-              </label>
               <label className="mt-4 block text-xs font-medium text-[#5f6b58]">
                 Session limit action
                 <select

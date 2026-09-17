@@ -2,15 +2,20 @@ import { and, desc, eq, inArray, isNull, or, gt } from "drizzle-orm";
 import { featureFlags, plans, subscriptions } from "@unpirator/db/schema";
 
 const DEFAULTS = {
-  secure_gateway: true,
-  dynamic_watermark: true,
-  device_control: true,
+  secure_gateway: false,
+  protected_delivery: false,
+  player_integrity: false,
+  secure_browser_restriction: false,
+  dynamic_watermark: false,
+  device_tracking: false,
+  require_device_id: false,
+  device_control: false,
+  concurrent_stream_control: false,
+  webhooks: false,
   max_sites: 1,
   max_devices_per_user: 2,
   max_concurrent_streams: 1,
   session_policy: "block_new",
-  // Legacy subscriptions predate policy ceilings and historically allowed Strict.
-  max_security_policy: "strict",
   youtube_custom: false,
 };
 
@@ -34,7 +39,11 @@ export async function getEntitlements(db, tenantId) {
       ...DEFAULTS,
       secure_gateway: false,
       dynamic_watermark: false,
-      device_control: true,
+      device_tracking: false,
+      require_device_id: false,
+      device_control: false,
+      concurrent_stream_control: false,
+      webhooks: false,
       max_sites: 0,
     };
   return { ...DEFAULTS, ...subscription.entitlements };
@@ -62,14 +71,15 @@ function evaluateFeature(flags, entitlements, key, tenantId, fallback) {
 
 export async function restrictedFeatureEnabled(db, key, tenantId) {
   const flags = await db.select().from(featureFlags).where(eq(featureFlags.key, key));
-  return evaluateRestricted(flags, key, tenantId);
+  const entitlements = await getEntitlements(db, tenantId);
+  return evaluateRestricted(flags, entitlements, key, tenantId);
 }
 
-function evaluateRestricted(flags, key, tenantId) {
+function evaluateRestricted(flags, entitlements, key, tenantId) {
   flags = flags.filter((flag) => flag.key === key);
   const globalFlag = flags.find((f) => f.scopeType === "global" && f.scopeId === "global");
   const tenantFlag = flags.find((f) => f.scopeType === "tenant" && f.scopeId === String(tenantId));
-  return globalFlag?.enabled === true && tenantFlag?.enabled === true;
+  return entitlements[key] === true && globalFlag?.enabled === true && tenantFlag?.enabled === true;
 }
 
 // Request-local snapshot: no stale cross-request authorization cache.
@@ -90,7 +100,15 @@ export async function getPlaybackPolicy(db, tenantId) {
   return {
     entitlements,
     secure: evaluateFeature(flags, entitlements, "secure_gateway", tenantId, true),
+    protectedDelivery: entitlements.protected_delivery === true,
+    playerIntegrity: entitlements.player_integrity === true,
+    secureBrowserRestriction: entitlements.secure_browser_restriction === true,
     watermark: evaluateFeature(flags, entitlements, "dynamic_watermark", tenantId, true),
-    youtube: evaluateRestricted(flags, "youtube_custom", tenantId),
+    deviceTracking: entitlements.device_tracking === true,
+    requireDeviceId: entitlements.require_device_id === true,
+    deviceControl: entitlements.device_control === true,
+    concurrentStreamControl: entitlements.concurrent_stream_control === true,
+    webhooks: entitlements.webhooks === true,
+    youtube: evaluateRestricted(flags, entitlements, "youtube_custom", tenantId),
   };
 }

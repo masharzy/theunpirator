@@ -7,7 +7,6 @@ import { PageHeader, Surface } from "@/components/console-kit";
 export default function SettingsPage() {
   const [name, setName] = useState(""),
     [timezone, setTimezone] = useState("Asia/Dhaka"),
-    [policy, setPolicy] = useState("strict"),
     [status, setStatus] = useState(""),
     [message, setMessage] = useState("");
   useEffect(() => {
@@ -16,7 +15,6 @@ export default function SettingsPage() {
         setName(d.tenant?.name || "");
         setStatus(d.tenant?.status || "");
         setTimezone(d.settings?.timezone || "Asia/Dhaka");
-        setPolicy(d.settings?.defaultSecurityPolicy || "strict");
       })
       .catch((e) => setMessage(e.message));
   }, []);
@@ -25,7 +23,7 @@ export default function SettingsPage() {
     try {
       await api("/v1/workspace/settings", {
         method: "PATCH",
-        body: JSON.stringify({ name, timezone, defaultSecurityPolicy: policy }),
+        body: JSON.stringify({ name, timezone }),
       });
       setMessage("Workspace settings saved.");
     } catch (err) {
@@ -37,7 +35,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="Manage workspace identity, timezone and default security posture."
+        description="Manage workspace identity and timezone. Protection features come from the active plan."
       />
       {message && (
         <div className="rounded-2xl border border-[#dce3d4] bg-white p-4 text-sm text-[#52604b]">
@@ -57,18 +55,6 @@ export default function SettingsPage() {
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
             />
-          </label>
-          <label className="block text-sm font-medium">
-            Default security policy
-            <select
-              className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
-              value={policy}
-              onChange={(e) => setPolicy(e.target.value)}
-            >
-              <option value="standard">Standard</option>
-              <option value="strict">Strict</option>
-              <option value="maximum">Maximum</option>
-            </select>
           </label>
           <div className="rounded-xl bg-[#f7f9f2] p-4 text-sm text-[#6f7a68]">
             Workspace status: <b>{status || "—"}</b>

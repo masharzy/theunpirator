@@ -130,7 +130,11 @@ const gateway = {
         await stub.fetch("https://session/state", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: body.status, ttlSeconds: body.ttlSeconds }),
+          body: JSON.stringify({
+            status: body.status,
+            ttlSeconds: body.ttlSeconds,
+            features: body.features || {},
+          }),
         });
         return new Response(null, { status: 204 });
       }
@@ -177,10 +181,14 @@ const gateway = {
         );
       }
       if (request.method === "POST" && mode === "bootstrap") {
-        assertAllowedProtectedBrowser(request);
+        if (claims.features?.secureBrowserRestriction !== false)
+          assertAllowedProtectedBrowser(request);
         await assertProtectedOrigin(request, env, claims, assetId);
         const body = await request.json();
-        if (body?.playerBuild !== PROTECTED_PLAYER_BUILD)
+        if (
+          claims.features?.playerIntegrity !== false &&
+          body?.playerBuild !== PROTECTED_PLAYER_BUILD
+        )
           throw securityError("PLAYER_INTEGRITY_LOST", 403, "Unsupported player build");
         if (body?.publicKey?.kty !== "RSA") throw securityError("INVALID_REQUEST", 400);
         let publicKey;
@@ -372,7 +380,7 @@ const gateway = {
             siteId: claims.sid,
             userId: claims.uid,
             deviceId: claims.did,
-            policy: claims.policy,
+            features: claims.features,
           }),
         });
         if (!response.ok)

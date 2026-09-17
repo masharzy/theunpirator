@@ -23,7 +23,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
           provider: assets.provider,
           providerReference: assets.providerReference,
           allowedHosts: assets.allowedHosts,
-          securityPolicy: assets.securityPolicy,
           status: assets.status,
           createdAt: assets.createdAt,
           updatedAt: assets.updatedAt,
@@ -88,7 +87,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
           provider: assets.provider,
           providerReference: assets.providerReference,
           allowedHosts: assets.allowedHosts,
-          securityPolicy: assets.securityPolicy,
           status: assets.status,
           createdAt: assets.createdAt,
           updatedAt: assets.updatedAt,
@@ -186,7 +184,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
             providerReference: input.providerReference,
             allowedHosts: input.allowedHosts,
             encryptedProviderConfig,
-            securityPolicy: input.securityPolicy,
           })
           .returning({
             id: assets.id,
@@ -228,7 +225,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
         .object({
           title: z.string().trim().min(1).max(240).optional(),
           status: z.enum(["active", "disabled"]).optional(),
-          securityPolicy: z.enum(["standard", "strict", "maximum"]).optional(),
           connectionId: z.string().min(3).max(128).nullable().optional(),
         })
         .strict()
@@ -269,7 +265,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
           .set({
             ...(input.title ? { title: input.title } : {}),
             ...(input.status ? { status: input.status } : {}),
-            ...(input.securityPolicy ? { securityPolicy: input.securityPolicy } : {}),
             ...(Object.prototype.hasOwnProperty.call(input, "connectionId")
               ? { encryptedProviderConfig: selectedConnection?.encryptedConfig || null }
               : {}),
@@ -280,7 +275,6 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
             id: assets.id,
             title: assets.title,
             provider: assets.provider,
-            securityPolicy: assets.securityPolicy,
             status: assets.status,
             updatedAt: assets.updatedAt,
           });

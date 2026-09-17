@@ -84,7 +84,6 @@ describe("public input validation", () => {
       sourceUrl: "https://media.example.com/master.m3u8",
       allowedHosts: ["media.example.com"],
       providerConfig: { headers: { authorization: "Bearer private" } },
-      securityPolicy: "strict",
     };
     expect(assetSyncSchema.safeParse(input).success).toBe(true);
     expect(assetSyncSchema.safeParse({ ...input, tenantId: "forged" }).success).toBe(false);

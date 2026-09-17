@@ -1,5 +1,5 @@
 export function createGatewayControl(config, logger) {
-  async function syncSession(sessionId, status, ttlSeconds = 300) {
+  async function syncSession(sessionId, status, ttlSeconds = 300, features = undefined) {
     if (!config.GATEWAY_CONTROL_URL || !config.GATEWAY_CONTROL_SECRET) return;
     try {
       const response = await fetch(`${config.GATEWAY_CONTROL_URL}/__internal/session-state`, {
@@ -8,7 +8,7 @@ export function createGatewayControl(config, logger) {
           "content-type": "application/json",
           authorization: `Bearer ${config.GATEWAY_CONTROL_SECRET}`,
         },
-        body: JSON.stringify({ sessionId, status, ttlSeconds }),
+        body: JSON.stringify({ sessionId, status, ttlSeconds, features }),
         signal: AbortSignal.timeout(config.NODE_ENV === "production" ? 5000 : 20000),
       });
       if (!response.ok) throw new Error(`Gateway control returned ${response.status}`);

@@ -95,9 +95,12 @@ export function looksLikeHls(url, response, source) {
 export async function proxyPrimary(request, env, claims, assetId) {
   let source = await getSource(env, claims, assetId);
   assertOrigin(request, source.allowedOrigins, env);
-  if (source.delivery?.mode === "protected_segments")
+  if (
+    claims.features?.protectedDelivery !== false &&
+    source.delivery?.mode === "protected_segments"
+  )
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected playback runtime");
-  if (source.manifestType === "hls")
+  if (claims.features?.protectedDelivery !== false && source.manifestType === "hls")
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
   let response = await originFetch(request, source.url, source);
   if ([401, 403, 404].includes(response.status)) {
