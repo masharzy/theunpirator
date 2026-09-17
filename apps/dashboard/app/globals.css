@@ -1990,7 +1990,6 @@ html {
   }
 }
 
-
 /* -------------------------------------------------------------------------- */
 /* Unpirator docs rewrite — beginner-friendly journey + cinematic animation   */
 /* Append this AFTER the existing documentation styles in globals.css.         */
@@ -2019,7 +2018,11 @@ html {
   top: 16px;
   right: 16px;
   color: #9ca792;
-  font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    700 10px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .docs-important-flow article > svg {
@@ -2354,7 +2357,11 @@ html {
   border-radius: 6px;
   background: #313a2d;
   color: #aab3a3;
-  font: 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    8px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2403,11 +2410,11 @@ html {
   overflow: hidden;
   border: 1px solid rgba(218, 232, 206, 0.09);
   border-radius: 9px;
-  background:
-    linear-gradient(145deg, rgba(212, 242, 121, 0.08), transparent 60%),
-    #1e251c;
+  background: linear-gradient(145deg, rgba(212, 242, 121, 0.08), transparent 60%), #1e251c;
   color: #87947f;
-  transition: border-color 0.5s ease, background 0.5s ease;
+  transition:
+    border-color 0.5s ease,
+    background 0.5s ease;
 }
 
 .journey-video > span {
@@ -2484,7 +2491,9 @@ html {
   color: #65705f;
   font-size: 8px;
   opacity: 0.55;
-  transition: opacity 0.45s ease, color 0.45s ease;
+  transition:
+    opacity 0.45s ease,
+    color 0.45s ease;
 }
 
 .journey-browser-data > span.is-on {
@@ -2538,7 +2547,10 @@ html {
   color: #687364;
   opacity: 0.5;
   transform: translateY(4px);
-  transition: opacity 0.4s ease, transform 0.4s ease, border-color 0.4s ease;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease,
+    border-color 0.4s ease;
 }
 
 .journey-backend-row.is-active {
@@ -2591,7 +2603,10 @@ html {
   border-radius: 8px;
   background: #242b21;
   opacity: 0.45;
-  transition: opacity 0.4s ease, border-color 0.4s ease, background 0.4s ease;
+  transition:
+    opacity 0.4s ease,
+    border-color 0.4s ease,
+    background 0.4s ease;
 }
 
 .journey-unpirator-card.is-active {
@@ -2688,7 +2703,11 @@ html {
   border-radius: 50%;
   background: #d4f279;
   color: #28321f;
-  font: 800 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    800 9px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .journey-caption strong {
@@ -2726,34 +2745,74 @@ html {
   border-radius: 50%;
 }
 
-.journey-legend i.customer { background: #8d9a87; }
-.journey-legend i.unpirator { background: #d4f279; }
-.journey-legend i.private { background: #f0bd7e; }
+.journey-legend i.customer {
+  background: #8d9a87;
+}
+.journey-legend i.unpirator {
+  background: #d4f279;
+}
+.journey-legend i.private {
+  background: #f0bd7e;
+}
 
 @keyframes docs-packet-source {
-  0% { opacity: 0; transform: translate(-80px, 8px) scale(0.84); }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; transform: translate(170px, 78px) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translate(-80px, 8px) scale(0.84);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(170px, 78px) scale(1);
+  }
 }
 
 @keyframes docs-packet-ref {
-  0% { opacity: 0; transform: translate(120px, 28px) scale(0.84); }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-265px, -145px) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translate(120px, 28px) scale(0.84);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-265px, -145px) scale(1);
+  }
 }
 
 @keyframes docs-packet-session {
-  0% { opacity: 0; transform: translate(-85px, 0) scale(0.84); }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; transform: translate(180px, 0) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translate(-85px, 0) scale(0.84);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(180px, 0) scale(1);
+  }
 }
 
 @keyframes docs-player-progress {
-  from { width: 8%; }
-  to { width: 82%; }
+  from {
+    width: 8%;
+  }
+  to {
+    width: 82%;
+  }
 }
 
 @media (max-width: 900px) {
@@ -2856,8 +2915,6 @@ html {
   }
 }
 
-
-
 /* ========================================================================== */
 /* JourneyAnimation V2 — slower, larger, production-scale architecture trace  */
 /* ========================================================================== */
@@ -2912,9 +2969,15 @@ html {
 
 .journey-progress-steps span {
   color: #697464;
-  font: 700 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    700 7px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
   text-align: center;
-  transition: color 0.35s ease, transform 0.35s ease;
+  transition:
+    color 0.35s ease,
+    transform 0.35s ease;
 }
 
 .journey-progress-steps span.is-current {
@@ -3048,7 +3111,11 @@ html {
 .journey-player-bar > span {
   margin-left: auto;
   color: #75816f;
-  font: 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    7px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .journey-player-center {
@@ -3135,7 +3202,11 @@ html {
   border-radius: 6px;
   background: #1b2119;
   color: #8f9a89;
-  font: 7px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    7px/1.55 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
   white-space: pre-wrap;
 }
 
@@ -3156,7 +3227,10 @@ html {
   border-radius: 8px;
   background: #222a1f;
   opacity: 0.4;
-  transition: opacity 0.5s ease, border-color 0.5s ease, background 0.5s ease;
+  transition:
+    opacity 0.5s ease,
+    border-color 0.5s ease,
+    background 0.5s ease;
 }
 
 .journey-gateway-card.is-active {
@@ -3203,10 +3277,22 @@ html {
   animation: journey-gateway-pulse 1.3s ease-in-out infinite alternate;
 }
 
-.journey-gateway-bars i:nth-child(2) { animation-delay: 0.12s !important; height: 55%; }
-.journey-gateway-bars i:nth-child(3) { animation-delay: 0.24s !important; height: 90%; }
-.journey-gateway-bars i:nth-child(4) { animation-delay: 0.36s !important; height: 68%; }
-.journey-gateway-bars i:nth-child(5) { animation-delay: 0.48s !important; height: 42%; }
+.journey-gateway-bars i:nth-child(2) {
+  animation-delay: 0.12s !important;
+  height: 55%;
+}
+.journey-gateway-bars i:nth-child(3) {
+  animation-delay: 0.24s !important;
+  height: 90%;
+}
+.journey-gateway-bars i:nth-child(4) {
+  animation-delay: 0.36s !important;
+  height: 68%;
+}
+.journey-gateway-bars i:nth-child(5) {
+  animation-delay: 0.48s !important;
+  height: 42%;
+}
 
 .journey-caption-v2 {
   min-height: 94px;
@@ -3226,7 +3312,11 @@ html {
 
 .journey-caption-status small {
   color: #697565;
-  font: 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    7px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .journey-caption-status strong {
@@ -3467,8 +3557,7 @@ html {
 .journey-stage-v2 {
   background:
     linear-gradient(rgba(72, 93, 56, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(72, 93, 56, 0.045) 1px, transparent 1px),
-    #ffffff;
+    linear-gradient(90deg, rgba(72, 93, 56, 0.045) 1px, transparent 1px), #ffffff;
   background-size: 28px 28px;
 }
 
@@ -3716,8 +3805,7 @@ html {
   .journey-stage-v2 {
     background:
       linear-gradient(rgba(72, 93, 56, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(72, 93, 56, 0.035) 1px, transparent 1px),
-      #ffffff;
+      linear-gradient(90deg, rgba(72, 93, 56, 0.035) 1px, transparent 1px), #ffffff;
     background-size: 24px 24px;
   }
 }
@@ -3936,7 +4024,7 @@ html {
 
 .stack-pill:hover {
   border-color: #aebe91;
-  background: #f7faF2;
+  background: #f7faf2;
   color: #334326;
   transform: translateY(-1px);
 }
@@ -4115,8 +4203,7 @@ html {
 .journey-stage-v2 {
   background:
     linear-gradient(rgba(82, 105, 62, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(82, 105, 62, 0.045) 1px, transparent 1px),
-    #ffffff;
+    linear-gradient(90deg, rgba(82, 105, 62, 0.045) 1px, transparent 1px), #ffffff;
   background-size: 28px 28px;
 }
 

@@ -77,7 +77,8 @@ export function createUnpiratorPlaybackHandler({
         );
       const body = await request.json();
       const deviceId = body.deviceId ? String(body.deviceId) : undefined;
-      if (deviceId && deviceId.length < 8) throw new Error("Device ID must be at least 8 characters");
+      if (deviceId && deviceId.length < 8)
+        throw new Error("Device ID must be at least 8 characters");
       const viewer = resolveViewer ? await resolveViewer(request) : null;
       if (!viewer?.id && !allowGuests) {
         const error = new Error("Sign in required");

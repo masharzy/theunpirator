@@ -10,8 +10,7 @@ export const POST = createUnpiratorPlaybackHandler({
   apiKey: process.env.UNPIRATOR_API_KEY,
   siteId: process.env.UNPIRATOR_SITE_ID,
   resolveViewer: async (request) => ({ id: await resolveUserId(request) }),
-  authorizePlayback: async ({ body, viewer }) =>
-    canViewPlayback(viewer.id, body.playbackRef),
+  authorizePlayback: async ({ body, viewer }) => canViewPlayback(viewer.id, body.playbackRef),
 });
 ```
 
