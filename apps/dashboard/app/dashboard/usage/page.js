@@ -1,77 +1,185 @@
 "use client";
+
 import { Activity, Gauge, HardDriveDownload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { PageHeader, ProgressMeter, Stat, Surface } from "@/components/console-kit";
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let amount = bytes;
+  let unit = "B";
+  for (const nextUnit of units) {
+    amount /= 1024;
+    unit = nextUnit;
+    if (amount < 1024) break;
+  }
+  return `${amount.toFixed(amount >= 100 ? 0 : amount >= 10 ? 1 : 2)} ${unit}`;
+}
+
+function formatPeriod(period) {
+  if (!period?.start || !period?.end) return "Current billing period";
+  const start = new Date(period.start);
+  const end = new Date(new Date(period.end).getTime() - 1);
+  return `${start.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+}
+
 export default function UsagePage() {
-  const [metrics, setMetrics] = useState({}),
-    [billing, setBilling] = useState(null),
-    [summary, setSummary] = useState(null),
-    [message, setMessage] = useState("");
+  const [usage, setUsage] = useState({ metrics: {}, period: null });
+  const [billing, setBilling] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [message, setMessage] = useState("");
+
   useEffect(() => {
     Promise.all([api("/v1/usage/summary"), api("/v1/billing"), api("/v1/workspace/summary")])
-      .then(([u, b, s]) => {
-        setMetrics(u.metrics || {});
-        setBilling(b);
-        setSummary(s);
+      .then(([usageData, billingData, summaryData]) => {
+        setUsage(usageData || { metrics: {}, period: null });
+        setBilling(billingData);
+        setSummary(summaryData);
       })
-      .catch((e) => setMessage(e.message));
+      .catch((error) => setMessage(error.message));
   }, []);
-  const e = billing?.entitlements || {},
-    c = summary?.counts || {};
+
+  const metrics = usage?.metrics || {};
+  const entitlements = billing?.entitlements || {};
+  const counts = summary?.counts || {};
+
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Workspace metering"
-        title="Usage"
-        description="Current control-plane usage and the limits included with your active plan."
+        eyebrow="Usage & Analytics"
+        title="Plan usage"
+        description={`${formatPeriod(usage?.period)}. Usage resets with the active billing period; live limits such as concurrent streams are measured separately.`}
       />
+
       {message && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {message}
         </div>
       )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
           label="Playback sessions"
-          value={Number(metrics.playback_sessions || 0)}
+          value={formatNumber(metrics.playback_sessions)}
+          hint="This billing period"
           icon={Activity}
         />
-        <Stat label="Gateway requests" value={Number(metrics.gateway_requests || 0)} icon={Gauge} />
         <Stat
-          label="Egress bytes recorded"
-          value={Number(metrics.egress_bytes || 0).toLocaleString()}
+          label="Gateway requests"
+          value={formatNumber(metrics.gateway_requests)}
+          hint="This billing period"
+          icon={Gauge}
+        />
+        <Stat
+          label="Egress"
+          value={formatBytes(metrics.egress_bytes)}
+          hint="Recorded protected delivery"
           icon={HardDriveDownload}
         />
       </div>
+
       <Surface className="p-6">
-        <h2 className="font-semibold">Plan limits</h2>
-        <p className="mt-1 text-sm text-[#74806d]">
-          {billing?.subscription?.planName || "No active plan"} ·{" "}
-          {billing?.subscription?.status || "inactive"}
-        </p>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-semibold">Included plan allowances</h2>
+            <p className="mt-1 text-sm text-[#74806d]">
+              {billing?.subscription?.planName || "No active plan"} ·{" "}
+              {billing?.subscription?.status || "inactive"}
+            </p>
+          </div>
+          <p className="text-xs text-[#87917f]">{formatPeriod(usage?.period)}</p>
+        </div>
+
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <ProgressMeter label="Sites" used={c.sites || 0} limit={e.max_sites} />
           <ProgressMeter
-            label="Active streams"
-            used={c.activeSessions || 0}
-            limit={e.max_concurrent_streams}
+            label="Playback sessions"
+            used={metrics.playback_sessions || 0}
+            limit={entitlements.monthly_playback_sessions}
+            format={formatNumber}
           />
-          <ProgressMeter label="Devices per viewer" used={0} limit={e.max_devices_per_viewer} />
-          <ProgressMeter label="Assets" used={c.assets || 0} limit={e.max_assets} />
+          <ProgressMeter
+            label="Gateway requests"
+            used={metrics.gateway_requests || 0}
+            limit={entitlements.monthly_gateway_requests}
+            format={formatNumber}
+          />
+          <ProgressMeter
+            label="Egress"
+            used={metrics.egress_bytes || 0}
+            limit={entitlements.monthly_egress_bytes}
+            format={formatBytes}
+          />
+          <ProgressMeter
+            label="Playback minutes"
+            used={metrics.playback_minutes || 0}
+            limit={entitlements.monthly_playback_minutes}
+            format={formatNumber}
+          />
+          <ProgressMeter
+            label="Sites"
+            used={counts.sites || 0}
+            limit={entitlements.max_sites}
+            format={formatNumber}
+          />
+          <ProgressMeter
+            label="Assets"
+            used={counts.assets || 0}
+            limit={entitlements.max_assets}
+            format={formatNumber}
+          />
         </div>
       </Surface>
+
       <Surface className="p-6">
-        <h2 className="font-semibold">Raw metered events</h2>
+        <h2 className="font-semibold">Live limits</h2>
+        <p className="mt-1 text-sm text-[#74806d]">
+          These do not contribute to the navbar usage percentage because they are simultaneous limits,
+          not billing-period consumption.
+        </p>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <ProgressMeter
+            label="Active streams"
+            used={counts.activeSessions || 0}
+            limit={entitlements.max_concurrent_streams}
+            format={formatNumber}
+          />
+          <div className="rounded-2xl border border-[#e3e7dd] bg-[#f8faf5] p-4">
+            <p className="text-sm font-medium text-[#33402d]">Devices per viewer</p>
+            <p className="mt-2 text-2xl font-semibold text-[#172014]">
+              {entitlements.max_devices_per_user != null
+                ? formatNumber(entitlements.max_devices_per_user)
+                : "No configured limit"}
+            </p>
+            <p className="mt-1 text-xs text-[#87917f]">Maximum active devices allowed per viewer.</p>
+          </div>
+        </div>
+      </Surface>
+
+      <Surface className="p-6">
+        <h2 className="font-semibold">Metered activity</h2>
+        <p className="mt-1 text-sm text-[#74806d]">
+          Raw counters recorded for the current billing period.
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(metrics).map(([k, v]) => (
-            <div key={k} className="rounded-xl bg-[#f7f9f2] p-4">
-              <p className="text-xs uppercase tracking-[.12em] text-[#7c8675]">
-                {k.replaceAll("_", " ")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold">{Number(v || 0).toLocaleString()}</p>
-            </div>
-          ))}
+          {Object.keys(metrics).length ? (
+            Object.entries(metrics).map(([key, value]) => (
+              <div key={key} className="rounded-xl bg-[#f7f9f2] p-4">
+                <p className="text-xs uppercase tracking-[.12em] text-[#7c8675]">
+                  {key.replaceAll("_", " ")}
+                </p>
+                <p className="mt-2 text-2xl font-semibold">{formatNumber(value)}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-[#87917f]">No metered activity yet in this billing period.</p>
+          )}
         </div>
       </Surface>
     </div>
