@@ -95,7 +95,11 @@ test("registration starts without an active plan", async ({ page }) => {
   await expect(page.getByText("Verify your email.", { exact: true })).toBeVisible();
 
   const billing = await page.evaluate(async () => {
-    const response = await fetch("/control-api/v1/billing", { credentials: "include" });
+    const tenantId = localStorage.getItem("unpirator_tenant_id");
+    const response = await fetch("/control-api/v1/billing", {
+      credentials: "include",
+      headers: tenantId ? { "x-tenant-id": tenantId } : {},
+    });
     if (!response.ok) throw new Error(`Billing request failed: ${response.status}`);
     return response.json();
   });
