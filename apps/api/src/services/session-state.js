@@ -8,7 +8,9 @@ export function effectiveSessionStatus(session, now = new Date()) {
 
   const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const expiresAt = session.expiresAt ? new Date(session.expiresAt).getTime() : null;
-  if (expiresAt != null && Number.isFinite(expiresAt) && expiresAt <= nowMs) return "ended";
+  if (expiresAt != null && Number.isFinite(expiresAt) && expiresAt <= nowMs) {
+    return "ended";
+  }
 
   const heartbeat = session.lastHeartbeatAt
     ? new Date(session.lastHeartbeatAt).getTime()
@@ -19,8 +21,9 @@ export function effectiveSessionStatus(session, now = new Date()) {
     heartbeat != null &&
     Number.isFinite(heartbeat) &&
     nowMs - heartbeat > SESSION_ACTIVE_HEARTBEAT_MS
-  )
+  ) {
     return "idle";
+  }
 
   return "active";
 }
