@@ -108,7 +108,9 @@ export default function PlansPage() {
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-[#7b8574]">
                   Protection model
                 </p>
-                <h2 className="mt-2 text-lg font-semibold text-[#263120]">Plan-driven protection</h2>
+                <h2 className="mt-2 text-lg font-semibold text-[#263120]">
+                  Plan-driven protection
+                </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-[#697363]">
                   Viewer email and a stable device ID are required for protected playback. Your
                   active plan adds the playback protections and limits shown here; individual assets
