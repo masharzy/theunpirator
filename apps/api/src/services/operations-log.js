@@ -43,10 +43,14 @@ function normalizeLevel(value) {
 function formatBytes(value) {
   const bytes = Math.max(0, Number(value || 0));
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2)
-    return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  if (bytes < 1024 ** 3)
-    return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
+  if (bytes < 1024 ** 2) {
+    const precision = bytes < 10 * 1024 ? 1 : 0;
+    return `${(bytes / 1024).toFixed(precision)} KB`;
+  }
+  if (bytes < 1024 ** 3) {
+    const precision = bytes < 10 * 1024 ** 2 ? 1 : 0;
+    return `${(bytes / 1024 ** 2).toFixed(precision)} MB`;
+  }
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
@@ -70,13 +74,9 @@ export function describeOperationEvent(row) {
       typeof row.metadata?.reason === "string" && row.metadata.reason.trim()
         ? ` ${row.metadata.reason.trim()}`
         : "";
-    return {
-      title,
-      summary: `${reason || "A security control recorded this event."}${
-        risk ? ` Risk score ${risk}.` : ""
-      }`.trim(),
-      level,
-    };
+    const base = reason || "A security control recorded this event.";
+    const summary = risk ? `${base} Risk score ${risk}.` : base;
+    return { title, summary: summary.trim(), level };
   }
 
   switch (row.event) {
@@ -115,8 +115,7 @@ export function describeOperationEvent(row) {
 
 export function buildOperationLogQueries(tenantId, query) {
   const pattern = `%${query.q}%`;
-  const usageEnabled =
-    query.category !== "security" && ["all", "info"].includes(query.level);
+  const usageEnabled = query.category !== "security" && ["all", "info"].includes(query.level);
   const securityEnabled = query.category !== "usage";
   const usageSearch = query.q
     ? sql`AND (ue.type ILIKE ${pattern} OR COALESCE(a.title, '') ILIKE ${pattern})`

@@ -30,9 +30,7 @@ function time(value) {
 }
 
 function TechnicalValue({ children }) {
-  return (
-    <span className="break-all font-mono text-[11px] text-[#5c6656]">{children || "—"}</span>
-  );
+  return <span className="break-all font-mono text-[11px] text-[#5c6656]">{children || "—"}</span>;
 }
 
 export default function LogsPage() {
@@ -80,12 +78,7 @@ export default function LogsPage() {
       .then((response) => {
         setItems(response.items || []);
         setPagination(
-          response.pagination || {
-            page,
-            pageSize: 25,
-            total: 0,
-            totalPages: 1,
-          },
+          response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 },
         );
       })
       .catch((failure) => {
@@ -315,9 +308,7 @@ export default function LogsPage() {
                     <dt className="text-[10px] font-bold uppercase tracking-[.12em] text-[#929b8c]">
                       Resource
                     </dt>
-                    <dd className="mt-1 text-sm font-medium text-[#3a4634]">
-                      {selected.resource}
-                    </dd>
+                    <dd className="mt-1 text-sm font-medium text-[#3a4634]">{selected.resource}</dd>
                   </div>
                   <div>
                     <dt className="text-[10px] font-bold uppercase tracking-[.12em] text-[#929b8c]">
@@ -374,8 +365,7 @@ export default function LogsPage() {
                       </dt>
                       <dd className="mt-1">
                         <TechnicalValue>
-                          quantity={selected.technical.quantity} · riskScore=
-                          {selected.technical.riskScore}
+                          quantity={selected.technical.quantity} · riskScore={selected.technical.riskScore}
                         </TechnicalValue>
                       </dd>
                     </div>
