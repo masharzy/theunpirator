@@ -1,7 +1,7 @@
 import { rewriteHlsManifest } from "./hls.js";
 import { getHlsObject, getSource, invalidateSource } from "./source.js";
 import { securityError } from "./token.js";
-import { assertSourceUrl } from "./origin-policy.js";
+import { fetchOriginWithRedirects } from "./origin-fetch.js";
 
 const COPY_REQUEST_HEADERS = ["range", "if-none-match", "if-modified-since", "accept"];
 const COPY_RESPONSE_HEADERS = [
@@ -45,28 +45,29 @@ function buildHeaders(request, sourceHeaders = {}) {
 }
 
 async function originFetch(request, url, source) {
-  assertSourceUrl(url, source.allowedHosts);
   const range = request.headers.get("range");
   if (range && !/^bytes=(?:\d+-\d*|-\d+)$/.test(range))
     throw securityError("INVALID_RANGE", 416, "Unsupported byte range");
-  const response = await fetch(url, {
-    method: request.method === "HEAD" ? "HEAD" : "GET",
-    headers: buildHeaders(request, source.headers),
-    redirect: "manual",
-    cf: {
-      cacheEverything: !request.headers.has("range"),
-      cacheTtl: Math.max(0, Math.min(Number(source.cacheTtlSeconds || 0), 300)),
+  const result = await fetchOriginWithRedirects(
+    url,
+    {
+      method: request.method === "HEAD" ? "HEAD" : "GET",
+      headers: buildHeaders(request, source.headers),
+      cf: {
+        cacheEverything: !request.headers.has("range"),
+        cacheTtl: Math.max(0, Math.min(Number(source.cacheTtlSeconds || 0), 300)),
+      },
     },
-  });
-  if (response.status >= 300 && response.status < 400 && response.status !== 304) {
-    await response.body?.cancel();
-    throw securityError("ORIGIN_REDIRECT_BLOCKED", 502, "Media source unavailable");
-  }
+    source.allowedHosts,
+  );
+  const { response } = result;
   if (!response.ok && ![304, 401, 403, 404, 416].includes(response.status)) {
     await response.body?.cancel();
-    throw securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
+    const error = securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
+    error.upstreamStatus = response.status;
+    throw error;
   }
-  return response;
+  return result;
 }
 
 function copyResponseHeaders(origin, requestOrigin) {
@@ -102,14 +103,14 @@ export async function proxyPrimary(request, env, claims, assetId) {
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected playback runtime");
   if (claims.features?.protectedDelivery !== false && source.manifestType === "hls")
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
-  let response = await originFetch(request, source.url, source);
-  if ([401, 403, 404].includes(response.status)) {
+  let origin = await originFetch(request, source.url, source);
+  if ([401, 403, 404].includes(origin.response.status)) {
     await invalidateSource(env, claims, assetId);
     source = await getSource(env, claims, assetId, true);
     assertOrigin(request, source.allowedOrigins, env);
-    response = await originFetch(request, source.url, source);
+    origin = await originFetch(request, source.url, source);
   }
-  return finalize(request, response, source.url, source, assetId, env);
+  return finalize(request, origin.response, origin.resolvedUrl, source, assetId, env);
 }
 
 export async function proxyHlsObject(request, env, claims, assetId, objectId) {
@@ -119,8 +120,8 @@ export async function proxyHlsObject(request, env, claims, assetId, objectId) {
   if (mapped.protectedTransport)
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
   assertOrigin(request, mapped.allowedOrigins, env);
-  const response = await originFetch(request, mapped.url, mapped);
-  return finalize(request, response, mapped.url, mapped, assetId, env);
+  const origin = await originFetch(request, mapped.url, mapped);
+  return finalize(request, origin.response, origin.resolvedUrl, mapped, assetId, env);
 }
 
 export async function protectedHlsResource(request, env, claims, assetId, resourceId) {
@@ -131,20 +132,23 @@ export async function protectedHlsResource(request, env, claims, assetId, resour
   if (!mapped?.url)
     throw securityError("HLS_OBJECT_EXPIRED", 410, "Media object expired; reload playback");
   assertOrigin(request, mapped.allowedOrigins || source.allowedOrigins, env);
-  const response = await originFetch(request, mapped.url, mapped);
+  const origin = await originFetch(request, mapped.url, mapped);
+  const response = origin.response;
   if (!response.ok) {
     await response.body?.cancel();
-    throw securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
+    const error = securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
+    error.upstreamStatus = response.status;
+    throw error;
   }
   const type = response.headers.get("content-type") || "";
   // Only the root descriptor is known to be a manifest. Child objects may be
   // playlists or binary media; inheriting the root manifestType
   // makes every TS/fMP4 segment get decoded and parsed as an M3U8 playlist.
-  if (looksLikeHls(mapped.url, response, resourceId === "root" ? source : mapped)) {
+  if (looksLikeHls(origin.resolvedUrl, response, resourceId === "root" ? source : mapped)) {
     const text = await response.text();
     return {
       body: new TextEncoder().encode(
-        await rewriteHlsManifest(text, mapped.url, assetId, { ...source, ...mapped }, env),
+        await rewriteHlsManifest(text, origin.resolvedUrl, assetId, { ...source, ...mapped }, env),
       ),
       contentType: "application/vnd.apple.mpegurl",
     };
