@@ -260,8 +260,10 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
   const input = () => ({
     siteId: site,
     assetId: asset,
-    externalUserId: `viewer-${run}`,
+    email: `viewer-${run}@integration.example`,
     deviceId: "device-integration",
+    viewerIp: "203.0.113.10",
+    viewerUserAgent: "Integration browser",
   });
   const play = (key) =>
     request(app)
@@ -319,7 +321,7 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     const youtubeInput = {
       siteId: site,
       source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
-      externalUserId: `youtube-viewer-${run}`,
+      email: `youtube-viewer-${run}@integration.example`,
       deviceId: "youtube-device-integration",
     };
     const first = await request(app)
@@ -330,7 +332,7 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     const second = await request(app)
       .post("/v1/playback/sessions")
       .set("authorization", `Bearer ${apiKey.secret}`)
-      .send({ ...youtubeInput, externalUserId: `youtube-viewer-2-${run}` });
+      .send({ ...youtubeInput, email: `youtube-viewer-2-${run}@integration.example` });
     expect(second.status, JSON.stringify(second.body)).toBe(201);
     const managed = await database.db
       .select()
