@@ -57,9 +57,7 @@ async function matchingViewerIds(db, tenantId, search, config) {
       const rows = await db
         .select({ id: endUsers.id })
         .from(endUsers)
-        .where(
-          and(eq(endUsers.tenantId, tenantId), inArray(endUsers.externalUserId, candidates)),
-        );
+        .where(and(eq(endUsers.tenantId, tenantId), inArray(endUsers.externalUserId, candidates)));
       for (const row of rows) matches.add(row.id);
     } catch {
       // Invalid email-like input simply produces no identity match.
@@ -247,10 +245,7 @@ export function viewersRouter({ db, config, requireTenantAdmin }) {
 
       const sessionIds = sessions.map((session) => session.id);
       const incidentWhere = sessionIds.length
-        ? or(
-            eq(securityEvents.endUserId, viewer.id),
-            inArray(securityEvents.sessionId, sessionIds),
-          )
+        ? or(eq(securityEvents.endUserId, viewer.id), inArray(securityEvents.sessionId, sessionIds))
         : eq(securityEvents.endUserId, viewer.id);
       const incidents = await db
         .select({

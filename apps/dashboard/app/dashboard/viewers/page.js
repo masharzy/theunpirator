@@ -214,7 +214,9 @@ function ViewerDrawer({ detail, loading, busyAction, onClose, onAction }) {
                         `/v1/security/users/${detail.viewer.id}/${
                           detail.viewer.status === "blocked" ? "unblock" : "block"
                         }`,
-                        detail.viewer.status === "blocked" ? "Viewer unblocked." : "Viewer blocked.",
+                        detail.viewer.status === "blocked"
+                          ? "Viewer unblocked."
+                          : "Viewer blocked.",
                       )
                     }
                   >
@@ -346,7 +348,9 @@ function ViewerDrawer({ detail, loading, busyAction, onClose, onAction }) {
                                 `/v1/security/devices/${device.id}/${
                                   device.status === "blocked" ? "unblock" : "block"
                                 }`,
-                                device.status === "blocked" ? "Device unblocked." : "Device blocked.",
+                                device.status === "blocked"
+                                  ? "Device unblocked."
+                                  : "Device blocked.",
                               )
                             }
                           >
@@ -403,7 +407,9 @@ function ViewerDrawer({ detail, loading, busyAction, onClose, onAction }) {
               <div className="flex items-center justify-between border-b border-[#e7ebe2] px-5 py-4">
                 <div>
                   <h3 className="font-semibold text-[#263120]">Security activity</h3>
-                  <p className="mt-1 text-xs text-[#879080]">Recent incidents linked to this viewer</p>
+                  <p className="mt-1 text-xs text-[#879080]">
+                    Recent incidents linked to this viewer
+                  </p>
                 </div>
                 <Link
                   href="/dashboard/security"
@@ -441,7 +447,9 @@ function ViewerDrawer({ detail, loading, busyAction, onClose, onAction }) {
             </Surface>
 
             <details className="rounded-2xl border border-[#e0e5d9] bg-white p-4 text-xs text-[#687362]">
-              <summary className="cursor-pointer font-semibold text-[#46513f]">Technical details</summary>
+              <summary className="cursor-pointer font-semibold text-[#46513f]">
+                Technical details
+              </summary>
               <div className="mt-3 space-y-2 break-all font-mono text-[10px] leading-5">
                 <p>Viewer ID: {detail.viewer.id}</p>
                 <p>Updated: {safeDate(detail.viewer.updatedAt)}</p>
@@ -577,7 +585,12 @@ export default function ViewersPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Viewers" value={summary.viewers || 0} hint="Known identities" icon={UsersRound} />
+        <Metric
+          label="Viewers"
+          value={summary.viewers || 0}
+          hint="Known identities"
+          icon={UsersRound}
+        />
         <Metric
           label="Active viewers"
           value={summary.activeViewers || 0}
@@ -753,7 +766,9 @@ export default function ViewersPage() {
                   <span className="text-[10px] font-bold uppercase tracking-[.1em] text-[#9aa292] md:hidden">
                     Devices
                   </span>
-                  <span className="text-sm font-semibold text-[#46513f]">{viewer.deviceCount || 0}</span>
+                  <span className="text-sm font-semibold text-[#46513f]">
+                    {viewer.deviceCount || 0}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between md:block">
