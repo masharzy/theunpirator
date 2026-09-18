@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { effectiveSessionStatus, SESSION_ACTIVE_HEARTBEAT_MS } from "../src/services/session-state.js";
+import {
+  effectiveSessionStatus,
+  SESSION_ACTIVE_HEARTBEAT_MS,
+} from "../src/services/session-state.js";
 
 const now = new Date("2026-09-18T14:00:00.000Z");
 
