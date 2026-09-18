@@ -20,7 +20,7 @@ import { riskFor } from "@unpirator/security";
 import { queueWebhook } from "./webhooks.js";
 import { notifyTenant } from "./tenant-notifications.js";
 import { AppError, notFound } from "../errors.js";
-import { getPlaybackPolicy } from "./entitlements.js";
+import { getPlaybackPolicy, hasActiveSubscription } from "./entitlements.js";
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
@@ -120,6 +120,13 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         409,
       );
     recordTiming("domain");
+    if (!(await hasActiveSubscription(db, tenantId)))
+      throw new AppError(
+        "SUBSCRIPTION_REQUIRED",
+        "An active subscription is required for playback",
+        403,
+      );
+    recordTiming("subscription");
     let asset;
     const policy = await getPlaybackPolicy(db, tenantId);
     recordTiming("policy");
