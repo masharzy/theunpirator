@@ -38,9 +38,7 @@ export default function PoliciesPage() {
     [assets],
   );
   const planLabel =
-    billing?.subscription?.planName ||
-    billing?.subscription?.planId ||
-    "No active plan";
+    billing?.subscription?.planName || billing?.subscription?.planId || "No active plan";
 
   return (
     <div className="space-y-8">
@@ -108,10 +106,7 @@ export default function PoliciesPage() {
           {planFeatures.map(([key, label]) => {
             const enabled = entitlements[key] === true;
             return (
-              <div
-                key={key}
-                className="flex items-center justify-between gap-4 px-5 py-4 text-sm"
-              >
+              <div key={key} className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
                 <div>
                   <p className="font-medium text-[#283222]">{label}</p>
                   <p className="mt-1 font-mono text-[10px] text-[#8a9483]">{key}</p>
@@ -127,8 +122,8 @@ export default function PoliciesPage() {
         <div className="border-b border-[#e4e8dd] p-5">
           <h2 className="font-semibold">Assets under this protection posture</h2>
           <p className="mt-1 text-xs leading-5 text-[#74806d]">
-            Asset records select a source and provider. They do not override the workspace plan
-            with a separate security level.
+            Asset records select a source and provider. They do not override the workspace plan with
+            a separate security level.
           </p>
         </div>
         {assets.length ? (
@@ -144,7 +139,7 @@ export default function PoliciesPage() {
               </span>
               <StatusPill status={asset.status} />
             </Link>
-          ))
+          ))}
         ) : (
           <p className="p-8 text-sm text-[#74806d]">
             Register an asset after adding and verifying a site.
