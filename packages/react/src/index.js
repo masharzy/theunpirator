@@ -10,7 +10,6 @@ export function UnpiratorPlayer({
   playbackRef,
   endpoint = "/api/unpirator/playback",
   title,
-  currentUser,
   className,
   style,
   poster,
@@ -29,8 +28,6 @@ export function UnpiratorPlayer({
   onError,
 }) {
   const root = useRef(null);
-  const currentUserKey = currentUser ? JSON.stringify(currentUser) : "";
-
   useEffect(() => {
     let disposed = false;
     let player;
@@ -51,7 +48,6 @@ export function UnpiratorPlayer({
         assetId,
         playbackRef,
         title,
-        currentUser,
         headers,
         getHeaders,
         getAccessToken,
@@ -85,7 +81,6 @@ export function UnpiratorPlayer({
     playbackRef,
     endpoint,
     title,
-    currentUserKey,
     poster,
     autoPlay,
     headers,
