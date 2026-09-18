@@ -21,8 +21,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Format Phase E files
-        run: pnpm exec prettier --write apps/api/src/routes/security-console.js apps/dashboard/app/dashboard/security/page.js
+      - name: Fix lint and format Phase E files
+        run: |
+          sed -i '/refreshNonce intentionally forces a reload without changing filters\./d' apps/dashboard/app/dashboard/security/page.js
+          sed -i '/eslint-disable-next-line react-hooks\/exhaustive-deps/d' apps/dashboard/app/dashboard/security/page.js
+          pnpm exec prettier --write apps/api/src/routes/security-console.js apps/dashboard/app/dashboard/security/page.js
       - name: Commit formatter output
         run: |
           if git diff --quiet; then
@@ -31,5 +34,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/api/src/routes/security-console.js apps/dashboard/app/dashboard/security/page.js
-          git commit -m "chore: apply phase e prettier output"
+          git commit -m "chore: fix phase e lint"
           git push
