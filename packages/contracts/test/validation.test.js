@@ -1,80 +1,99 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   assetSyncSchema,
-  siteCreateSchema,
   playbackSessionSchema,
   registerSchema,
+  siteCreateSchema,
 } from "../src/index.js";
+
+const viewer = {
+  email: "viewer@example.com",
+  deviceId: "device123",
+};
+
 describe("public input validation", () => {
   it("rejects URL-shaped site domains", () => {
     expect(
       siteCreateSchema.safeParse({ name: "Course", domain: "https://example.com/path" }).success,
     ).toBe(false);
   });
-  it("rejects injected playback fields", () => {
+
+  it("rejects injected playback identity and tenant fields", () => {
     expect(
       playbackSessionSchema.safeParse({
         siteId: "site",
         assetId: "asset",
-        deviceId: "device123",
-        externalUserId: "user",
+        ...viewer,
+        externalUserId: "forged-user",
         tenantId: "forged",
       }).success,
     ).toBe(false);
   });
+
   it("accepts one on-demand YouTube source without an asset id", () => {
     expect(
       playbackSessionSchema.safeParse({
         siteId: "site",
         source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
-        deviceId: "device123",
-        externalUserId: "user",
+        ...viewer,
       }).success,
     ).toBe(true);
+
     expect(
       playbackSessionSchema.safeParse({
         siteId: "site",
         assetId: "asset",
         source: { provider: "youtube_custom", url: "https://youtu.be/abc123DEF45" },
-        deviceId: "device123",
-        externalUserId: "user",
+        ...viewer,
       }).success,
     ).toBe(false);
   });
-  it("accepts playback without a device id", () => {
+
+  it("requires authenticated viewer email and a stable device id", () => {
     expect(
       playbackSessionSchema.safeParse({
         siteId: "site",
         assetId: "asset",
-        externalUserId: "user",
+        deviceId: "device123",
       }).success,
-    ).toBe(true);
+    ).toBe(false);
+
+    expect(
+      playbackSessionSchema.safeParse({
+        siteId: "site",
+        assetId: "asset",
+        email: "viewer@example.com",
+      }).success,
+    ).toBe(false);
   });
-  it("normalizes verbose client metadata instead of rejecting playback", () => {
+
+  it("normalizes viewer email and verbose client metadata", () => {
     const browser =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
       "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
     const result = playbackSessionSchema.parse({
       siteId: "site",
       assetId: "asset",
+      email: "Viewer@Example.COM",
       deviceId: "device123",
-      externalUserId: "user",
       client: { browser },
     });
 
+    expect(result.email).toBe("viewer@example.com");
     expect(result.client.browser).toBe(browser.slice(0, 100));
   });
+
   it("accepts a simple client identifier", () => {
     const result = playbackSessionSchema.parse({
       siteId: "site",
       assetId: "asset",
-      deviceId: "device123",
-      externalUserId: "user",
+      ...viewer,
       client: "easy-education-web",
     });
 
     expect(result.client).toEqual({ browser: "easy-education-web" });
   });
+
   it("accepts server-side asset synchronization and rejects injected fields", () => {
     const input = {
       siteId: "site",
@@ -88,6 +107,7 @@ describe("public input validation", () => {
     expect(assetSyncSchema.safeParse(input).success).toBe(true);
     expect(assetSyncSchema.safeParse({ ...input, tenantId: "forged" }).success).toBe(false);
   });
+
   it("normalizes email addresses and rejects weak passwords", () => {
     expect(
       registerSchema.parse({
