@@ -132,15 +132,21 @@ export default function IntegrationPage() {
 
           <div className="grid grid-cols-3 gap-3 p-6 text-center">
             <div className="rounded-2xl bg-[#f6f8f2] p-4">
-              <p className="text-2xl font-semibold text-[#263120]">{health?.summary?.healthy ?? "—"}</p>
+              <p className="text-2xl font-semibold text-[#263120]">
+                {health?.summary?.healthy ?? "—"}
+              </p>
               <p className="mt-1 text-xs text-[#74806d]">Healthy</p>
             </div>
             <div className="rounded-2xl bg-[#fff8e8] p-4">
-              <p className="text-2xl font-semibold text-[#7b5b12]">{health?.summary?.action ?? "—"}</p>
+              <p className="text-2xl font-semibold text-[#7b5b12]">
+                {health?.summary?.action ?? "—"}
+              </p>
               <p className="mt-1 text-xs text-[#8a7442]">Action</p>
             </div>
             <div className="rounded-2xl bg-[#f1f3ed] p-4">
-              <p className="text-2xl font-semibold text-[#596551]">{health?.summary?.waiting ?? "—"}</p>
+              <p className="text-2xl font-semibold text-[#596551]">
+                {health?.summary?.waiting ?? "—"}
+              </p>
               <p className="mt-1 text-xs text-[#74806d]">Waiting</p>
             </div>
           </div>

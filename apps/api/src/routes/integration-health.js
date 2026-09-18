@@ -109,8 +109,9 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
 
       const verifiedDomain = verifiedDomains[0] || null;
       const activeKey =
-        keyRows.find((item) => !item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime()) ||
-        null;
+        keyRows.find(
+          (item) => !item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime(),
+        ) || null;
       const latestAsset = latestAssets[0] || null;
       const latestViewer = latestViewers[0] || null;
       const latestDevice = latestDevices[0] || null;
