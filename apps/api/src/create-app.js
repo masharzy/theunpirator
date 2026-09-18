@@ -39,6 +39,7 @@ import { billingRouter } from "./routes/billing.js";
 import { workspaceRouter } from "./routes/workspace.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { publicRouter } from "./routes/public.js";
+import { integrationHealthRouter } from "./routes/integration-health.js";
 
 export function createApp(overrides = {}) {
   const config = overrides.config || loadConfig();
@@ -174,6 +175,13 @@ export function createApp(overrides = {}) {
       requireTenantAdmin: tenantAdmin,
       requireTenantOwner: tenantOwner,
     }),
+  );
+
+  app.use(
+    "/v1/integration-health",
+    auth,
+    csrfGuard,
+    integrationHealthRouter({ db, requireTenantDeveloper: tenantDeveloper }),
   );
 
   app.use(
