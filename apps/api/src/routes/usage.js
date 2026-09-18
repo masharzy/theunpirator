@@ -41,7 +41,7 @@ export function usageRouter({ db, dashboardAuth, requireTenantViewer }) {
       const fallback = calendarPeriod(now);
       const periodStart = subscription?.periodStart || fallback.start;
       const periodEnd = subscription?.periodEnd || fallback.end;
-      const [rows, siteRows, assetRows, activeRows] = await Promise.all([
+      const [rows, egressRows, siteRows, assetRows, activeRows] = await Promise.all([
         db
           .select({
             type: usageEvents.type,
@@ -56,6 +56,19 @@ export function usageRouter({ db, dashboardAuth, requireTenantViewer }) {
             ),
           )
           .groupBy(usageEvents.type),
+        db
+          .select({
+            quantity: sql`coalesce(sum(case when (${usageEvents.metadata}->>'bytes') ~ '^[0-9]+$' then (${usageEvents.metadata}->>'bytes')::bigint else 0 end), 0)::bigint`,
+          })
+          .from(usageEvents)
+          .where(
+            and(
+              eq(usageEvents.tenantId, req.tenantId),
+              eq(usageEvents.type, "gateway_requests"),
+              gte(usageEvents.createdAt, periodStart),
+              lt(usageEvents.createdAt, periodEnd),
+            ),
+          ),
         db
           .select({ count: sql`count(*)::int` })
           .from(sites)
@@ -77,6 +90,8 @@ export function usageRouter({ db, dashboardAuth, requireTenantViewer }) {
       ]);
 
       const metrics = Object.fromEntries(rows.map((row) => [row.type, Number(row.quantity || 0)]));
+      const egressBytes = Number(egressRows[0]?.quantity || 0);
+      if (egressBytes > 0) metrics.egress_bytes = egressBytes;
       const counts = {
         sites: Number(siteRows[0]?.count || 0),
         assets: Number(assetRows[0]?.count || 0),

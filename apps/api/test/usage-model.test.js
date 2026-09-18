@@ -36,10 +36,29 @@ describe("usage model", () => {
   it("does not invent unsupported zero-value customer metrics", () => {
     const usage = buildUsageModel({
       metrics: { playback_sessions: 4, playback_heartbeat: 99 },
-      entitlements: {},
+      entitlements: {
+        monthly_playback_minutes: 5000,
+        monthly_egress_bytes: 10_000_000,
+      },
     });
 
     expect(usage.metered.map((item) => item.key)).toEqual(["playback_sessions"]);
+  });
+
+  it("shows observed delivery without fabricating unmeasured usage", () => {
+    const usage = buildUsageModel({
+      metrics: { egress_bytes: 4096 },
+      entitlements: { monthly_egress_bytes: 8192 },
+    });
+
+    expect(usage.metered).toEqual([
+      expect.objectContaining({
+        key: "egress_bytes",
+        used: 4096,
+        limit: 8192,
+        percent: 50,
+      }),
+    ]);
   });
 
   it("marks real overages explicitly", () => {

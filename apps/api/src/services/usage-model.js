@@ -4,12 +4,14 @@ const meteredDefinitions = [
     label: "Playback minutes",
     unit: "minutes",
     limitKey: "monthly_playback_minutes",
+    requiresObserved: true,
   },
   {
     key: "egress_bytes",
-    label: "Protected delivery",
+    label: "Recorded protected delivery",
     unit: "bytes",
     limitKey: "monthly_egress_bytes",
+    requiresObserved: true,
   },
   {
     key: "playback_sessions",
@@ -69,11 +71,11 @@ function usageItem({ key, label, unit, used = 0, limit = null }) {
 
 export function buildUsageModel({ metrics = {}, entitlements = {}, counts = {} }) {
   const metered = meteredDefinitions
-    .filter(
-      (definition) =>
-        Object.prototype.hasOwnProperty.call(metrics, definition.key) ||
-        normalizeLimit(entitlements[definition.limitKey]) !== null,
-    )
+    .filter((definition) => {
+      const observed = Object.prototype.hasOwnProperty.call(metrics, definition.key);
+      if (definition.requiresObserved) return observed;
+      return observed || normalizeLimit(entitlements[definition.limitKey]) !== null;
+    })
     .map((definition) =>
       usageItem({
         ...definition,
