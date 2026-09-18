@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   assets,
   devices,
@@ -14,6 +14,7 @@ import {
   encryptViewerEmail,
   normalizeViewerEmail,
   viewerIdentityKey,
+  viewerIdentityKeyCandidates,
 } from "./viewer-identity.js";
 import { riskFor } from "@unpirator/security";
 import { queueWebhook } from "./webhooks.js";
@@ -206,12 +207,19 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     };
     const normalizedEmail = normalizeViewerEmail(input.email);
     const identityKey = viewerIdentityKey(normalizedEmail, config);
+    const identityCandidates = viewerIdentityKeyCandidates(normalizedEmail, config);
     const encryptedEmail = encryptViewerEmail(normalizedEmail, tenantId, config);
     let [user] = await db
       .select()
       .from(endUsers)
-      .where(and(eq(endUsers.tenantId, tenantId), eq(endUsers.externalUserId, identityKey)))
+      .where(
+        and(
+          eq(endUsers.tenantId, tenantId),
+          inArray(endUsers.externalUserId, identityCandidates),
+        ),
+      )
       .limit(1);
+
     if (!user) {
       const [legacyUser] = await db
         .select()
@@ -226,30 +234,29 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           ),
         )
         .limit(1);
-      if (legacyUser) {
-        [user] = await db
-          .update(endUsers)
-          .set({
-            externalUserId: identityKey,
-            displayLabel: encryptedEmail,
-            updatedAt: new Date(),
-          })
-          .where(eq(endUsers.id, legacyUser.id))
-          .returning();
-      } else {
-        [user] = await db
-          .insert(endUsers)
-          .values({
-            tenantId,
-            externalUserId: identityKey,
-            displayLabel: encryptedEmail,
-          })
-          .returning();
-      }
-    } else if (!String(user.displayLabel || "").startsWith("enc:v1:")) {
+      if (legacyUser) user = legacyUser;
+    }
+
+    if (!user) {
+      [user] = await db
+        .insert(endUsers)
+        .values({
+          tenantId,
+          externalUserId: identityKey,
+          displayLabel: encryptedEmail,
+        })
+        .returning();
+    } else if (
+      user.externalUserId !== identityKey ||
+      !String(user.displayLabel || "").startsWith("enc:v2:")
+    ) {
       [user] = await db
         .update(endUsers)
-        .set({ displayLabel: encryptedEmail, updatedAt: new Date() })
+        .set({
+          externalUserId: identityKey,
+          displayLabel: encryptedEmail,
+          updatedAt: new Date(),
+        })
         .where(eq(endUsers.id, user.id))
         .returning();
     }
