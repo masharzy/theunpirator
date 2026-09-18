@@ -72,9 +72,22 @@ export function createApp(overrides = {}) {
 
   app.use("/health", healthRouter({ dbClient, cache }));
   app.use("/v1/public", publicRouter({ db }));
+  const sensitiveAuthLimiter = createRateLimiter(cache, {
+    prefix: "auth",
+    limit: 20,
+    windowSeconds: 60,
+  });
+  const sessionIntrospectionLimiter = createRateLimiter(cache, {
+    prefix: "auth-session",
+    limit: 600,
+    windowSeconds: 60,
+  });
   app.use(
     "/v1/auth",
-    createRateLimiter(cache, { prefix: "auth", limit: 20, windowSeconds: 60 }),
+    (req, res, next) =>
+      req.method === "GET" && req.path === "/me"
+        ? sessionIntrospectionLimiter(req, res, next)
+        : sensitiveAuthLimiter(req, res, next),
     authRouter({ db, config, dashboardAuth: auth, csrfGuard }),
   );
 
