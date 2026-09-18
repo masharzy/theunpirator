@@ -1,7 +1,7 @@
 # Playback recovery and gateway limits
 
-Deploy the matching gateway image before installing `@unpirator/react@0.1.5`
-or `@unpirator/web-component@0.1.4` (player/SDK 0.1.4).
+Deploy the matching gateway image before installing `@unpirator/react@0.2.0`
+or `@unpirator/web-component@0.2.0` (player/SDK 0.1.4).
 
 ## Customer integration
 
