@@ -279,8 +279,6 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           ),
         );
       if (
-        policy.deviceTracking &&
-        input.deviceId &&
         policy.deviceControl &&
         existing.length >= Number(entitlements.max_devices_per_user || 2)
       ) {
