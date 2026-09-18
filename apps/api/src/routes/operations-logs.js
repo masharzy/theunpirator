@@ -5,6 +5,7 @@ import {
   parseOperationLogQuery,
 } from "../services/operations-log.js";
 
+// Keep this route in the API deploy graph so dashboard log requests resolve after release.
 export function operationsLogsRouter({ db, requireTenantDeveloper }) {
   const router = Router();
 
