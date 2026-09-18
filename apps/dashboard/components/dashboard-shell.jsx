@@ -42,7 +42,6 @@ const groups = [
     "Media",
     [
       [Waypoints, "/dashboard/sites", "Sites"],
-      [PlugZap, "/dashboard/connections", "Provider Connections"],
       [Clapperboard, "/dashboard/assets", "Assets / Videos"],
       [Users, "/dashboard/viewers", "Viewers"],
       [MonitorSmartphone, "/dashboard/devices", "Devices"],
