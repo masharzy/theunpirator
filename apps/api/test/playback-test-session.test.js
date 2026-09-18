@@ -16,13 +16,12 @@ describe("dashboard playback test session", () => {
     const input = dashboardTestSessionInput(
       request({
         assetId: "33333333-3333-4333-8333-333333333333",
-        externalUserId: "spoofed-user",
-        displayLabel: "spoofed@example.com",
+        email: "spoofed@example.com",
       }),
     );
 
-    expect(input.externalUserId).toBe("dashboard:11111111-1111-4111-8111-111111111111");
-    expect(input.displayLabel).toBe("developer@example.com");
+    expect(input.email).toBe("developer@example.com");
+    expect(input.viewerUserAgent).toBeUndefined();
     expect(input.assetId).toBe("33333333-3333-4333-8333-333333333333");
   });
 
