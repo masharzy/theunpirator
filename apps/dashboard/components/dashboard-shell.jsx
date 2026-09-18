@@ -148,7 +148,11 @@ export function DashboardShell({ children }) {
   const planLabel = billing?.subscription?.planName || "No active plan";
   const usagePercent = usage?.headline?.percent;
   const usageText =
-    usagePercent != null ? `${Math.round(usagePercent)}% usage` : usage ? "No metered cap" : "Usage";
+    usagePercent != null
+      ? `${Math.round(usagePercent)}% usage`
+      : usage
+        ? "No metered cap"
+        : "Usage";
 
   const nav = (
     <>
