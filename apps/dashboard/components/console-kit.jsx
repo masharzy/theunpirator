@@ -76,25 +76,42 @@ export function StatusPill({ status }) {
 }
 
 export function ProgressMeter({ label, used = 0, limit, format = (v) => String(v) }) {
-  const finite = Number.isFinite(Number(limit)) && Number(limit) > 0;
-  const pct = finite ? Math.min(100, Math.max(0, (Number(used) / Number(limit)) * 100)) : 0;
+  const finite = Number.isFinite(Number(limit)) && Number(limit) >= 0;
+  const numericUsed = Math.max(0, Number(used || 0));
+  const numericLimit = finite ? Number(limit) : null;
+  const rawPct = !finite
+    ? 0
+    : numericLimit === 0
+      ? numericUsed > 0
+        ? 100
+        : 0
+      : (numericUsed / numericLimit) * 100;
+  const pct = Math.min(100, Math.max(0, rawPct));
+  const exceeded = finite && numericUsed > numericLimit;
+  const nearLimit = finite && !exceeded && pct >= 80;
+  const barClass = exceeded ? "bg-red-500" : nearLimit ? "bg-amber-500" : "bg-[#7d9853]";
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="font-medium text-[#33402d]">{label}</span>
-        <span className="text-[#727d6b]">
-          {format(used)} {finite ? `/ ${format(limit)}` : ""}
+        <span className={exceeded ? "font-semibold text-red-600" : "text-[#727d6b]"}>
+          {format(numericUsed)} {finite ? `/ ${format(numericLimit)}` : "· No cap"}
         </span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf0e8]">
         <div
-          className="h-full rounded-full bg-[#7d9853]"
+          className={`h-full rounded-full ${barClass}`}
           style={{ width: finite ? `${pct}%` : "0%" }}
         />
       </div>
       {finite && (
-        <p className="mt-1 text-right text-[11px] text-[#90998a]">
-          {Math.max(0, 100 - pct).toFixed(0)}% remaining
+        <p
+          className={`mt-1 text-right text-[11px] ${exceeded ? "font-semibold text-red-600" : nearLimit ? "text-amber-700" : "text-[#90998a]"}`}
+        >
+          {exceeded
+            ? `${format(numericUsed - numericLimit)} over limit`
+            : `${Math.max(0, 100 - pct).toFixed(0)}% remaining`}
         </p>
       )}
     </div>

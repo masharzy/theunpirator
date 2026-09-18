@@ -93,12 +93,6 @@ const groups = [
   ],
 ];
 
-function quotaRatio(used, limit) {
-  const numericLimit = Number(limit);
-  if (!Number.isFinite(numericLimit) || numericLimit <= 0) return null;
-  return Math.max(0, Number(used || 0) / numericLimit);
-}
-
 export function DashboardShell({ children }) {
   const path = usePathname();
   const router = useRouter();
@@ -106,7 +100,6 @@ export function DashboardShell({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [billing, setBilling] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [summary, setSummary] = useState(null);
   const [usage, setUsage] = useState(null);
 
   const activeMembership = useMemo(
@@ -115,15 +108,13 @@ export function DashboardShell({ children }) {
   );
 
   async function loadChrome() {
-    const [billingData, notificationData, summaryData, usageData] = await Promise.all([
+    const [billingData, notificationData, usageData] = await Promise.all([
       api("/v1/billing").catch(() => null),
       api("/v1/billing/notifications").catch(() => ({ items: [] })),
-      api("/v1/workspace/summary").catch(() => null),
       api("/v1/usage/summary").catch(() => null),
     ]);
     setBilling(billingData);
     setNotifications(notificationData?.items || []);
-    setSummary(summaryData);
     setUsage(usageData);
   }
 
@@ -155,23 +146,9 @@ export function DashboardShell({ children }) {
 
   const unread = notifications.filter((item) => !item.readAt).length;
   const planLabel = billing?.subscription?.planName || "No active plan";
-  const entitlements = billing?.entitlements || {};
-  const counts = summary?.counts || {};
-  const metrics = usage?.metrics || {};
-  const sitesUsed = counts.sites ?? 0;
-  const sitesLimit = entitlements.max_sites;
-  const usageRatios = [
-    quotaRatio(metrics.playback_sessions, entitlements.monthly_playback_sessions),
-    quotaRatio(metrics.gateway_requests, entitlements.monthly_gateway_requests),
-    quotaRatio(metrics.egress_bytes, entitlements.monthly_egress_bytes),
-    quotaRatio(metrics.playback_minutes, entitlements.monthly_playback_minutes),
-    quotaRatio(counts.sites, entitlements.max_sites),
-    quotaRatio(counts.assets, entitlements.max_assets),
-  ].filter((value) => value != null);
-  const usagePercent = Math.min(
-    100,
-    Math.round((usageRatios.length ? Math.max(...usageRatios) : 0) * 100),
-  );
+  const usagePercent = usage?.headline?.percent;
+  const usageText =
+    usagePercent != null ? `${Math.round(usagePercent)}% usage` : usage ? "No metered cap" : "Usage";
 
   const nav = (
     <>
@@ -205,9 +182,7 @@ export function DashboardShell({ children }) {
           <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold capitalize text-[#65705f] ring-1 ring-[#e0e5d8]">
             {activeMembership?.role || "member"}
           </span>
-          <span className="truncate text-[10px] font-semibold text-[#65705f]">
-            {sitesLimit != null ? `${sitesUsed}/${sitesLimit} sites` : planLabel}
-          </span>
+          <span className="truncate text-[10px] font-semibold text-[#65705f]">{planLabel}</span>
         </div>
       </div>
       <nav className="mt-6 space-y-6" aria-label="Workspace navigation">
@@ -308,17 +283,21 @@ export function DashboardShell({ children }) {
             <Link
               href="/dashboard/usage"
               prefetch={false}
-              className="w-20 rounded-lg px-1 py-1.5 transition hover:bg-white/70 md:w-24"
-              aria-label={`Plan usage ${usagePercent} percent. Open Usage & Analytics.`}
+              className="w-24 rounded-lg px-1 py-1.5 transition hover:bg-white/70 md:w-28"
+              aria-label={`${usageText}. Open Usage & Analytics.`}
               title="Open Usage & Analytics"
             >
-              <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
-                <div
-                  className="h-full rounded-full bg-[#7d9853]"
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </div>
-              <p className="mt-1 text-[9px] leading-none text-[#7d8776]">{usagePercent}% usage</p>
+              {usagePercent != null ? (
+                <div className="h-1.5 overflow-hidden rounded-full bg-[#dfe5d8]">
+                  <div
+                    className={`h-full rounded-full ${usage?.headline?.status === "exceeded" ? "bg-red-500" : usagePercent >= 80 ? "bg-amber-500" : "bg-[#7d9853]"}`}
+                    style={{ width: `${Math.min(100, Math.max(0, usagePercent))}%` }}
+                  />
+                </div>
+              ) : (
+                <div className="h-1.5 rounded-full bg-[#dfe5d8]" />
+              )}
+              <p className="mt-1 truncate text-[9px] leading-none text-[#7d8776]">{usageText}</p>
             </Link>
             <Link
               href="/docs"
