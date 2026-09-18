@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, or, sql } from "drizzle-orm";
 import {
   assets,
   devices,
@@ -212,16 +212,41 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       .from(endUsers)
       .where(and(eq(endUsers.tenantId, tenantId), eq(endUsers.externalUserId, identityKey)))
       .limit(1);
-    if (!user)
-      [user] = await db
-        .insert(endUsers)
-        .values({
-          tenantId,
-          externalUserId: identityKey,
-          displayLabel: encryptedEmail,
-        })
-        .returning();
-    else if (!String(user.displayLabel || "").startsWith("enc:v1:")) {
+    if (!user) {
+      const [legacyUser] = await db
+        .select()
+        .from(endUsers)
+        .where(
+          and(
+            eq(endUsers.tenantId, tenantId),
+            or(
+              eq(endUsers.externalUserId, normalizedEmail),
+              eq(endUsers.displayLabel, normalizedEmail),
+            ),
+          ),
+        )
+        .limit(1);
+      if (legacyUser) {
+        [user] = await db
+          .update(endUsers)
+          .set({
+            externalUserId: identityKey,
+            displayLabel: encryptedEmail,
+            updatedAt: new Date(),
+          })
+          .where(eq(endUsers.id, legacyUser.id))
+          .returning();
+      } else {
+        [user] = await db
+          .insert(endUsers)
+          .values({
+            tenantId,
+            externalUserId: identityKey,
+            displayLabel: encryptedEmail,
+          })
+          .returning();
+      }
+    } else if (!String(user.displayLabel || "").startsWith("enc:v1:")) {
       [user] = await db
         .update(endUsers)
         .set({ displayLabel: encryptedEmail, updatedAt: new Date() })
