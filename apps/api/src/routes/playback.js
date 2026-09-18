@@ -3,8 +3,9 @@ import { assetSyncSchema, playbackSessionSchema, parseOrThrow } from "@unpirator
 import { and, eq, sql } from "drizzle-orm";
 import { encryptJson, sha256 } from "@unpirator/crypto";
 import { AppError } from "../errors.js";
-import { assets, playbackSessions, sites } from "@unpirator/db/schema";
+import { assets, endUsers, playbackSessions, sites } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
+import { decryptViewerEmail } from "../services/viewer-identity.js";
 
 export function dashboardTestSessionInput(req) {
   return parseOrThrow(playbackSessionSchema, {
@@ -18,9 +19,10 @@ export function dashboardTestSessionInput(req) {
             ...(req.body.title ? { title: req.body.title } : {}),
           },
         }),
-    externalUserId: `dashboard:${req.auth.accountId}`,
-    displayLabel: req.auth.email,
+    email: req.auth.email,
     deviceId: req.body.deviceId,
+    ...(req.ip ? { viewerIp: req.ip } : {}),
+    ...(req.get("user-agent") ? { viewerUserAgent: req.get("user-agent") } : {}),
     client: req.body.client || {},
   });
 }
@@ -158,11 +160,30 @@ export function playbackRouter({
   });
   router.get("/sessions", dashboardAuth, requireTenantAdmin, async (req, res, next) => {
     try {
+      const rows = await db
+        .select({
+          id: playbackSessions.id,
+          siteId: playbackSessions.siteId,
+          assetId: playbackSessions.assetId,
+          endUserId: playbackSessions.endUserId,
+          deviceId: playbackSessions.deviceId,
+          status: playbackSessions.status,
+          ip: playbackSessions.ip,
+          userAgent: playbackSessions.userAgent,
+          startedAt: playbackSessions.startedAt,
+          lastHeartbeatAt: playbackSessions.lastHeartbeatAt,
+          expiresAt: playbackSessions.expiresAt,
+          endedAt: playbackSessions.endedAt,
+          viewerEmailEncrypted: endUsers.displayLabel,
+        })
+        .from(playbackSessions)
+        .leftJoin(endUsers, eq(endUsers.id, playbackSessions.endUserId))
+        .where(eq(playbackSessions.tenantId, req.tenantId));
       res.json({
-        items: await db
-          .select()
-          .from(playbackSessions)
-          .where(eq(playbackSessions.tenantId, req.tenantId)),
+        items: rows.map(({ viewerEmailEncrypted, ...session }) => ({
+          ...session,
+          viewerEmail: decryptViewerEmail(viewerEmailEncrypted, req.tenantId, config),
+        })),
       });
     } catch (e) {
       next(e);
