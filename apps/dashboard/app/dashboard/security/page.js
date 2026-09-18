@@ -393,8 +393,6 @@ export default function SecurityPage() {
     return () => {
       active = false;
     };
-    // refreshNonce intentionally forces a reload without changing filters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, searchQuery, severity, type, fromDate, toDate, refreshNonce]);
 
   const hasFilters = Boolean(
