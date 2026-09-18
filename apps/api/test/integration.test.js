@@ -364,6 +364,20 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
       sessionStatusAtEvent: "active",
     });
 
+    const deviceList = await agent.get("/v1/security/devices").set("x-tenant-id", tenant);
+    expect(deviceList.status).toBe(200);
+    expect(
+      deviceList.body.items.find((device) => device.externalDeviceId === "device-integration"),
+    ).toMatchObject({
+      viewerEmail: `viewer-${run}@integration.example`,
+    });
+
+    const platformSecurity = await admin.get("/v1/admin/security");
+    expect(platformSecurity.status).toBe(200);
+    expect(platformSecurity.body.items.find((event) => event.id === securityEvent.id)).toMatchObject({
+      viewerEmail: `viewer-${run}@integration.example`,
+    });
+
     const hiddenAcrossTenants = await other
       .get(`/v1/security/events/${securityEvent.id}`)
       .set("x-tenant-id", otherTenant);
