@@ -57,8 +57,8 @@ export default function ViewersPage() {
                   className="flex w-full items-center justify-between gap-3 p-5 text-left hover:bg-[#fafbf8]"
                 >
                   <div>
-                    <p className="font-semibold">{u.displayLabel || u.externalUserId}</p>
-                    <p className="mt-1 font-mono text-[11px] text-[#87917f]">{u.externalUserId}</p>
+                    <p className="font-semibold">{u.email || "Email unavailable"}</p>
+                    <p className="mt-1 font-mono text-[11px] text-[#87917f]">{u.id}</p>
                   </div>
                   <StatusPill status={u.status} />
                 </button>
@@ -74,7 +74,7 @@ export default function ViewersPage() {
                       Viewer detail
                     </p>
                     <h2 className="mt-2 text-xl font-semibold">
-                      {selected.viewer.displayLabel || selected.viewer.externalUserId}
+                      {selected.viewer.email || "Email unavailable"}
                     </h2>
                   </div>
                   <div className="flex gap-2">
