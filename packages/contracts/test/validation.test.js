@@ -76,11 +76,17 @@ describe("public input validation", () => {
       assetId: "asset",
       email: "Viewer@Example.COM",
       deviceId: "device123",
-      client: { browser },
+      client: {
+        browser,
+        sdkName: "@unpirator/sdk-js",
+        sdkVersion: "0.2.1",
+      },
     });
 
     expect(result.email).toBe("viewer@example.com");
     expect(result.client.browser).toBe(browser.slice(0, 100));
+    expect(result.client.sdkName).toBe("@unpirator/sdk-js");
+    expect(result.client.sdkVersion).toBe("0.2.1");
   });
 
   it("accepts a simple client identifier", () => {

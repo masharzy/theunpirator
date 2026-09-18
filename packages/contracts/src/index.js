@@ -77,6 +77,8 @@ const playbackClientSchema = z.union([
       browser: clientMetadataSchema.optional(),
       os: clientMetadataSchema.optional(),
       deviceName: clientMetadataSchema.optional(),
+      sdkName: clientMetadataSchema.optional(),
+      sdkVersion: clientMetadataSchema.optional(),
     })
     .strict(),
   clientMetadataSchema.transform((browser) => ({ browser })),

@@ -3,7 +3,7 @@ import { assetSyncSchema, playbackSessionSchema, parseOrThrow } from "@unpirator
 import { and, eq, sql } from "drizzle-orm";
 import { encryptJson, sha256 } from "@unpirator/crypto";
 import { AppError, notFound } from "../errors.js";
-import { assets, endUsers, playbackSessions, sites } from "@unpirator/db/schema";
+import { assets, endUsers, playbackSessions, sites, usageEvents } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 import { decryptViewerEmail } from "../services/viewer-identity.js";
 import {
@@ -148,6 +148,27 @@ export function playbackRouter({
             return value;
           })
         : await create();
+
+      if (result.sessionId && (input.client?.sdkName || input.client?.sdkVersion)) {
+        await db
+          .update(usageEvents)
+          .set({
+            metadata: {
+              client: {
+                ...(input.client.sdkName ? { sdkName: input.client.sdkName } : {}),
+                ...(input.client.sdkVersion ? { sdkVersion: input.client.sdkVersion } : {}),
+              },
+            },
+          })
+          .where(
+            and(
+              eq(usageEvents.tenantId, req.apiAuth.tenantId),
+              eq(usageEvents.sessionId, result.sessionId),
+              eq(usageEvents.type, "playback_sessions"),
+            ),
+          );
+      }
+
       const durationMs = Math.round(performance.now() - started);
       res.set("server-timing", `playback_session;dur=${durationMs}`);
       console.info(

@@ -1,5 +1,8 @@
 export { ProtectedPlayer, mountProtectedPlayer } from "@unpirator/player";
 
+export const UNPIRATOR_SDK_NAME = "@unpirator/sdk-js";
+export const UNPIRATOR_SDK_VERSION = "0.2.1";
+
 export function getOrCreateDeviceId(storageKey = "unpirator_device_id") {
   try {
     let id = localStorage.getItem(storageKey);
@@ -46,6 +49,8 @@ export function createPlaybackBootstrap({
         client: {
           browser: navigator.userAgent.slice(0, 100),
           os: navigator.platform?.slice(0, 100) || undefined,
+          sdkName: UNPIRATOR_SDK_NAME,
+          sdkVersion: UNPIRATOR_SDK_VERSION,
         },
       }),
     });
