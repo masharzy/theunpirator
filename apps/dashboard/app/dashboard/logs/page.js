@@ -77,13 +77,10 @@ export default function LogsPage() {
     api(endpoint, { signal: controller.signal })
       .then((response) => {
         setItems(response.items || []);
-        setPagination(
-          response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 },
-        );
+        setPagination(response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 });
       })
       .catch((failure) => {
-        if (failure.name !== "AbortError")
-          setError(failure.message || "Logs could not be loaded");
+        if (failure.name !== "AbortError") setError(failure.message || "Logs could not be loaded");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -365,7 +362,8 @@ export default function LogsPage() {
                       </dt>
                       <dd className="mt-1">
                         <TechnicalValue>
-                          quantity={selected.technical.quantity} · riskScore={selected.technical.riskScore}
+                          quantity={selected.technical.quantity} · riskScore=
+                          {selected.technical.riskScore}
                         </TechnicalValue>
                       </dd>
                     </div>
