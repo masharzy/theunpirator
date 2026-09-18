@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { assetCreateSchema, parseOrThrow } from "@unpirator/contracts";
 import { encryptJson } from "@unpirator/crypto";
 import { assets, providerHealth, sites } from "@unpirator/db/schema";
 import { assetConnectionRefs, providerConnections } from "@unpirator/db/commerce-schema";
-import { restrictedFeatureEnabled } from "../services/entitlements.js";
+import { getEntitlements, restrictedFeatureEnabled } from "../services/entitlements.js";
+import { normalizeQuotaLimit } from "../services/quotas.js";
 import { AppError, forbidden, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
 
@@ -174,6 +175,20 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
           : null;
 
       const asset = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${req.tenantId}:assets`}, 22))`,
+        );
+        const entitlements = await getEntitlements(tx, req.tenantId);
+        const limit = normalizeQuotaLimit(entitlements.max_assets);
+        if (limit !== null) {
+          const existing = await tx
+            .select({ id: assets.id })
+            .from(assets)
+            .where(eq(assets.tenantId, req.tenantId));
+          if (existing.length >= limit)
+            throw new AppError("PLAN_LIMIT", "Plan asset limit reached", 403);
+        }
+
         const [created] = await tx
           .insert(assets)
           .values({

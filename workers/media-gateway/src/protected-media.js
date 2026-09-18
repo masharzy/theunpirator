@@ -3,6 +3,7 @@ import { getSource } from "./source.js";
 import { securityError } from "./token.js";
 import { singleFlight } from "./single-flight.js";
 import { readRange } from "./read-range.js";
+import { reserveDeliveryQuota } from "./quota.js";
 
 const MANIFEST_TTL_SECONDS = 300;
 
@@ -54,7 +55,7 @@ export function parseSidx(buffer, indexEnd) {
   const view = new DataView(buffer);
   let boxStart = -1;
   let boxSize = 0;
-  for (let offset = 0; offset + 8 <= view.byteLength;) {
+  for (let offset = 0; offset + 8 <= view.byteLength; ) {
     const size = view.getUint32(offset);
     const type = String.fromCharCode(...new Uint8Array(buffer, offset + 4, 4));
     if (type === "sidx") {
@@ -114,8 +115,6 @@ export function parseSidx(buffer, indexEnd) {
 function sourceHeaders(source, range) {
   const headers = new Headers({
     range: `bytes=${range.start}-${range.end}`,
-    // Prevent an intermediary from transforming a byte-range response. YouTube's
-    // Content-Range offsets are defined against the identity representation.
     "accept-encoding": "identity",
   });
   for (const [name, value] of Object.entries(source.headers || {})) {
@@ -168,9 +167,6 @@ async function fetchTrackRange(track, variant, range, source) {
     } catch (error) {
       lastError = error;
       if (attempt === 2) break;
-      // A protected YouTube source can only be resolved with a fresh browser PO proof.
-      // Retry its already-verified signed URL here; a new playback bootstrap performs
-      // source renewal when that URL has actually expired.
       await new Promise((resolve) => setTimeout(resolve, 150 * 2 ** attempt));
     }
   }
@@ -213,8 +209,6 @@ export async function protectedManifest(
 }
 async function buildManifest(env, claims, assetId, forceRefresh, providerProof) {
   const key = `protected:manifest:${claims.psid}:${assetId}`;
-  // Resolve/check the source before accepting its cached manifest. getSource
-  // invalidates this key whenever it has to replace the signed source.
   const source = await getSource(env, claims, assetId, forceRefresh, providerProof);
   if (!forceRefresh) {
     const cached = await env.SOURCE_CACHE.get(key, "json");
@@ -274,6 +268,7 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   try {
     const { response } = await fetchTrackRange(track, variant, range, source);
     const body = await readRange(response, range, 16 * 1024 * 1024, "MEDIA_SEGMENT_INVALID");
+    await reserveDeliveryQuota(env, claims, body.byteLength);
     return { body, contentType: stream.mimeType || "application/octet-stream" };
   } finally {
     await stub

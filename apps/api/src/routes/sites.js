@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { resolveTxt } from "node:dns/promises";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { siteCreateSchema, parseOrThrow } from "@unpirator/contracts";
 import { randomToken } from "@unpirator/crypto";
 import { siteDomains, sites } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
-import { notFound } from "../errors.js";
+import { AppError, notFound } from "../errors.js";
 import { getEntitlements } from "../services/entitlements.js";
+import { normalizeQuotaLimit } from "../services/quotas.js";
 import {
   domainChallenges,
   verifyFileChallenge,
@@ -26,36 +27,39 @@ export function sitesRouter({ db, requireTenantAdmin }) {
   router.post("/", async (req, res, next) => {
     try {
       const input = parseOrThrow(siteCreateSchema, req.body);
-      const entitlements = await getEntitlements(db, req.tenantId);
-      const existingSites = await db
-        .select({ id: sites.id })
-        .from(sites)
-        .where(eq(sites.tenantId, req.tenantId));
-      if (existingSites.length >= Number(entitlements.max_sites ?? 1)) {
-        const error = new Error("Plan site limit reached");
-        error.code = "PLAN_LIMIT";
-        error.status = 403;
-        throw error;
-      }
-      const [site] = await db
-        .insert(sites)
-        .values({ tenantId: req.tenantId, name: input.name, domain: input.domain })
-        .returning();
-      const domains = [...new Set([input.domain, ...input.allowedDomains])];
-      await db.insert(siteDomains).values(
-        domains.map((domain) => ({
-          siteId: site.id,
-          domain,
-          verificationToken: randomToken(24),
-        })),
-      );
-      await writeAudit(db, {
-        tenantId: req.tenantId,
-        actorAccountId: req.auth.accountId,
-        action: "SITE_CREATED",
-        targetType: "site",
-        targetId: site.id,
-        ip: req.ip,
+      const site = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${req.tenantId}:sites`}, 21))`,
+        );
+        const entitlements = await getEntitlements(tx, req.tenantId);
+        const limit = normalizeQuotaLimit(entitlements.max_sites);
+        const existingSites = await tx
+          .select({ id: sites.id })
+          .from(sites)
+          .where(eq(sites.tenantId, req.tenantId));
+        if (limit !== null && existingSites.length >= limit)
+          throw new AppError("PLAN_LIMIT", "Plan site limit reached", 403);
+        const [created] = await tx
+          .insert(sites)
+          .values({ tenantId: req.tenantId, name: input.name, domain: input.domain })
+          .returning();
+        const domains = [...new Set([input.domain, ...input.allowedDomains])];
+        await tx.insert(siteDomains).values(
+          domains.map((domain) => ({
+            siteId: created.id,
+            domain,
+            verificationToken: randomToken(24),
+          })),
+        );
+        await writeAudit(tx, {
+          tenantId: req.tenantId,
+          actorAccountId: req.auth.accountId,
+          action: "SITE_CREATED",
+          targetType: "site",
+          targetId: created.id,
+          ip: req.ip,
+        });
+        return created;
       });
       res.status(201).json({ site });
     } catch (e) {
