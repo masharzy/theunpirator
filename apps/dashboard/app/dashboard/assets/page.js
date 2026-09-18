@@ -124,7 +124,9 @@ export default function AssetsPage() {
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="min-w-0 truncate font-mono text-[10px] text-[#9aa292]">{item.id}</p>
+                  <p className="min-w-0 truncate font-mono text-[10px] text-[#9aa292]">
+                    {item.id}
+                  </p>
                   <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#536b31]">
                     Open <ArrowRight size={13} />
                   </span>
