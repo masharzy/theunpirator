@@ -115,7 +115,9 @@ function MetricCard({ label, value, hint, icon: Icon, tone = "default" }) {
           <p className="mt-2 text-2xl font-semibold tracking-tight text-[#263120]">{value}</p>
           <p className="mt-1 text-xs text-[#899283]">{hint}</p>
         </div>
-        <span className={`grid size-9 place-items-center rounded-xl ${tones[tone] || tones.default}`}>
+        <span
+          className={`grid size-9 place-items-center rounded-xl ${tones[tone] || tones.default}`}
+        >
           <Icon size={16} />
         </span>
       </div>
@@ -128,7 +130,10 @@ function LoadingRows() {
     <Surface className="overflow-hidden">
       <div className="divide-y divide-[#edf0e9]">
         {[0, 1, 2].map((row) => (
-          <div key={row} className="grid animate-pulse gap-5 p-5 lg:grid-cols-[1.2fr_1fr_1fr_180px]">
+          <div
+            key={row}
+            className="grid animate-pulse gap-5 p-5 lg:grid-cols-[1.2fr_1fr_1fr_180px]"
+          >
             <div className="space-y-2">
               <div className="h-4 w-48 rounded bg-[#edf0e9]" />
               <div className="h-3 w-32 rounded bg-[#f2f4ef]" />
@@ -220,7 +225,11 @@ export default function SessionsPage() {
           session.ip,
           session.userAgent,
           session.status,
-        ].some((value) => String(value || "").toLowerCase().includes(term));
+        ].some((value) =>
+          String(value || "")
+            .toLowerCase()
+            .includes(term),
+        );
       });
   }, [assetMap, filter, items, query, siteMap]);
 
@@ -380,10 +389,13 @@ export default function SessionsPage() {
 
         <div className="flex items-center justify-between gap-4 bg-[#fafbf8] px-5 py-3 text-xs text-[#7c8775]">
           <p>
-            Showing <span className="font-semibold text-[#46513f]">{visible.length}</span> of {items.length}
+            Showing <span className="font-semibold text-[#46513f]">{visible.length}</span> of{" "}
+            {items.length}
             {query ? " matching sessions" : " sessions"}
           </p>
-          <p className="hidden sm:block">Idle sessions remain revocable until they end or expire.</p>
+          <p className="hidden sm:block">
+            Idle sessions remain revocable until they end or expire.
+          </p>
         </div>
       </Surface>
 
@@ -431,7 +443,10 @@ export default function SessionsPage() {
                           <p className="truncate text-sm font-semibold text-[#263120]">
                             {session.viewerEmail || "Viewer email unavailable"}
                           </p>
-                          <p className="mt-1 font-mono text-[10px] text-[#929b8b]" title={session.id}>
+                          <p
+                            className="mt-1 font-mono text-[10px] text-[#929b8b]"
+                            title={session.id}
+                          >
                             Session {shortId(session.id)}
                           </p>
                           <div className="mt-2 lg:hidden">
