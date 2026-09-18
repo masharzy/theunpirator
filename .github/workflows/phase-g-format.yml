@@ -1,0 +1,31 @@
+name: Phase G format
+
+on:
+  push:
+    branches:
+      - phase-g-format
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format Phase G files
+        run: pnpm exec prettier --write apps/api/src/routes/integration-health.js apps/dashboard/app/dashboard/integration/page.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase-g-formatted
+          path: |
+            apps/api/src/routes/integration-health.js
+            apps/dashboard/app/dashboard/integration/page.js
