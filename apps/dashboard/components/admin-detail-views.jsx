@@ -7,9 +7,13 @@ function Records({ items, empty = "No records in this section." }) {
         {empty}
       </p>
     );
-  const columns = Object.keys(items[0])
-    .filter((k) => !["metadata", "encryptedConfig", "secretHash"].includes(k))
-    .slice(0, 9);
+  const keys = Object.keys(items[0]).filter(
+    (k) => !["metadata", "encryptedConfig", "secretHash"].includes(k),
+  );
+  const columns = [
+    ...["id", "viewerEmail", "email"].filter((key) => keys.includes(key)),
+    ...keys.filter((key) => !["id", "viewerEmail", "email"].includes(key)),
+  ].slice(0, 9);
   return (
     <div className="overflow-auto rounded-2xl border bg-white">
       <table className="w-full text-left text-xs">
