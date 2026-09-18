@@ -2,6 +2,7 @@ import { rewriteHlsManifest } from "./hls.js";
 import { getHlsObject, getSource, invalidateSource } from "./source.js";
 import { securityError } from "./token.js";
 import { fetchOriginWithRedirects } from "./origin-fetch.js";
+import { reserveDeliveryQuota } from "./quota.js";
 
 const COPY_REQUEST_HEADERS = ["range", "if-none-match", "if-modified-since", "accept"];
 const COPY_RESPONSE_HEADERS = [
@@ -110,7 +111,7 @@ export async function proxyPrimary(request, env, claims, assetId) {
     assertOrigin(request, source.allowedOrigins, env);
     origin = await originFetch(request, source.url, source);
   }
-  return finalize(request, origin.response, origin.resolvedUrl, source, assetId, env);
+  return finalize(request, origin.response, origin.resolvedUrl, source, assetId, env, claims);
 }
 
 export async function proxyHlsObject(request, env, claims, assetId, objectId) {
@@ -121,7 +122,7 @@ export async function proxyHlsObject(request, env, claims, assetId, objectId) {
     throw securityError("NATIVE_DELIVERY_DISABLED", 403, "Use the protected HLS runtime");
   assertOrigin(request, mapped.allowedOrigins, env);
   const origin = await originFetch(request, mapped.url, mapped);
-  return finalize(request, origin.response, origin.resolvedUrl, mapped, assetId, env);
+  return finalize(request, origin.response, origin.resolvedUrl, mapped, assetId, env, claims);
 }
 
 export async function protectedHlsResource(request, env, claims, assetId, resourceId) {
@@ -141,25 +142,25 @@ export async function protectedHlsResource(request, env, claims, assetId, resour
     throw error;
   }
   const type = response.headers.get("content-type") || "";
-  // Only the root descriptor is known to be a manifest. Child objects may be
-  // playlists or binary media; inheriting the root manifestType
-  // makes every TS/fMP4 segment get decoded and parsed as an M3U8 playlist.
   if (looksLikeHls(origin.resolvedUrl, response, resourceId === "root" ? source : mapped)) {
     const text = await response.text();
+    const body = new TextEncoder().encode(
+      await rewriteHlsManifest(text, origin.resolvedUrl, assetId, { ...source, ...mapped }, env),
+    );
+    await reserveDeliveryQuota(env, claims, body.byteLength);
     return {
-      body: new TextEncoder().encode(
-        await rewriteHlsManifest(text, origin.resolvedUrl, assetId, { ...source, ...mapped }, env),
-      ),
+      body,
       contentType: "application/vnd.apple.mpegurl",
     };
   }
   const body = await response.arrayBuffer();
   if (body.byteLength > 16 * 1024 * 1024)
     throw securityError("HLS_RESOURCE_TOO_LARGE", 413, "HLS segment exceeds 16 MB");
+  await reserveDeliveryQuota(env, claims, body.byteLength);
   return { body, contentType: type || "application/octet-stream" };
 }
 
-async function finalize(request, response, sourceUrl, source, assetId, env) {
+async function finalize(request, response, sourceUrl, source, assetId, env, claims) {
   if ([401, 403, 404].includes(response.status)) {
     await response.body?.cancel();
     throw securityError("ORIGIN_FAILURE", 502, "Media source unavailable");
@@ -168,12 +169,16 @@ async function finalize(request, response, sourceUrl, source, assetId, env) {
   if (request.method !== "HEAD" && looksLikeHls(sourceUrl, response, source) && response.ok) {
     const text = await response.text();
     const rewritten = await rewriteHlsManifest(text, sourceUrl, assetId, source, env);
+    const bytes = new TextEncoder().encode(rewritten).byteLength;
+    await reserveDeliveryQuota(env, claims, bytes);
     const headers = copyResponseHeaders(response, requestOrigin);
     headers.set("content-type", "application/vnd.apple.mpegurl");
     headers.delete("content-length");
     headers.set("cache-control", "private, no-store");
     return new Response(rewritten, { status: response.status, headers });
   }
+  const length = request.method === "HEAD" ? 0 : Number(response.headers.get("content-length") || 0);
+  await reserveDeliveryQuota(env, claims, Number.isFinite(length) ? length : 0);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

@@ -76,7 +76,12 @@ export function StatusPill({ status }) {
 }
 
 export function ProgressMeter({ label, used = 0, limit, format = (v) => String(v) }) {
-  const finite = Number.isFinite(Number(limit)) && Number(limit) >= 0;
+  const finite =
+    limit !== null &&
+    limit !== undefined &&
+    limit !== "" &&
+    Number.isFinite(Number(limit)) &&
+    Number(limit) >= 0;
   const numericUsed = Math.max(0, Number(used || 0));
   const numericLimit = finite ? Number(limit) : null;
   const rawPct = !finite

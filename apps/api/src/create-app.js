@@ -32,6 +32,7 @@ import { usageRouter } from "./routes/usage.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminCommerceRouter } from "./routes/admin-commerce.js";
 import { internalRouter } from "./routes/internal.js";
+import { quotaInternalRouter } from "./routes/quota-internal.js";
 import { billingRouter } from "./routes/billing.js";
 import { workspaceRouter } from "./routes/workspace.js";
 import { webhooksRouter } from "./routes/webhooks.js";
@@ -197,6 +198,7 @@ export function createApp(overrides = {}) {
     }),
   );
 
+  app.use("/internal/quota", quotaInternalRouter({ db, config }));
   app.use("/internal", internalRouter({ db, config, signingRing }));
   app.use(notFoundHandler);
   app.use(errorHandler);

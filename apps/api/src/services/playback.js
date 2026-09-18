@@ -21,6 +21,12 @@ import { queueWebhook } from "./webhooks.js";
 import { notifyTenant } from "./tenant-notifications.js";
 import { AppError, notFound } from "../errors.js";
 import { getPlaybackPolicy, hasActiveSubscription } from "./entitlements.js";
+import {
+  assertMeteredCapacityTx,
+  getActiveQuotaContext,
+  normalizeQuotaLimit,
+  reserveMeteredQuotaTx,
+} from "./quotas.js";
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
@@ -154,6 +160,18 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         )
         .limit(1);
       if (!asset) {
+        await db.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:assets`}, 22))`,
+        );
+        const assetLimit = normalizeQuotaLimit(policy.entitlements.max_assets);
+        if (assetLimit !== null) {
+          const existing = await db
+            .select({ id: assets.id })
+            .from(assets)
+            .where(eq(assets.tenantId, tenantId));
+          if (existing.length >= assetLimit)
+            throw new AppError("PLAN_LIMIT", "Plan asset limit reached", 403);
+        }
         [asset] = await db
           .insert(assets)
           .values({
@@ -207,6 +225,17 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     }
     const protectedHls = isHlsAsset(asset);
     const entitlements = policy.entitlements;
+    const quotaContext = await getActiveQuotaContext(db, tenantId);
+    for (const metric of ["gateway_requests", "egress_bytes"]) {
+      const availability = await assertMeteredCapacityTx(db, {
+        tenantId,
+        metric,
+        context: quotaContext,
+      });
+      if (!availability.allowed)
+        throw new AppError("PLAN_QUOTA_EXCEEDED", "Plan usage limit reached", 429);
+    }
+    recordTiming("metered_capacity");
     const playbackFeatures = {
       protectedDelivery: policy.protectedDelivery,
       playerIntegrity: policy.playerIntegrity,
@@ -289,10 +318,8 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
             eq(devices.status, "active"),
           ),
         );
-      if (
-        policy.deviceControl &&
-        existing.length >= Number(entitlements.max_devices_per_user || 2)
-      ) {
+      const deviceLimit = normalizeQuotaLimit(entitlements.max_devices_per_user);
+      if (policy.deviceControl && deviceLimit !== null && existing.length >= deviceLimit) {
         await db.insert(securityEvents).values({
           tenantId,
           siteId: site.id,
@@ -301,7 +328,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           type: "DEVICE_LIMIT",
           severity: "warning",
           riskScore: riskFor("DEVICE_LIMIT"),
-          metadata: { maxDevices: Number(entitlements.max_devices_per_user || 2) },
+          metadata: { maxDevices: deviceLimit },
         });
         throw new AppError("DEVICE_LIMIT", "Device limit reached", 403);
       }
@@ -330,21 +357,33 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         .where(eq(devices.id, device.id));
     }
     recordTiming("device");
+
+    await db.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:concurrency`}, 23))`,
+    );
     const activeSessions = await db
-      .select({ id: playbackSessions.id })
+      .select({ id: playbackSessions.id, startedAt: playbackSessions.startedAt })
       .from(playbackSessions)
       .where(
         and(
-          eq(playbackSessions.endUserId, user.id),
+          eq(playbackSessions.tenantId, tenantId),
           eq(playbackSessions.status, "active"),
           gt(playbackSessions.expiresAt, new Date()),
         ),
       );
-    const maxStreams = Number(entitlements.max_concurrent_streams || 1);
+    const maxStreams = normalizeQuotaLimit(entitlements.max_concurrent_streams);
     recordTiming("active_sessions");
-    if (policy.concurrentStreamControl && activeSessions.length >= maxStreams) {
-      if (entitlements.session_policy === "revoke_old") {
-        for (const old of activeSessions) {
+    if (
+      policy.concurrentStreamControl &&
+      maxStreams !== null &&
+      activeSessions.length >= maxStreams
+    ) {
+      if (entitlements.session_policy === "revoke_old" && maxStreams > 0) {
+        const revokeCount = activeSessions.length - maxStreams + 1;
+        const oldest = [...activeSessions]
+          .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt))
+          .slice(0, revokeCount);
+        for (const old of oldest) {
           await db
             .update(playbackSessions)
             .set({ status: "revoked", endedAt: new Date() })
@@ -366,6 +405,16 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         throw new AppError("CONCURRENT_PLAYBACK", "Concurrent playback limit reached", 409);
       }
     }
+
+    const playbackReservation = await reserveMeteredQuotaTx(db, {
+      tenantId,
+      metric: "playback_sessions",
+      quantity: 1,
+      context: quotaContext,
+    });
+    if (!playbackReservation.allowed)
+      throw new AppError("PLAN_QUOTA_EXCEEDED", "Plan playback session limit reached", 429);
+
     const expiresAt = new Date(Date.now() + 8 * 3600_000);
     recordTiming("concurrency_policy");
     const [session] = await db
