@@ -17,6 +17,24 @@ const DEFAULTS = {
   youtube_custom: false,
 };
 
+export async function hasActiveSubscription(db, tenantId) {
+  const [subscription] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(
+      and(
+        eq(subscriptions.tenantId, tenantId),
+        inArray(subscriptions.status, ["active", "trialing"]),
+        eq(plans.status, "active"),
+        or(isNull(subscriptions.periodEnd), gt(subscriptions.periodEnd, new Date())),
+      ),
+    )
+    .orderBy(desc(subscriptions.createdAt))
+    .limit(1);
+  return Boolean(subscription);
+}
+
 export async function getEntitlements(db, tenantId) {
   const [subscription] = await db
     .select({ entitlements: plans.entitlements })
