@@ -7,17 +7,24 @@ import { api } from "@/lib/api";
 import { PageHeader, Surface } from "@/components/console-kit";
 
 const frameworks = {
-  nextjs: `const session = await client.createYoutubePlaybackSession({
-  siteId: "YOUR_SITE_ID",
-  youtubeUrl,
-  externalUserId: currentUser.id,
-  deviceId,
+  nextjs: `export const POST = createUnpiratorPlaybackHandler({
+  apiUrl: process.env.UNPIRATOR_API_URL,
+  apiKey: process.env.UNPIRATOR_API_KEY,
+  siteId: process.env.UNPIRATOR_SITE_ID,
+  resolveViewer: async () => {
+    const user = await requireAuthenticatedUser();
+    return { email: user.email };
+  },
+  authorizePlayback: async ({ body }) =>
+    canCurrentUserWatch(body.playbackRef),
 });`,
   php: `$session = $client->createPlaybackSession([
   'siteId' => 'YOUR_SITE_ID',
   'source' => ['provider' => 'youtube_custom', 'url' => $youtubeUrl],
-  'externalUserId' => $currentUser->id,
+  'email' => strtolower($authenticatedUser->email),
   'deviceId' => $deviceId,
+  'viewerIp' => $request->ip(),
+  'viewerUserAgent' => $request->userAgent(),
 ]);`,
   custom: `POST /v1/playback/sessions
 Authorization: Bearer YOUR_API_KEY
@@ -26,8 +33,10 @@ Idempotency-Key: UNIQUE_REQUEST_ID
 {
   "siteId": "YOUR_SITE_ID",
   "source": { "provider": "youtube_custom", "url": "YOUTUBE_URL" },
-  "externalUserId": "CURRENT_USER_ID",
-  "deviceId": "STABLE_DEVICE_ID"
+  "email": "AUTHENTICATED_USER_EMAIL",
+  "deviceId": "STABLE_DEVICE_ID",
+  "viewerIp": "VIEWER_IP",
+  "viewerUserAgent": "VIEWER_USER_AGENT"
 }`,
 };
 
@@ -99,7 +108,7 @@ export default function IntegrationPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
             <div>
               <h2 className="font-semibold">Starter sample</h2>
-              <p className="mt-1 text-xs text-[#74806d]">Use server-side credentials only.</p>
+              <p className="mt-1 text-xs text-[#74806d]">Resolve viewer email on your server; never trust a browser-supplied email.</p>
             </div>
             <select
               className="rounded-xl border bg-white px-3 py-2 text-sm"
