@@ -21,8 +21,7 @@ export async function fetchOriginWithRedirects(
       redirect: "manual",
     });
 
-    const isRedirect =
-      response.status >= 300 && response.status < 400 && response.status !== 304;
+    const isRedirect = response.status >= 300 && response.status < 400 && response.status !== 304;
     if (!isRedirect) {
       return {
         response,

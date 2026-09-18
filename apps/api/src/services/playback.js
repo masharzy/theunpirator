@@ -220,10 +220,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       .select()
       .from(endUsers)
       .where(
-        and(
-          eq(endUsers.tenantId, tenantId),
-          inArray(endUsers.externalUserId, identityCandidates),
-        ),
+        and(eq(endUsers.tenantId, tenantId), inArray(endUsers.externalUserId, identityCandidates)),
       )
       .limit(1);
 

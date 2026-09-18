@@ -108,7 +108,9 @@ export default function IntegrationPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
             <div>
               <h2 className="font-semibold">Starter sample</h2>
-              <p className="mt-1 text-xs text-[#74806d]">Resolve viewer email on your server; never trust a browser-supplied email.</p>
+              <p className="mt-1 text-xs text-[#74806d]">
+                Resolve viewer email on your server; never trust a browser-supplied email.
+              </p>
             </div>
             <select
               className="rounded-xl border bg-white px-3 py-2 text-sm"

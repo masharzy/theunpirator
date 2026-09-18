@@ -1102,9 +1102,9 @@ export function DocsClient() {
                 <code>deviceId</code>
                 <strong>Required · generated automatically</strong>
                 <p>
-                  The official SDK generates a random stable UUID. It is not a hardware
-                  fingerprint. It links the authenticated email to the device/session history and
-                  enables device controls.
+                  The official SDK generates a random stable UUID. It is not a hardware fingerprint.
+                  It links the authenticated email to the device/session history and enables device
+                  controls.
                 </p>
               </div>
               <div>
@@ -1143,10 +1143,10 @@ Content-Type: application/json
 }`}</CodeBlock>
 
             <div className="docs-note">
-              Your server adds the trusted <code>email</code>, <code>siteId</code>,
-              viewer request context and server-only API key before calling Unpirator. The player
-              supplies the required random stable <code>deviceId</code>. Any email included in
-              browser JSON must be ignored.
+              Your server adds the trusted <code>email</code>, <code>siteId</code>, viewer request
+              context and server-only API key before calling Unpirator. The player supplies the
+              required random stable <code>deviceId</code>. Any email included in browser JSON must
+              be ignored.
             </div>
 
             <div className="docs-callout">

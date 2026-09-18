@@ -31,20 +31,17 @@ describe("validated origin redirects", () => {
   });
 
   it("blocks redirects to private or unapproved hosts", async () => {
-    const fetcher = vi.fn(async () =>
-      new Response(null, {
-        status: 302,
-        headers: { location: "http://127.0.0.1/admin" },
-      }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1/admin" },
+        }),
     );
     vi.stubGlobal("fetch", fetcher);
 
     await expect(
-      fetchOriginWithRedirects(
-        "https://media.example.com/video.mp4",
-        {},
-        ["media.example.com"],
-      ),
+      fetchOriginWithRedirects("https://media.example.com/video.mp4", {}, ["media.example.com"]),
     ).rejects.toMatchObject({
       code: "ORIGIN_REDIRECT_BLOCKED",
       status: 502,
@@ -68,12 +65,9 @@ describe("validated origin redirects", () => {
     vi.stubGlobal("fetch", fetcher);
 
     await expect(
-      fetchOriginWithRedirects(
-        "https://media.example.com/video.mp4",
-        {},
-        ["media.example.com"],
-        { maxRedirects: 2 },
-      ),
+      fetchOriginWithRedirects("https://media.example.com/video.mp4", {}, ["media.example.com"], {
+        maxRedirects: 2,
+      }),
     ).rejects.toMatchObject({
       code: "ORIGIN_REDIRECT_LIMIT",
       status: 502,

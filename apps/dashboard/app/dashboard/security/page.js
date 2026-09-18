@@ -196,15 +196,30 @@ function EventDrawer({ selectedEvent, onClose }) {
               />
               <DetailRow
                 label="Site"
-                value={detail?.site ? `${detail.site.name} · ${detail.site.domain}` : event?.siteId || "—"}
+                value={
+                  detail?.site
+                    ? `${detail.site.name} · ${detail.site.domain}`
+                    : event?.siteId || "—"
+                }
                 mono={!detail?.site && Boolean(event?.siteId)}
               />
-              <DetailRow label="Asset" value={detail?.asset?.title || event?.assetId || "—"} mono={!detail?.asset && Boolean(event?.assetId)} />
+              <DetailRow
+                label="Asset"
+                value={detail?.asset?.title || event?.assetId || "—"}
+                mono={!detail?.asset && Boolean(event?.assetId)}
+              />
               <DetailRow label="Provider" value={detail?.asset?.provider || "—"} />
-              <DetailRow label="Session" value={detail?.session?.id || event?.sessionId || "—"} mono />
+              <DetailRow
+                label="Session"
+                value={detail?.session?.id || event?.sessionId || "—"}
+                mono
+              />
               <DetailRow label="Session status" value={detail?.session?.status || "—"} />
               <DetailRow label="Started" value={formatDate(detail?.session?.startedAt)} />
-              <DetailRow label="Last heartbeat" value={formatDate(detail?.session?.lastHeartbeatAt)} />
+              <DetailRow
+                label="Last heartbeat"
+                value={formatDate(detail?.session?.lastHeartbeatAt)}
+              />
               <DetailRow label="Expires" value={formatDate(detail?.session?.expiresAt)} />
               <DetailRow label="Ended" value={formatDate(detail?.session?.endedAt)} />
             </Section>
@@ -212,9 +227,15 @@ function EventDrawer({ selectedEvent, onClose }) {
             <Section title="Viewer & device">
               <DetailRow
                 label="Viewer email"
-                value={detail?.viewer?.email || event?.viewerEmail || "Unavailable for this older event"}
+                value={
+                  detail?.viewer?.email || event?.viewerEmail || "Unavailable for this older event"
+                }
               />
-              <DetailRow label="Viewer record" value={detail?.viewer?.id || event?.endUserId || "—"} mono />
+              <DetailRow
+                label="Viewer record"
+                value={detail?.viewer?.id || event?.endUserId || "—"}
+                mono
+              />
               <DetailRow label="Viewer status" value={detail?.viewer?.status || "—"} />
               <DetailRow
                 label="Device"
@@ -227,7 +248,11 @@ function EventDrawer({ selectedEvent, onClose }) {
             </Section>
 
             <Section title="Request context">
-              <DetailRow label="IP address" value={detail?.session?.ip || metadata.ip || "—"} mono />
+              <DetailRow
+                label="IP address"
+                value={detail?.session?.ip || metadata.ip || "—"}
+                mono
+              />
               <DetailRow
                 label="User agent"
                 value={detail?.session?.userAgent || metadata.userAgent || "—"}
@@ -265,9 +290,8 @@ export default function SecurityPage() {
 
   const critical = useMemo(
     () =>
-      events.filter((event) =>
-        ["critical", "high"].includes(String(event.severity).toLowerCase()),
-      ).length,
+      events.filter((event) => ["critical", "high"].includes(String(event.severity).toLowerCase()))
+        .length,
     [events],
   );
   const blocked = devices.filter((device) => device.status === "blocked").length;

@@ -22,7 +22,9 @@ function legacyViewerEmailEncryptionKey(config) {
 }
 
 export function normalizeViewerEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 export function viewerIdentityKey(email, config) {
@@ -36,11 +38,7 @@ export function viewerIdentityKeyCandidates(email, config) {
   if (!normalized) throw new Error("Viewer email is required");
   return [
     viewerIdentityKey(normalized, config),
-    `email_hmac_v1_${blindIndex(
-      normalized,
-      config.APP_ENCRYPTION_KEY_BASE64,
-      EMAIL_CONTEXT,
-    )}`,
+    `email_hmac_v1_${blindIndex(normalized, config.APP_ENCRYPTION_KEY_BASE64, EMAIL_CONTEXT)}`,
   ];
 }
 

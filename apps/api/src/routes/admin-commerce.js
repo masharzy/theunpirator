@@ -527,7 +527,9 @@ export function adminCommerceRouter({
               createdAt: tenants.createdAt,
             })
             .from(tenants)
-            .where(sql`not exists (select 1 from subscriptions s where s.tenant_id = ${tenants.id})`)
+            .where(
+              sql`not exists (select 1 from subscriptions s where s.tenant_id = ${tenants.id})`,
+            )
             .orderBy(desc(tenants.createdAt))
             .limit(500),
         ]);

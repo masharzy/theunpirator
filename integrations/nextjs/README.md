@@ -19,12 +19,12 @@ export const POST = createUnpiratorPlaybackHandler({
     return { email: user.email, id: user.id };
   },
 
-  authorizePlayback: async ({ body, viewer }) =>
-    canViewPlayback(viewer.id, body.playbackRef),
+  authorizePlayback: async ({ body, viewer }) => canViewPlayback(viewer.id, body.playbackRef),
 });
 ```
 
 The helper:
+
 - rejects cross-site playback bootstrap requests;
 - requires a device ID;
 - resolves the viewer email only through `resolveViewer`;

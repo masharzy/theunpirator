@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { blindIndex, decryptJson, deriveKey, encryptJson, signPlaybackToken, verifyPlaybackToken } from "../src/index.js";
+import {
+  blindIndex,
+  decryptJson,
+  deriveKey,
+  encryptJson,
+  signPlaybackToken,
+  verifyPlaybackToken,
+} from "../src/index.js";
 
 describe("crypto", () => {
   it("signs and verifies playback grants", () => {

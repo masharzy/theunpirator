@@ -177,7 +177,8 @@ export default function AdminSubscriptionsPage() {
                   <StatusPill status={item.status} />
                 )}
                 <div className="lg:text-right">
-                  {item.rowType === "subscription" && ["active", "trialing"].includes(item.status) ? (
+                  {item.rowType === "subscription" &&
+                  ["active", "trialing"].includes(item.status) ? (
                     <Button
                       variant="outline"
                       className="border-red-200 text-red-700 hover:bg-red-50"

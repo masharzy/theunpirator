@@ -1,5 +1,7 @@
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function viewerIpFromRequest(request) {
@@ -94,8 +96,7 @@ export function createUnpiratorPlaybackHandler({
   if (!siteId) throw new Error("siteId is required");
   if (typeof resolveViewer !== "function")
     throw new Error("resolveViewer is required and must return the authenticated viewer email");
-  if (typeof authorizePlayback !== "function")
-    throw new Error("authorizePlayback is required");
+  if (typeof authorizePlayback !== "function") throw new Error("authorizePlayback is required");
 
   const client = createUnpiratorServerClient({ apiUrl, apiKey });
 

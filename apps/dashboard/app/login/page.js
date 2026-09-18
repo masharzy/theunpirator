@@ -113,12 +113,17 @@ export default function LoginPage() {
                 aria-invalid={Boolean(fieldErrors.email)}
                 className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
               />
-              {fieldErrors.email && <p className="mt-2 text-sm text-red-600">{fieldErrors.email}</p>}
+              {fieldErrors.email && (
+                <p className="mt-2 text-sm text-red-600">{fieldErrors.email}</p>
+              )}
             </label>
             <label className="block">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-[#30342e]">Password</span>
-                <Link href="/forgot-password" className="text-sm text-[#666c62] hover:text-[#20251d] hover:underline">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-[#666c62] hover:text-[#20251d] hover:underline"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -134,12 +139,16 @@ export default function LoginPage() {
                 aria-invalid={Boolean(fieldErrors.password)}
                 className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
               />
-              {fieldErrors.password && <p className="mt-2 text-sm text-red-600">{fieldErrors.password}</p>}
+              {fieldErrors.password && (
+                <p className="mt-2 text-sm text-red-600">{fieldErrors.password}</p>
+              )}
             </label>
           </>
         ) : (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-[#30342e]">Authenticator code</span>
+            <span className="mb-2 block text-sm font-medium text-[#30342e]">
+              Authenticator code
+            </span>
             <Input
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -158,12 +167,18 @@ export default function LoginPage() {
         )}
 
         {error && (
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700"
+          >
             {error}
           </div>
         )}
 
-        <Button className="h-12 w-full rounded-lg bg-[#20251d] text-sm font-semibold text-white hover:bg-[#32382e]" disabled={busy}>
+        <Button
+          className="h-12 w-full rounded-lg bg-[#20251d] text-sm font-semibold text-white hover:bg-[#32382e]"
+          disabled={busy}
+        >
           {busy ? "Signing in…" : challenge ? "Verify and continue" : "Sign in"}
           {!busy && <ArrowRight className="ml-2 size-4" />}
         </Button>
@@ -176,7 +191,11 @@ export default function LoginPage() {
             <span>or</span>
             <span className="h-px flex-1 bg-[#e4e6e0]" />
           </div>
-          <Button asChild variant="outline" className="h-12 w-full rounded-lg border-[#d9dcd6] bg-white text-sm font-semibold shadow-none hover:bg-[#f7f8f5]">
+          <Button
+            asChild
+            variant="outline"
+            className="h-12 w-full rounded-lg border-[#d9dcd6] bg-white text-sm font-semibold shadow-none hover:bg-[#f7f8f5]"
+          >
             <a href="/control-api/v1/auth/google">Continue with Google</a>
           </Button>
         </>

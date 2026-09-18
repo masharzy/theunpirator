@@ -77,8 +77,7 @@ export class SessionState {
       const body = await request.json();
       const session = await this.state.storage.get("session");
       const sequence = Number(body.sequence);
-      const deny = (reason, status = 403) =>
-        Response.json({ error: "denied", reason }, { status });
+      const deny = (reason, status = 403) => Response.json({ error: "denied", reason }, { status });
 
       if (!session) return deny("session_missing");
       if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);
@@ -155,8 +154,7 @@ export class SessionState {
       const body = await request.json();
       const session = await this.state.storage.get("session");
       const resourceId = String(body.resourceId || "");
-      const deny = (reason, status = 403) =>
-        Response.json({ error: "denied", reason }, { status });
+      const deny = (reason, status = 403) => Response.json({ error: "denied", reason }, { status });
 
       if (!session) return deny("session_missing");
       if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);

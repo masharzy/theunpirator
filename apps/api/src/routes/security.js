@@ -20,7 +20,8 @@ function cleanIncidentTitle(type) {
 }
 
 function denialExplanation(reason, kind) {
-  const prefix = kind === "consume" ? "The protected segment was not released" : "No segment ticket was issued";
+  const prefix =
+    kind === "consume" ? "The protected segment was not released" : "No segment ticket was issued";
   const reasons = {
     session_missing: `${prefix} because the gateway session state was missing.`,
     session_active: `${prefix} because the session state was inconsistent.`,
@@ -28,30 +29,21 @@ function denialExplanation(reason, kind) {
     session_blocked: `${prefix} because the playback session had been blocked.`,
     session_inactive: `${prefix} because the playback session was not active.`,
     session_expired: `${prefix} because the playback session had expired.`,
-    integrity_stale:
-      `${prefix} because the protected player had not refreshed its integrity state within the required 15-second window.`,
+    integrity_stale: `${prefix} because the protected player had not refreshed its integrity state within the required 15-second window.`,
     invalid_track: `${prefix} because the requested media track was invalid.`,
     invalid_variant: `${prefix} because the requested quality variant was invalid.`,
     invalid_sequence: `${prefix} because the requested segment sequence was invalid.`,
-    sequence_out_of_window:
-      `${prefix} because the segment was outside the server-authorized playback/seek window.`,
-    rate_limited:
-      `${prefix} because the session exceeded the protected-ticket issuance rate limit.`,
-    replay_limit:
-      `${prefix} because the same segment reached the bounded ticket re-mint limit.`,
-    ticket_missing_or_used:
-      `${prefix} because the one-time segment ticket was missing or had already been consumed.`,
+    sequence_out_of_window: `${prefix} because the segment was outside the server-authorized playback/seek window.`,
+    rate_limited: `${prefix} because the session exceeded the protected-ticket issuance rate limit.`,
+    replay_limit: `${prefix} because the same segment reached the bounded ticket re-mint limit.`,
+    ticket_missing_or_used: `${prefix} because the one-time segment ticket was missing or had already been consumed.`,
     ticket_expired: `${prefix} because the one-time segment ticket had expired.`,
     ticket_track_mismatch: `${prefix} because the ticket did not match the requested media track.`,
-    ticket_variant_mismatch:
-      `${prefix} because the ticket did not match the requested quality variant.`,
-    ticket_sequence_mismatch:
-      `${prefix} because the ticket did not match the requested segment sequence.`,
-    media_key_unavailable:
-      `${prefix} because the protected session encryption key was unavailable.`,
+    ticket_variant_mismatch: `${prefix} because the ticket did not match the requested quality variant.`,
+    ticket_sequence_mismatch: `${prefix} because the ticket did not match the requested segment sequence.`,
+    media_key_unavailable: `${prefix} because the protected session encryption key was unavailable.`,
     invalid_resource: `${prefix} because the protected resource identifier was invalid.`,
-    resource_mismatch:
-      `${prefix} because the one-time resource ticket did not match the requested resource.`,
+    resource_mismatch: `${prefix} because the one-time resource ticket did not match the requested resource.`,
   };
   return reasons[reason] || null;
 }
@@ -221,19 +213,23 @@ function explainSecurityEvent(event) {
 
 async function enrichEventsWithViewerEmail(db, tenantId, events, config) {
   if (!events.length) return [];
-  const sessionIds = [...new Set(events.filter((event) => !event.endUserId && event.sessionId).map((event) => event.sessionId))];
+  const sessionIds = [
+    ...new Set(
+      events.filter((event) => !event.endUserId && event.sessionId).map((event) => event.sessionId),
+    ),
+  ];
   const sessionRows = sessionIds.length
     ? await db
         .select({ id: playbackSessions.id, endUserId: playbackSessions.endUserId })
         .from(playbackSessions)
-        .where(and(eq(playbackSessions.tenantId, tenantId), inArray(playbackSessions.id, sessionIds)))
+        .where(
+          and(eq(playbackSessions.tenantId, tenantId), inArray(playbackSessions.id, sessionIds)),
+        )
     : [];
   const sessionViewer = new Map(sessionRows.map((row) => [row.id, row.endUserId]));
   const viewerIds = [
     ...new Set(
-      events
-        .map((event) => event.endUserId || sessionViewer.get(event.sessionId))
-        .filter(Boolean),
+      events.map((event) => event.endUserId || sessionViewer.get(event.sessionId)).filter(Boolean),
     ),
   ];
   const viewers = viewerIds.length
@@ -243,10 +239,7 @@ async function enrichEventsWithViewerEmail(db, tenantId, events, config) {
         .where(and(eq(endUsers.tenantId, tenantId), inArray(endUsers.id, viewerIds)))
     : [];
   const emails = new Map(
-    viewers.map((viewer) => [
-      viewer.id,
-      decryptViewerEmail(viewer.displayLabel, tenantId, config),
-    ]),
+    viewers.map((viewer) => [viewer.id, decryptViewerEmail(viewer.displayLabel, tenantId, config)]),
   );
   return events.map((event) => {
     const viewerId = event.endUserId || sessionViewer.get(event.sessionId) || null;
@@ -284,7 +277,12 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
       const [site, asset, session] = await Promise.all([
         event.siteId
           ? db
-              .select({ id: sites.id, name: sites.name, domain: sites.domain, status: sites.status })
+              .select({
+                id: sites.id,
+                name: sites.name,
+                domain: sites.domain,
+                status: sites.status,
+              })
               .from(sites)
               .where(and(eq(sites.id, event.siteId), eq(sites.tenantId, req.tenantId)))
               .limit(1)
@@ -361,7 +359,9 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
       res.json({
         event: {
           ...event,
-          viewerEmail: viewer ? decryptViewerEmail(viewer.displayLabel, req.tenantId, config) : null,
+          viewerEmail: viewer
+            ? decryptViewerEmail(viewer.displayLabel, req.tenantId, config)
+            : null,
         },
         site,
         asset,

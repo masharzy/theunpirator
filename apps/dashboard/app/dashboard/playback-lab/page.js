@@ -225,7 +225,8 @@ export default function PlaybackLabPage() {
             </span>
             <h2 className="mt-5 text-lg font-semibold text-[#1d2919]">Test configuration</h2>
             <p className="mt-1 text-xs leading-5 text-[#74806d]">
-              Each run uses your authenticated dashboard email, SDK device ID, and the protections enabled by your current plan.
+              Each run uses your authenticated dashboard email, SDK device ID, and the protections
+              enabled by your current plan.
             </p>
           </div>
           <form className="space-y-5 p-6" onSubmit={start}>
