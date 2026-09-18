@@ -1,6 +1,7 @@
 import {
   createHash,
   createHmac,
+  hkdfSync,
   createPrivateKey,
   createPublicKey,
   randomBytes,
@@ -21,6 +22,20 @@ export function blindIndex(value, base64Key, context = "") {
     .update("\0")
     .update(String(value))
     .digest("hex");
+}
+
+export function deriveKey(base64Key, context) {
+  const key = Buffer.from(base64Key || "", "base64");
+  if (key.length !== 32) throw new Error("APP_ENCRYPTION_KEY_BASE64 must decode to 32 bytes");
+  return Buffer.from(
+    hkdfSync(
+      "sha256",
+      key,
+      Buffer.from("the-unpirator:key-derivation:v1", "utf8"),
+      Buffer.from(String(context), "utf8"),
+      32,
+    ),
+  ).toString("base64");
 }
 export const randomToken = (bytes = 32) => randomBytes(bytes).toString("base64url");
 export const safeEqual = (a, b) => {
