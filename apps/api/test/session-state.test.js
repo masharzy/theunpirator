@@ -50,9 +50,11 @@ describe("settleSessionRevoke", () => {
     const revoke = vi.fn();
     const readDurable = vi.fn();
 
-    await expect(
-      settleSessionRevoke({ state, existing, revoke, readDurable }),
-    ).resolves.toEqual({ session: existing, didRevoke: false, secondaryError: null });
+    await expect(settleSessionRevoke({ state, existing, revoke, readDurable })).resolves.toEqual({
+      session: existing,
+      didRevoke: false,
+      secondaryError: null,
+    });
     expect(revoke).not.toHaveBeenCalled();
     expect(readDurable).not.toHaveBeenCalled();
   });

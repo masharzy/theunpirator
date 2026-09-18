@@ -316,9 +316,7 @@ export default function Page() {
                 <Globe2 className="h-5 w-5" />
               </div>
               <p className="mt-4 font-medium text-[#34402f]">No sites yet</p>
-              <p className="mt-1 text-sm text-[#7d8776]">
-                Add your first playback origin above.
-              </p>
+              <p className="mt-1 text-sm text-[#7d8776]">Add your first playback origin above.</p>
             </div>
           </div>
         ) : (
