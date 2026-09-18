@@ -256,7 +256,6 @@ export function workspaceRouter({
         settings: settings || {
           tenantId: req.tenantId,
           timezone: "Asia/Dhaka",
-          defaultSecurityPolicy: "strict",
           notificationPreferences: {},
         },
       });

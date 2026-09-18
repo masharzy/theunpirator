@@ -23,7 +23,6 @@ export default function AssetsPage() {
   const [connectionId, setConnectionId] = useState("");
   const [providerReference, setProviderReference] = useState("");
   const [allowedHosts, setAllowedHosts] = useState("");
-  const [securityPolicy, setSecurityPolicy] = useState("strict");
 
   const load = async () => {
     const [assetData, siteData, providerData, connectionData] = await Promise.all([
@@ -74,7 +73,6 @@ export default function AssetsPage() {
             .filter(Boolean),
           connectionId: connectionId || null,
           providerConfig: {},
-          securityPolicy,
         }),
       });
       setTitle("");
@@ -193,18 +191,10 @@ export default function AssetsPage() {
                 placeholder="media.example.com, cdn.example.com"
               />
             </label>
-            <label className="text-sm font-medium">
-              Security policy
-              <select
-                className="mt-2 w-full rounded-xl border border-[#dfe4d6] bg-white px-3 py-2.5 text-sm"
-                value={securityPolicy}
-                onChange={(e) => setSecurityPolicy(e.target.value)}
-              >
-                <option value="standard">Standard</option>
-                <option value="strict">Strict</option>
-                <option value="maximum">Maximum</option>
-              </select>
-            </label>
+            <div className="rounded-xl border border-[#dfe4d6] bg-[#f7f9f2] p-4 text-sm text-[#66705f]">
+              Protection is plan-driven. Authenticated viewer email and stable device identity are
+              required for protected playback; additional controls come from the active plan.
+            </div>
             <div className="flex gap-2 lg:col-span-2">
               <Button disabled={!siteId}>Create protected asset</Button>
               <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>
@@ -245,7 +235,7 @@ export default function AssetsPage() {
                 </div>
                 <h2 className="mt-6 line-clamp-2 font-semibold">{item.title}</h2>
                 <p className="mt-2 text-xs uppercase tracking-[.12em] text-[#899283]">
-                  {item.provider} · {item.securityPolicy}
+                  {item.provider} · plan-protected
                 </p>
                 <p className="mt-5 truncate font-mono text-[10px] text-[#9aa292]">{item.id}</p>
               </Surface>
