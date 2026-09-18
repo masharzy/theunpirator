@@ -34,6 +34,21 @@ function jsonError(error, requestId, request) {
 function requestId(request) {
   return request.headers.get("x-request-id") || crypto.randomUUID();
 }
+
+async function stateDenial(code, response) {
+  let reason = null;
+  try {
+    const body = await response.json();
+    if (typeof body?.reason === "string" && /^[a-z0-9_:-]{1,80}$/.test(body.reason)) {
+      reason = body.reason;
+    }
+  } catch {
+    // State responses are internal-only. Missing JSON falls back to the stable event code.
+  }
+  const error = securityError(code, response.status, "Playback request denied");
+  if (reason) error.reason = reason;
+  return error;
+}
 export function readToken(request, url) {
   const auth = request.headers.get("authorization") || "";
   if (auth.startsWith("Bearer ")) return auth.slice(7);
@@ -270,7 +285,7 @@ const gateway = {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!response.ok) throw securityError("SEGMENT_TICKET_DENIED", response.status);
+        if (!response.ok) throw await stateDenial("SEGMENT_TICKET_DENIED", response);
         return Response.json(await response.json(), {
           headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
         });
@@ -284,7 +299,7 @@ const gateway = {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ resourceId: body.resourceId }),
         });
-        if (!response.ok) throw securityError("RESOURCE_TICKET_DENIED", response.status);
+        if (!response.ok) throw await stateDenial("RESOURCE_TICKET_DENIED", response);
         return Response.json(await response.json(), {
           headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
         });
@@ -298,7 +313,7 @@ const gateway = {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ ticket, resourceId }),
         });
-        if (!consumed.ok) throw securityError("RESOURCE_TICKET_INVALID", 403);
+        if (!consumed.ok) throw await stateDenial("RESOURCE_TICKET_INVALID", consumed);
         const { keyBase64 } = await consumed.json();
         const resource = await protectedHlsResource(request, env, claims, assetId, resourceId);
         const context = `${claims.psid}:${assetId}:hls:${resourceId}:${crypto.randomUUID()}`;
@@ -327,7 +342,7 @@ const gateway = {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ ticket, track: chunkTrack, variant, sequence }),
         });
-        if (!consumed.ok) throw securityError("SEGMENT_TICKET_INVALID", 403);
+        if (!consumed.ok) throw await stateDenial("SEGMENT_TICKET_INVALID", consumed);
         const { keyBase64 } = await consumed.json();
         const chunk = await protectedPlainChunk(
           env,
@@ -454,6 +469,7 @@ const gateway = {
           code: error?.code || "GATEWAY_ERROR",
           status: Number(error?.status || 500),
           message: error?.message || "Media gateway error",
+          reason: error?.reason || null,
         }),
       );
       emitTelemetry(
@@ -475,6 +491,7 @@ const gateway = {
                   code: error.code,
                   status: Number(error.status || 500),
                   message: error.message || "Media gateway error",
+                  ...(error.reason ? { reason: error.reason } : {}),
                   ...(Number.isInteger(error.upstreamStatus)
                     ? { upstreamStatus: error.upstreamStatus }
                     : {}),
