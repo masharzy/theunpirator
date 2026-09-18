@@ -139,7 +139,7 @@ export default function PoliciesPage() {
               </span>
               <StatusPill status={asset.status} />
             </Link>
-          ))}
+          ))
         ) : (
           <p className="p-8 text-sm text-[#74806d]">
             Register an asset after adding and verifying a site.
