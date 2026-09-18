@@ -7,7 +7,6 @@ import {
   Clapperboard,
   KeyRound,
   MonitorSmartphone,
-  PlugZap,
   ShieldAlert,
   Waypoints,
 } from "lucide-react";
@@ -66,9 +65,8 @@ export default function Dashboard() {
   const steps = [
     ["Add a site", counts.sites > 0],
     ["Verify a domain", counts.verifiedSites > 0],
-    ["Add a provider connection", counts.connections > 0],
     ["Create an API key", counts.apiKeys > 0],
-    ["Register an asset", counts.assets > 0],
+    ["Discover first asset", counts.assets > 0],
     ["Start protected playback", Number(metrics.playback_sessions || 0) > 0],
   ];
 
@@ -80,10 +78,10 @@ export default function Dashboard() {
         description="Media activity, integration readiness, security posture and plan status in one place."
         action={
           <Link
-            href="/dashboard/assets"
+            href="/dashboard/integration"
             className="rounded-xl bg-[#172014] px-4 py-2.5 text-sm font-semibold text-white"
           >
-            Add protected video
+            Open integration
           </Link>
         }
       />
@@ -183,16 +181,15 @@ export default function Dashboard() {
             </p>
             <h2 className="mt-2 text-xl font-semibold">Control-plane setup</h2>
           </div>
-          <Link href="/dashboard/onboarding" className="text-sm font-semibold text-[#536b31]">
-            Open onboarding →
+          <Link href="/dashboard/integration" className="text-sm font-semibold text-[#536b31]">
+            Open integration →
           </Link>
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[
             [Waypoints, "Verified sites", counts.verifiedSites || 0, "/dashboard/sites"],
-            [PlugZap, "Connections", counts.connections || 0, "/dashboard/connections"],
             [KeyRound, "Active API keys", counts.apiKeys || 0, "/dashboard/api-keys"],
-            [CheckCircle2, "Registered assets", counts.assets || 0, "/dashboard/assets"],
+            [CheckCircle2, "Discovered assets", counts.assets || 0, "/dashboard/assets"],
           ].map(([Icon, label, value, href]) => (
             <Link
               key={label}
@@ -243,9 +240,9 @@ export default function Dashboard() {
             <div className="p-5">
               <EmptyState
                 title="No protected assets"
-                description="Register your first source after adding a site and provider connection."
-                href="/dashboard/assets"
-                action="Add asset"
+                description="Assets appear automatically after your integration registers or starts protected playback for a video."
+                href="/dashboard/integration"
+                action="Open integration"
               />
             </div>
           )}
