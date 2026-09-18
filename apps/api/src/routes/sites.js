@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { resolveTxt } from "node:dns/promises";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { siteCreateSchema, parseOrThrow } from "@unpirator/contracts";
 import { randomToken } from "@unpirator/crypto";
 import { siteDomains, sites } from "@unpirator/db/schema";
@@ -19,7 +19,31 @@ export function sitesRouter({ db, requireTenantAdmin }) {
   router.use(requireTenantAdmin);
   router.get("/", async (req, res, next) => {
     try {
-      res.json({ items: await db.select().from(sites).where(eq(sites.tenantId, req.tenantId)) });
+      const siteRows = await db.select().from(sites).where(eq(sites.tenantId, req.tenantId));
+      const domainRows = siteRows.length
+        ? await db
+            .select({
+              siteId: siteDomains.siteId,
+              domain: siteDomains.domain,
+              verifiedAt: siteDomains.verifiedAt,
+            })
+            .from(siteDomains)
+            .where(
+              inArray(
+                siteDomains.siteId,
+                siteRows.map((site) => site.id),
+              ),
+            )
+        : [];
+      const verificationBySite = new Map(
+        domainRows.map((domain) => [`${domain.siteId}:${domain.domain}`, domain.verifiedAt]),
+      );
+      res.json({
+        items: siteRows.map((site) => ({
+          ...site,
+          domainVerifiedAt: verificationBySite.get(`${site.id}:${site.domain}`) || null,
+        })),
+      });
     } catch (e) {
       next(e);
     }
