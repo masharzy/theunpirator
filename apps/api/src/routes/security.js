@@ -99,6 +99,38 @@ function explainSecurityEvent(event) {
       },
     };
   }
+  if (event.type === "RESOURCE_TICKET_DENIED") {
+    return {
+      title: "Protected resource ticket request was denied",
+      explanation:
+        denialExplanation(reason, "issue") ||
+        (message && message !== "Playback request denied" ? message : null) ||
+        "The protected HLS resource ticket request was rejected by the playback session state.",
+      evidence: {
+        code,
+        status,
+        reason,
+        path,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
+  if (event.type === "RESOURCE_TICKET_INVALID") {
+    return {
+      title: "Protected resource ticket was invalid or already unusable",
+      explanation:
+        denialExplanation(reason, "consume") ||
+        (message && message !== "Playback request denied" ? message : null) ||
+        "The gateway could not consume the one-time ticket for this protected HLS resource.",
+      evidence: {
+        code,
+        status,
+        reason,
+        path,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
   if (event.type === "TOKEN_EXPIRED") {
     return {
       title: "Playback token expired",
