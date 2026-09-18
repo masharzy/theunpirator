@@ -11,6 +11,13 @@ import {
 import { writeAudit } from "../services/audit.js";
 import { notFound } from "../errors.js";
 
+function cleanIncidentTitle(type) {
+  return String(type || "Security event")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^./, (value) => value.toUpperCase());
+}
+
 export function securityRouter({ db, requireTenantAdmin, playbackService }) {
   const router = Router();
   router.use(requireTenantAdmin);
@@ -79,6 +86,7 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
           ? db
               .select({
                 id: playbackSessions.id,
+                endUserId: playbackSessions.endUserId,
                 deviceId: playbackSessions.deviceId,
                 status: playbackSessions.status,
                 ip: playbackSessions.ip,
@@ -100,6 +108,100 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
           : null,
       ]);
 
+      const viewerId = event.endUserId || session?.endUserId || null;
+      const resolvedViewer = viewerId
+        ? await db
+            .select({
+              id: endUsers.id,
+              externalUserId: endUsers.externalUserId,
+              displayLabel: endUsers.displayLabel,
+              status: endUsers.status,
+            })
+            .from(endUsers)
+            .where(and(eq(endUsers.id, viewerId), eq(endUsers.tenantId, req.tenantId)))
+            .limit(1)
+            .then((rows) => rows[0] || null)
+        : viewer;
+
+      const viewerEmail = [resolvedViewer?.externalUserId, resolvedViewer?.displayLabel].find(
+        (value) => typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+      ) || null;
+
+      const metadata = event.metadata || {};
+      const incidentReason = (() => {
+        const code = metadata.code || event.type;
+        const status = metadata.status ?? metadata.upstreamStatus ?? null;
+        const message = metadata.message || null;
+        const path = metadata.path || null;
+
+        if (event.type === "SEGMENT_TICKET_DENIED") {
+          return {
+            title: "Segment ticket request was denied",
+            explanation:
+              message ||
+              "The media gateway asked the playback session to issue a segment ticket, but the session state rejected the request. No protected segment ticket was issued.",
+            evidence: {
+              code,
+              status,
+              path,
+              note: metadata.status
+                ? "Gateway rejection details were recorded with this event."
+                : "This older event did not record the gateway rejection status/message; the denial itself is confirmed.",
+            },
+          };
+        }
+
+        if (event.type === "SEGMENT_TICKET_INVALID") {
+          return {
+            title: "Segment ticket was invalid or already unusable",
+            explanation:
+              message ||
+              "The gateway could not consume the supplied segment ticket for this protected media chunk. The ticket was invalid, expired, mismatched, or already consumed.",
+            evidence: { code, status, path },
+          };
+        }
+
+        if (event.type === "TOKEN_EXPIRED") {
+          return {
+            title: "Playback token expired",
+            explanation:
+              message ||
+              "The short-lived playback token was outside its allowed lifetime when the gateway validated the request.",
+            evidence: { code, status, path },
+          };
+        }
+
+        if (event.type === "PLAYER_INTEGRITY_LOST") {
+          return {
+            title: "Player integrity validation failed",
+            explanation:
+              message ||
+              "The protected player failed an integrity check or the integrity state rejected the request.",
+            evidence: { code, status, path },
+          };
+        }
+
+        if (event.type === "ORIGIN_FAILURE") {
+          return {
+            title: "Upstream media origin returned an unexpected response",
+            explanation:
+              message ||
+              (metadata.upstreamStatus
+                ? `The media gateway could not complete the upstream fetch because the origin returned HTTP ${metadata.upstreamStatus}.`
+                : "The media gateway could not complete the upstream media fetch."),
+            evidence: { code, status, path, upstreamStatus: metadata.upstreamStatus ?? null },
+          };
+        }
+
+        return {
+          title: cleanIncidentTitle(event.type),
+          explanation:
+            message ||
+            `The gateway recorded ${String(event.type || "a security event").replaceAll("_", " ").toLowerCase()} while processing this playback request.`,
+          evidence: { code, status, path },
+        };
+      })();
+
       const device = session?.deviceId
         ? await db
             .select({
@@ -118,7 +220,15 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
             .then((rows) => rows[0] || null)
         : null;
 
-      res.json({ event, site, asset, viewer, session, device });
+      res.json({
+        event,
+        site,
+        asset,
+        viewer: resolvedViewer ? { ...resolvedViewer, email: viewerEmail } : null,
+        session,
+        device,
+        reason: incidentReason,
+      });
     } catch (error) {
       next(error);
     }
