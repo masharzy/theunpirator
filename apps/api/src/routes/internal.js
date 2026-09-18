@@ -264,17 +264,40 @@ export function internalRouter({
               ),
             );
         if (event.kind === "security") {
+          const sessionSnapshot = event.sessionId
+            ? await db
+                .select({
+                  endUserId: playbackSessions.endUserId,
+                  deviceId: playbackSessions.deviceId,
+                  status: playbackSessions.status,
+                })
+                .from(playbackSessions)
+                .where(
+                  and(
+                    eq(playbackSessions.id, event.sessionId),
+                    eq(playbackSessions.tenantId, event.tenantId),
+                  ),
+                )
+                .limit(1)
+                .then((rows) => rows[0] || null)
+            : null;
           const [securityEvent] = await db
             .insert(securityEvents)
             .values({
               tenantId: event.tenantId,
               siteId: event.siteId || null,
+              endUserId: sessionSnapshot?.endUserId || null,
               assetId: event.assetId || null,
               sessionId: event.sessionId || null,
               type: event.type,
               severity: event.severity || "info",
               riskScore: Number(event.riskScore ?? riskFor(event.type)),
-              metadata: event.metadata || {},
+              metadata: {
+                source: "media-gateway",
+                ...(event.metadata || {}),
+                sessionStatusAtEvent: sessionSnapshot?.status || null,
+                deviceIdAtEvent: sessionSnapshot?.deviceId || null,
+              },
             })
             .returning();
           if (["high", "critical"].includes(securityEvent.severity)) {
