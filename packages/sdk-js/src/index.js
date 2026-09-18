@@ -19,7 +19,6 @@ export function createPlaybackBootstrap({
   assetId,
   playbackRef,
   title,
-  currentUser,
   deviceId,
   deviceStorageKey,
   headers,
@@ -44,7 +43,6 @@ export function createPlaybackBootstrap({
       body: JSON.stringify({
         ...(src ? { src, title } : playbackRef ? { playbackRef } : { assetId }),
         deviceId: deviceId || getOrCreateDeviceId(deviceStorageKey),
-        ...(currentUser ? { currentUser } : {}),
         client: {
           browser: navigator.userAgent.slice(0, 100),
           os: navigator.platform?.slice(0, 100) || undefined,
