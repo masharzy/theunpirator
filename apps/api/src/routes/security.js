@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   assets,
   devices,
@@ -10,6 +10,7 @@ import {
 } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 import { notFound } from "../errors.js";
+import { decryptViewerEmail, publicViewer } from "../services/viewer-identity.js";
 
 function cleanIncidentTitle(type) {
   return String(type || "Security event")
@@ -18,20 +19,133 @@ function cleanIncidentTitle(type) {
     .replace(/^./, (value) => value.toUpperCase());
 }
 
-export function securityRouter({ db, requireTenantAdmin, playbackService }) {
+function explainSecurityEvent(event) {
+  const metadata = event.metadata || {};
+  const code = metadata.code || event.type;
+  const status = metadata.status ?? metadata.upstreamStatus ?? null;
+  const message = metadata.message || null;
+  const path = metadata.path || null;
+
+  if (event.type === "SEGMENT_TICKET_DENIED") {
+    return {
+      title: "Segment ticket request was denied",
+      explanation:
+        message ||
+        "The media gateway asked the playback session to issue a segment ticket, but the session state rejected the request. No protected segment ticket was issued.",
+      evidence: {
+        code,
+        status,
+        path,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+        note: metadata.status
+          ? "Gateway rejection details were recorded with this event."
+          : "This older event did not record the gateway rejection status/message; the denial itself is confirmed.",
+      },
+    };
+  }
+  if (event.type === "SEGMENT_TICKET_INVALID") {
+    return {
+      title: "Segment ticket was invalid or already unusable",
+      explanation:
+        message ||
+        "The gateway could not consume the supplied segment ticket for this protected media chunk. The ticket was invalid, expired, mismatched, or already consumed.",
+      evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
+    };
+  }
+  if (event.type === "TOKEN_EXPIRED") {
+    return {
+      title: "Playback token expired",
+      explanation:
+        message ||
+        "The short-lived playback token was outside its allowed lifetime when the gateway validated the request.",
+      evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
+    };
+  }
+  if (event.type === "PLAYER_INTEGRITY_LOST") {
+    return {
+      title: "Player integrity validation failed",
+      explanation:
+        message ||
+        "The protected player failed an integrity check or the integrity state rejected the request.",
+      evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
+    };
+  }
+  if (event.type === "ORIGIN_FAILURE") {
+    return {
+      title: "Upstream media origin returned an unexpected response",
+      explanation:
+        message ||
+        (metadata.upstreamStatus
+          ? `The media gateway could not complete the upstream fetch because the origin returned HTTP ${metadata.upstreamStatus}.`
+          : "The media gateway could not complete the upstream media fetch."),
+      evidence: {
+        code,
+        status,
+        path,
+        upstreamStatus: metadata.upstreamStatus ?? null,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
+  return {
+    title: cleanIncidentTitle(event.type),
+    explanation:
+      message ||
+      `The gateway recorded ${String(event.type || "a security event")
+        .replaceAll("_", " ")
+        .toLowerCase()} while processing this playback request.`,
+    evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
+  };
+}
+
+async function enrichEventsWithViewerEmail(db, tenantId, events, config) {
+  if (!events.length) return [];
+  const sessionIds = [...new Set(events.filter((event) => !event.endUserId && event.sessionId).map((event) => event.sessionId))];
+  const sessionRows = sessionIds.length
+    ? await db
+        .select({ id: playbackSessions.id, endUserId: playbackSessions.endUserId })
+        .from(playbackSessions)
+        .where(and(eq(playbackSessions.tenantId, tenantId), inArray(playbackSessions.id, sessionIds)))
+    : [];
+  const sessionViewer = new Map(sessionRows.map((row) => [row.id, row.endUserId]));
+  const viewerIds = [
+    ...new Set(
+      events
+        .map((event) => event.endUserId || sessionViewer.get(event.sessionId))
+        .filter(Boolean),
+    ),
+  ];
+  const viewers = viewerIds.length
+    ? await db
+        .select({ id: endUsers.id, displayLabel: endUsers.displayLabel })
+        .from(endUsers)
+        .where(and(eq(endUsers.tenantId, tenantId), inArray(endUsers.id, viewerIds)))
+    : [];
+  const emails = new Map(
+    viewers.map((viewer) => [
+      viewer.id,
+      decryptViewerEmail(viewer.displayLabel, tenantId, config),
+    ]),
+  );
+  return events.map((event) => {
+    const viewerId = event.endUserId || sessionViewer.get(event.sessionId) || null;
+    return { ...event, viewerEmail: viewerId ? emails.get(viewerId) || null : null };
+  });
+}
+
+export function securityRouter({ db, config, requireTenantAdmin, playbackService }) {
   const router = Router();
   router.use(requireTenantAdmin);
 
   router.get("/events", async (req, res, next) => {
     try {
-      res.json({
-        items: await db
-          .select()
-          .from(securityEvents)
-          .where(eq(securityEvents.tenantId, req.tenantId))
-          .orderBy(desc(securityEvents.createdAt))
-          .limit(300),
-      });
+      const events = await db
+        .select()
+        .from(securityEvents)
+        .where(eq(securityEvents.tenantId, req.tenantId))
+        .orderBy(desc(securityEvents.createdAt))
+        .limit(300);
+      res.json({ items: await enrichEventsWithViewerEmail(db, req.tenantId, events, config) });
     } catch (error) {
       next(error);
     }
@@ -46,7 +160,7 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
         .limit(1);
       if (!event) throw notFound();
 
-      const [site, asset, viewer, session] = await Promise.all([
+      const [site, asset, session] = await Promise.all([
         event.siteId
           ? db
               .select({ id: sites.id, name: sites.name, domain: sites.domain, status: sites.status })
@@ -66,19 +180,6 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
               })
               .from(assets)
               .where(and(eq(assets.id, event.assetId), eq(assets.tenantId, req.tenantId)))
-              .limit(1)
-              .then((rows) => rows[0] || null)
-          : null,
-        event.endUserId
-          ? db
-              .select({
-                id: endUsers.id,
-                externalUserId: endUsers.externalUserId,
-                displayLabel: endUsers.displayLabel,
-                status: endUsers.status,
-              })
-              .from(endUsers)
-              .where(and(eq(endUsers.id, event.endUserId), eq(endUsers.tenantId, req.tenantId)))
               .limit(1)
               .then((rows) => rows[0] || null)
           : null,
@@ -109,98 +210,14 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
       ]);
 
       const viewerId = event.endUserId || session?.endUserId || null;
-      const resolvedViewer = viewerId
+      const viewer = viewerId
         ? await db
-            .select({
-              id: endUsers.id,
-              externalUserId: endUsers.externalUserId,
-              displayLabel: endUsers.displayLabel,
-              status: endUsers.status,
-            })
+            .select()
             .from(endUsers)
             .where(and(eq(endUsers.id, viewerId), eq(endUsers.tenantId, req.tenantId)))
             .limit(1)
             .then((rows) => rows[0] || null)
-        : viewer;
-
-      const viewerEmail = [resolvedViewer?.externalUserId, resolvedViewer?.displayLabel].find(
-        (value) => typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-      ) || null;
-
-      const metadata = event.metadata || {};
-      const incidentReason = (() => {
-        const code = metadata.code || event.type;
-        const status = metadata.status ?? metadata.upstreamStatus ?? null;
-        const message = metadata.message || null;
-        const path = metadata.path || null;
-
-        if (event.type === "SEGMENT_TICKET_DENIED") {
-          return {
-            title: "Segment ticket request was denied",
-            explanation:
-              message ||
-              "The media gateway asked the playback session to issue a segment ticket, but the session state rejected the request. No protected segment ticket was issued.",
-            evidence: {
-              code,
-              status,
-              path,
-              note: metadata.status
-                ? "Gateway rejection details were recorded with this event."
-                : "This older event did not record the gateway rejection status/message; the denial itself is confirmed.",
-            },
-          };
-        }
-
-        if (event.type === "SEGMENT_TICKET_INVALID") {
-          return {
-            title: "Segment ticket was invalid or already unusable",
-            explanation:
-              message ||
-              "The gateway could not consume the supplied segment ticket for this protected media chunk. The ticket was invalid, expired, mismatched, or already consumed.",
-            evidence: { code, status, path },
-          };
-        }
-
-        if (event.type === "TOKEN_EXPIRED") {
-          return {
-            title: "Playback token expired",
-            explanation:
-              message ||
-              "The short-lived playback token was outside its allowed lifetime when the gateway validated the request.",
-            evidence: { code, status, path },
-          };
-        }
-
-        if (event.type === "PLAYER_INTEGRITY_LOST") {
-          return {
-            title: "Player integrity validation failed",
-            explanation:
-              message ||
-              "The protected player failed an integrity check or the integrity state rejected the request.",
-            evidence: { code, status, path },
-          };
-        }
-
-        if (event.type === "ORIGIN_FAILURE") {
-          return {
-            title: "Upstream media origin returned an unexpected response",
-            explanation:
-              message ||
-              (metadata.upstreamStatus
-                ? `The media gateway could not complete the upstream fetch because the origin returned HTTP ${metadata.upstreamStatus}.`
-                : "The media gateway could not complete the upstream media fetch."),
-            evidence: { code, status, path, upstreamStatus: metadata.upstreamStatus ?? null },
-          };
-        }
-
-        return {
-          title: cleanIncidentTitle(event.type),
-          explanation:
-            message ||
-            `The gateway recorded ${String(event.type || "a security event").replaceAll("_", " ").toLowerCase()} while processing this playback request.`,
-          evidence: { code, status, path },
-        };
-      })();
+        : null;
 
       const device = session?.deviceId
         ? await db
@@ -221,13 +238,16 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
         : null;
 
       res.json({
-        event,
+        event: {
+          ...event,
+          viewerEmail: viewer ? decryptViewerEmail(viewer.displayLabel, req.tenantId, config) : null,
+        },
         site,
         asset,
-        viewer: resolvedViewer ? { ...resolvedViewer, email: viewerEmail } : null,
+        viewer: publicViewer(viewer, req.tenantId, config),
         session,
         device,
-        reason: incidentReason,
+        reason: explainSecurityEvent(event),
       });
     } catch (error) {
       next(error);
@@ -236,26 +256,29 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
 
   router.get("/devices", async (req, res, next) => {
     try {
+      const rows = await db
+        .select({
+          id: devices.id,
+          endUserId: devices.endUserId,
+          externalDeviceId: devices.externalDeviceId,
+          deviceName: devices.deviceName,
+          browser: devices.browser,
+          os: devices.os,
+          status: devices.status,
+          firstSeenAt: devices.firstSeenAt,
+          lastSeenAt: devices.lastSeenAt,
+          viewerEmailEncrypted: endUsers.displayLabel,
+        })
+        .from(devices)
+        .innerJoin(endUsers, eq(devices.endUserId, endUsers.id))
+        .where(eq(devices.tenantId, req.tenantId))
+        .orderBy(desc(devices.lastSeenAt))
+        .limit(1000);
       res.json({
-        items: await db
-          .select({
-            id: devices.id,
-            endUserId: devices.endUserId,
-            externalDeviceId: devices.externalDeviceId,
-            deviceName: devices.deviceName,
-            browser: devices.browser,
-            os: devices.os,
-            status: devices.status,
-            firstSeenAt: devices.firstSeenAt,
-            lastSeenAt: devices.lastSeenAt,
-            viewerLabel: endUsers.displayLabel,
-            externalUserId: endUsers.externalUserId,
-          })
-          .from(devices)
-          .innerJoin(endUsers, eq(devices.endUserId, endUsers.id))
-          .where(eq(devices.tenantId, req.tenantId))
-          .orderBy(desc(devices.lastSeenAt))
-          .limit(1000),
+        items: rows.map(({ viewerEmailEncrypted, ...device }) => ({
+          ...device,
+          viewerEmail: decryptViewerEmail(viewerEmailEncrypted, req.tenantId, config),
+        })),
       });
     } catch (error) {
       next(error);
@@ -264,14 +287,13 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
 
   router.get("/users", async (req, res, next) => {
     try {
-      res.json({
-        items: await db
-          .select()
-          .from(endUsers)
-          .where(eq(endUsers.tenantId, req.tenantId))
-          .orderBy(desc(endUsers.updatedAt))
-          .limit(1000),
-      });
+      const viewers = await db
+        .select()
+        .from(endUsers)
+        .where(eq(endUsers.tenantId, req.tenantId))
+        .orderBy(desc(endUsers.updatedAt))
+        .limit(1000);
+      res.json({ items: viewers.map((viewer) => publicViewer(viewer, req.tenantId, config)) });
     } catch (error) {
       next(error);
     }
@@ -303,7 +325,11 @@ export function securityRouter({ db, requireTenantAdmin, playbackService }) {
           .orderBy(desc(playbackSessions.startedAt))
           .limit(100),
       ]);
-      res.json({ viewer, devices: viewerDevices, sessions });
+      res.json({
+        viewer: publicViewer(viewer, req.tenantId, config),
+        devices: viewerDevices,
+        sessions,
+      });
     } catch (error) {
       next(error);
     }
