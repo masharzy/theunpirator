@@ -27,3 +27,11 @@ test("stores static request headers for server-authenticated endpoints", () => {
 
   assert.equal(element.headers, headers);
 });
+
+
+test("does not expose a trusted browser viewer identity property", () => {
+  assert.equal(
+    Object.getOwnPropertyDescriptor(UnpiratorPlayerElement.prototype, "currentUser"),
+    undefined,
+  );
+});
