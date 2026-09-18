@@ -96,7 +96,8 @@ export function usageRouter({ db, dashboardAuth, requireTenantViewer }) {
       const legacyEgress = Number(egressRows[0]?.quantity || 0);
       if (legacyEgress > 0) metrics.egress_bytes = legacyEgress;
       for (const metric of ["playback_sessions", "gateway_requests", "egress_bytes"]) {
-        if (Object.prototype.hasOwnProperty.call(rollups, metric)) metrics[metric] = rollups[metric];
+        if (Object.prototype.hasOwnProperty.call(rollups, metric))
+          metrics[metric] = rollups[metric];
       }
       const counts = {
         sites: Number(siteRows[0]?.count || 0),

@@ -205,8 +205,6 @@ export async function readQuotaRollups(db, tenantId, context) {
   const rows = await db
     .select({ metric: usageRollups.metric, quantity: usageRollups.quantity })
     .from(usageRollups)
-    .where(
-      and(eq(usageRollups.tenantId, tenantId), eq(usageRollups.period, context.periodKey)),
-    );
+    .where(and(eq(usageRollups.tenantId, tenantId), eq(usageRollups.period, context.periodKey)));
   return Object.fromEntries(rows.map((row) => [row.metric, Number(row.quantity || 0)]));
 }
