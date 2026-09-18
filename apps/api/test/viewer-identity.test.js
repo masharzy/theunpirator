@@ -17,13 +17,13 @@ describe("viewer identity protection", () => {
     const first = viewerIdentityKey(email, config);
     const second = viewerIdentityKey(email, config);
     expect(first).toBe(second);
-    expect(first).toMatch(/^email_hmac_v1_[a-f0-9]{64}$/);
+    expect(first).toMatch(/^email_hmac_v2_[a-f0-9]{64}$/);
     expect(first).not.toContain("viewer@example.com");
   });
 
   it("encrypts viewer email with tenant-bound context", () => {
     const encrypted = encryptViewerEmail("viewer@example.com", "tenant-a", config);
-    expect(encrypted).toMatch(/^enc:v1:/);
+    expect(encrypted).toMatch(/^enc:v2:/);
     expect(encrypted).not.toContain("viewer@example.com");
     expect(decryptViewerEmail(encrypted, "tenant-a", config)).toBe("viewer@example.com");
     expect(decryptViewerEmail(encrypted, "tenant-b", config)).toBeNull();
