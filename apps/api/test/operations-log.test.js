@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  describeOperationEvent,
-  parseOperationLogQuery,
-} from "../src/services/operations-log.js";
+import { describeOperationEvent, parseOperationLogQuery } from "../src/services/operations-log.js";
 
 describe("operations log", () => {
   it("normalizes server-side filters and pagination", () => {

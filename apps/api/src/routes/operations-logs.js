@@ -24,7 +24,8 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
           title: description.title,
           summary: description.summary,
           level: description.level,
-          resource: row.assetTitle || (row.category === "security" ? "Workspace security" : "Workspace"),
+          resource:
+            row.assetTitle || (row.category === "security" ? "Workspace security" : "Workspace"),
           createdAt: row.createdAt,
           technical: {
             eventId: row.id,
