@@ -472,6 +472,9 @@ const gateway = {
                 riskScore: error.code === "INVALID_TOKEN" ? 25 : 10,
                 metadata: {
                   path: url.pathname,
+                  code: error.code,
+                  status: Number(error.status || 500),
+                  message: error.message || "Media gateway error",
                   ...(Number.isInteger(error.upstreamStatus)
                     ? { upstreamStatus: error.upstreamStatus }
                     : {}),
