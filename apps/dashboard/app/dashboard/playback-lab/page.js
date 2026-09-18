@@ -111,7 +111,6 @@ export default function PlaybackLabPage() {
   const [siteId, setSiteId] = useState("");
   const [mode, setMode] = useState("youtube");
   const [provider, setProvider] = useState("direct");
-  const [securityPolicy, setSecurityPolicy] = useState("strict");
   const [renderer, setRenderer] = useState("react");
   const [assetId, setAssetId] = useState("");
   const [connectionId, setConnectionId] = useState("");
@@ -183,7 +182,6 @@ export default function PlaybackLabPage() {
             allowedHosts: hosts,
             connectionId: connectionId || null,
             providerConfig: connectionId ? {} : parseProviderConfig(headersJson),
-            securityPolicy,
           }),
         });
         next = { assetId: created.asset.id, title: title.trim() || "Playback Lab asset" };
@@ -227,7 +225,7 @@ export default function PlaybackLabPage() {
             </span>
             <h2 className="mt-5 text-lg font-semibold text-[#1d2919]">Test configuration</h2>
             <p className="mt-1 text-xs leading-5 text-[#74806d]">
-              Each run uses your current dashboard identity and a strict playback session.
+              Each run uses your authenticated dashboard email, SDK device ID, and the protections enabled by your current plan.
             </p>
           </div>
           <form className="space-y-5 p-6" onSubmit={start}>
@@ -329,24 +327,6 @@ export default function PlaybackLabPage() {
                     }
                   />
                 </label>
-                {mode === "new" && (
-                  <label className="block text-sm font-medium text-[#354230]">
-                    Security policy
-                    <select
-                      className={selectClass}
-                      value={securityPolicy}
-                      onChange={(e) => setSecurityPolicy(e.target.value)}
-                    >
-                      <option value="standard">Standard</option>
-                      <option value="strict">Strict</option>
-                      <option value="maximum">Maximum</option>
-                    </select>
-                    <span className="mt-2 block text-[11px] leading-4 text-[#7b8674]">
-                      Your plan sets the security ceiling. Every supported source still plays;
-                      progressive MP4 currently falls back to Standard delivery.
-                    </span>
-                  </label>
-                )}
                 <label className="block text-sm font-medium text-[#354230]">
                   Test title
                   <Input
