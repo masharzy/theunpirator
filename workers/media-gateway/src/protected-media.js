@@ -1,4 +1,4 @@
-import { assertSourceUrl } from "./origin-policy.js";
+import { fetchOriginWithRedirects } from "./origin-fetch.js";
 import { getSource } from "./source.js";
 import { securityError } from "./token.js";
 import { singleFlight } from "./single-flight.js";
@@ -126,12 +126,14 @@ function sourceHeaders(source, range) {
 }
 
 async function fetchRange(stream, source, range, signal) {
-  assertSourceUrl(stream.url, source.allowedHosts);
-  const response = await fetch(stream.url, {
-    headers: sourceHeaders(source, range),
-    redirect: "manual",
-    signal,
-  });
+  const { response, resolvedUrl, redirects } = await fetchOriginWithRedirects(
+    stream.url,
+    {
+      headers: sourceHeaders(source, range),
+      signal,
+    },
+    source.allowedHosts,
+  );
   if (response.status !== 206) {
     await response.body?.cancel();
     console.error(
@@ -140,7 +142,8 @@ async function fetchRange(stream, source, range, signal) {
         component: "protected-origin",
         code: "ORIGIN_RANGE_REJECTED",
         upstreamStatus: response.status,
-        hostname: new URL(stream.url).hostname,
+        hostname: new URL(resolvedUrl).hostname,
+        redirects,
         range: `${range.start}-${range.end}`,
         profile: stream.profile || null,
       }),
