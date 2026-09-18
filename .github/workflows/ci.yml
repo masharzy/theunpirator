@@ -38,7 +38,6 @@ jobs:
       - run: node scripts/setup-local.js
       - run: pnpm db:migrate
       - run: pnpm check:syntax
-      - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm --filter @unpirator/dashboard build
@@ -59,6 +58,7 @@ jobs:
             exit 1
           fi
           pnpm test:e2e
+      - run: pnpm format:check
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
