@@ -7,5 +7,7 @@ add_shortcode('unpirator_video', function($atts) {
   $id = 'unpirator-' . wp_generate_uuid4();
   return '<div id="' . esc_attr($id) . '" data-unpirator-asset="' . esc_attr($a['asset']) . '"></div>';
 });
-// Production integration should enqueue the universal SDK and expose a WordPress REST endpoint
-// that verifies the logged-in student's course access before calling The Unpirator server-to-server.
+// Production integration must enqueue the universal SDK and expose a same-origin WordPress REST endpoint.
+// That endpoint must verify the logged-in student's course access, read the authenticated account email
+// from WordPress server-side state, require the SDK deviceId, and only then call The Unpirator
+// server-to-server. Never accept a trusted viewer email from shortcode attributes or request JSON.
