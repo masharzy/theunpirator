@@ -12,6 +12,7 @@ import {
   auditLogs,
   featureFlags,
   plans,
+  securityEvents,
   siteDomains,
   subscriptions,
 } from "@unpirator/db/schema";
@@ -29,7 +30,8 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     csrf,
     site,
     asset,
-    apiKey;
+    apiKey,
+    playbackSessionId;
   const run = randomUUID().slice(0, 8);
   beforeAll(async () => {
     if (!new URL(url).pathname.endsWith("_test"))
@@ -322,8 +324,52 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     expect(a.status).toBe(201);
     expect(b.status).toBe(201);
     expect(a.body.sessionId).toBe(b.body.sessionId);
+    playbackSessionId = a.body.sessionId;
     expect(a.body.playbackUrl).not.toContain("media.example.com");
   });
+  it("returns security incident detail with viewer email and exact reason", async () => {
+    const [securityEvent] = await database.db
+      .insert(securityEvents)
+      .values({
+        tenantId: tenant,
+        siteId: site,
+        assetId: asset,
+        sessionId: playbackSessionId,
+        type: "SEGMENT_TICKET_DENIED",
+        severity: "medium",
+        riskScore: 20,
+        metadata: {
+          path: "/v/test/ticket",
+          code: "SEGMENT_TICKET_DENIED",
+          status: 403,
+          reason: "integrity_stale",
+          sessionStatusAtEvent: "active",
+        },
+      })
+      .returning();
+
+    const detail = await agent
+      .get(`/v1/security/events/${securityEvent.id}`)
+      .set("x-tenant-id", tenant);
+
+    expect(detail.status, JSON.stringify(detail.body)).toBe(200);
+    expect(detail.body.event.id).toBe(securityEvent.id);
+    expect(detail.body.viewer.email).toBe(`viewer-${run}@integration.example`);
+    expect(detail.body.reason.title).toBe("Segment ticket request was denied");
+    expect(detail.body.reason.explanation).toContain("integrity state");
+    expect(detail.body.reason.evidence).toMatchObject({
+      code: "SEGMENT_TICKET_DENIED",
+      status: 403,
+      reason: "integrity_stale",
+      sessionStatusAtEvent: "active",
+    });
+
+    const hiddenAcrossTenants = await other
+      .get(`/v1/security/events/${securityEvent.id}`)
+      .set("x-tenant-id", otherTenant);
+    expect(hiddenAcrossTenants.status).toBe(404);
+  });
+
   it("creates and reuses an internal YouTube asset on demand", async () => {
     const [subscription] = await database.db
       .select()
