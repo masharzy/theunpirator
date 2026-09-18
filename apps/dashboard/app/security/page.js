@@ -25,8 +25,8 @@ const layers = [
   ],
   [
     Fingerprint,
-    "Identity can follow the session",
-    "Plan-enabled device tracking and watermarking can connect playback to a viewer and device context.",
+    "Viewer identity is server-authoritative",
+    "Protected playback binds the authenticated viewer email to a stable application device ID. Dynamic watermarking can display that trusted identity when the active plan enables it.",
   ],
   [
     Siren,
@@ -54,9 +54,9 @@ export default function SecurityPage() {
                   Security is not a label. It is the controls that actually run.
                 </h1>
                 <p className="mt-6 max-w-2xl text-base leading-7 text-[#b8c2b3] sm:text-lg">
-                  There is no customer-facing Standard, Strict or Maximum mode. The purchased plan
-                  decides which protection features are enabled, and the backend enforces those
-                  concrete entitlements.
+                  There is no customer-facing Standard, Strict or Maximum mode. Authenticated
+                  viewer email and stable device identity are baseline playback requirements; the
+                  purchased plan decides which additional protection features are enabled.
                 </p>
               </div>
 
@@ -67,9 +67,9 @@ export default function SecurityPage() {
                 </div>
                 <div className="mt-5 space-y-3 text-sm">
                   {[
-                    "viewer authorized",
+                    "viewer email resolved server-side",
+                    "device identity present",
                     "session valid",
-                    "plan feature enabled",
                     "origin allowed",
                   ].map((item) => (
                     <div
