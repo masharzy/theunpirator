@@ -30,12 +30,19 @@ function time(value) {
 }
 
 function TechnicalValue({ children }) {
-  return <span className="break-all font-mono text-[11px] text-[#5c6656]">{children || "—"}</span>;
+  return (
+    <span className="break-all font-mono text-[11px] text-[#5c6656]">{children || "—"}</span>
+  );
 }
 
 export default function LogsPage() {
   const [items, setItems] = useState(null);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+  });
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -72,10 +79,18 @@ export default function LogsPage() {
     api(endpoint, { signal: controller.signal })
       .then((response) => {
         setItems(response.items || []);
-        setPagination(response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 });
+        setPagination(
+          response.pagination || {
+            page,
+            pageSize: 25,
+            total: 0,
+            totalPages: 1,
+          },
+        );
       })
       .catch((failure) => {
-        if (failure.name !== "AbortError") setError(failure.message || "Logs could not be loaded");
+        if (failure.name !== "AbortError")
+          setError(failure.message || "Logs could not be loaded");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -154,7 +169,10 @@ export default function LogsPage() {
       </Surface>
 
       {error && (
-        <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+        <p
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
           {error}
         </p>
       )}
@@ -169,7 +187,8 @@ export default function LogsPage() {
       ) : (
         <Surface className="overflow-hidden">
           <div className="border-b border-[#e6eadf] px-5 py-3 text-xs text-[#7c8675]">
-            {pagination.total.toLocaleString()} matching {pagination.total === 1 ? "event" : "events"}
+            {pagination.total.toLocaleString()} matching{" "}
+            {pagination.total === 1 ? "event" : "events"}
           </div>
           <div className="divide-y divide-[#e8ebe3]">
             {items.map((item) => {
@@ -246,7 +265,10 @@ export default function LogsPage() {
       )}
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-[#172014]/20 backdrop-blur-[2px]" onMouseDown={() => setSelected(null)}>
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-[#172014]/20 backdrop-blur-[2px]"
+          onMouseDown={() => setSelected(null)}
+        >
           <aside
             className="h-full w-full max-w-xl overflow-y-auto bg-[#fbfcf8] shadow-2xl"
             onMouseDown={(event) => event.stopPropagation()}
@@ -293,7 +315,9 @@ export default function LogsPage() {
                     <dt className="text-[10px] font-bold uppercase tracking-[.12em] text-[#929b8c]">
                       Resource
                     </dt>
-                    <dd className="mt-1 text-sm font-medium text-[#3a4634]">{selected.resource}</dd>
+                    <dd className="mt-1 text-sm font-medium text-[#3a4634]">
+                      {selected.resource}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-[10px] font-bold uppercase tracking-[.12em] text-[#929b8c]">
@@ -350,7 +374,8 @@ export default function LogsPage() {
                       </dt>
                       <dd className="mt-1">
                         <TechnicalValue>
-                          quantity={selected.technical.quantity} · riskScore={selected.technical.riskScore}
+                          quantity={selected.technical.quantity} · riskScore=
+                          {selected.technical.riskScore}
                         </TechnicalValue>
                       </dd>
                     </div>
