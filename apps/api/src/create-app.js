@@ -118,7 +118,7 @@ export function createApp(overrides = {}) {
     "/v1/security",
     auth,
     csrfGuard,
-    securityRouter({ db, requireTenantAdmin: tenantAdmin, playbackService }),
+    securityRouter({ db, config, requireTenantAdmin: tenantAdmin, playbackService }),
   );
   app.use("/v1/usage", usageRouter({ db, dashboardAuth: auth, requireTenantViewer: tenantViewer }));
 
