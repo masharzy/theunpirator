@@ -27,6 +27,7 @@ import { sitesRouter } from "./routes/sites.js";
 import { assetsRouter } from "./routes/assets.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { playbackRouter } from "./routes/playback.js";
+import { securityConsoleRouter } from "./routes/security-console.js";
 import { securityRouter } from "./routes/security.js";
 import { viewersRouter } from "./routes/viewers.js";
 import { usageRouter } from "./routes/usage.js";
@@ -129,6 +130,12 @@ export function createApp(overrides = {}) {
     }),
   );
 
+  app.use(
+    "/v1/security",
+    auth,
+    csrfGuard,
+    securityConsoleRouter({ db, config, requireTenantAdmin: tenantAdmin }),
+  );
   app.use(
     "/v1/security",
     auth,
