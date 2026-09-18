@@ -216,12 +216,14 @@ export function playbackRouter({
 
         const state = effectiveSessionStatus(existing, now);
         let session = existing;
+        let didRevoke = false;
         if (!["revoked", "ended"].includes(state)) {
           try {
             session = await playbackService.revoke({
               tenantId: req.tenantId,
               sessionId: req.params.sessionId,
             });
+            didRevoke = session.status === "revoked";
           } catch (error) {
             const [durable] = await db
               .select()
@@ -235,6 +237,7 @@ export function playbackRouter({
               .limit(1);
             if (durable?.status !== "revoked") throw error;
             session = durable;
+            didRevoke = true;
             console.warn(
               JSON.stringify({
                 component: "playback-revoke",
@@ -247,7 +250,7 @@ export function playbackRouter({
           }
         }
 
-        if (state !== "revoked")
+        if (didRevoke)
           await writeAudit(db, {
             tenantId: req.tenantId,
             actorAccountId: req.auth.accountId,
