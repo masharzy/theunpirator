@@ -321,7 +321,7 @@ describe("media delivery", () => {
     ).rejects.toMatchObject({ code: "INVALID_RANGE" });
     expect(f).not.toHaveBeenCalled();
   });
-  it("does not follow origin redirects or expose their body", async () => {
+  it("does not follow redirects to unapproved origins or expose their body", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
