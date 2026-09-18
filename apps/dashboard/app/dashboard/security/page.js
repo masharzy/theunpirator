@@ -248,13 +248,14 @@ function EventDrawer({ selectedEvent, onClose }) {
             </Section>
 
             <Section title="Request context">
+              <DetailRow label="Event producer" value={metadata.source || "—"} />
               <DetailRow
-                label="IP address"
+                label="Viewer request IP"
                 value={detail?.session?.ip || metadata.ip || "—"}
                 mono
               />
               <DetailRow
-                label="User agent"
+                label="Viewer user agent"
                 value={detail?.session?.userAgent || metadata.userAgent || "—"}
                 mono
               />
