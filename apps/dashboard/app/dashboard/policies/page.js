@@ -38,7 +38,9 @@ export default function PoliciesPage() {
     [assets],
   );
   const planLabel =
-    billing?.subscription?.planName || billing?.subscription?.planId || "No active plan";
+    billing?.subscription?.planName ||
+    billing?.subscription?.planId ||
+    "No active plan";
 
   return (
     <div className="space-y-8">
