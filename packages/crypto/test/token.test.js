@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { blindIndex, signPlaybackToken, verifyPlaybackToken, encryptJson, decryptJson } from "../src/index.js";
+import { blindIndex, decryptJson, deriveKey, encryptJson, signPlaybackToken, verifyPlaybackToken } from "../src/index.js";
 
 describe("crypto", () => {
   it("signs and verifies playback grants", () => {
@@ -28,6 +28,15 @@ describe("crypto", () => {
       email: "viewer@example.com",
     });
     expect(() => decryptJson(encrypted, key, "viewer-email:tenant-b")).toThrow();
+  });
+
+  it("derives domain-separated application subkeys", () => {
+    const key = Buffer.alloc(32, 13).toString("base64");
+    const lookup = deriveKey(key, "viewer-email:lookup:v2");
+    const encryption = deriveKey(key, "viewer-email:encryption:v2");
+    expect(Buffer.from(lookup, "base64")).toHaveLength(32);
+    expect(Buffer.from(encryption, "base64")).toHaveLength(32);
+    expect(lookup).not.toBe(encryption);
   });
 
   it("creates deterministic context-separated blind indexes", () => {
