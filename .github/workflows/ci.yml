@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: write
 on:
   push:
   pull_request:
@@ -64,7 +66,23 @@ jobs:
             cat /tmp/unpirator-dashboard.log
             exit 1
           fi
-      - run: pnpm format:check
+      - name: Apply Prettier formatting
+        run: pnpm exec prettier --write .
+      - name: Commit formatting on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Formatting already clean"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style: apply prettier formatting"
+            git push origin HEAD:main
+          fi
+      - name: Verify formatting on pull requests
+        if: github.event_name == 'pull_request'
+        run: pnpm format:check
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
