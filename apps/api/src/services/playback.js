@@ -10,6 +10,11 @@ import {
   usageEvents,
 } from "@unpirator/db/schema";
 import { signPlaybackToken } from "@unpirator/crypto";
+import {
+  encryptViewerEmail,
+  normalizeViewerEmail,
+  viewerIdentityKey,
+} from "./viewer-identity.js";
 import { riskFor } from "@unpirator/security";
 import { queueWebhook } from "./webhooks.js";
 import { notifyTenant } from "./tenant-notifications.js";
@@ -31,7 +36,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       const result = await db.transaction(async (tx) => {
         recordTiming("transaction_open");
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${args.tenantId}:${args.input.externalUserId}`}, 0))`,
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${args.tenantId}:${viewerIdentityKey(args.input.email, config)}`}, 0))`,
         );
         recordTiming("user_lock");
         return createPlaybackService({
@@ -194,33 +199,38 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     }
     const protectedHls = isHlsAsset(asset);
     const entitlements = policy.entitlements;
-    if (policy.requireDeviceId && !input.deviceId)
-      throw new AppError("DEVICE_ID_REQUIRED", "This plan requires a device ID", 400);
     const playbackFeatures = {
       protectedDelivery: policy.protectedDelivery,
       playerIntegrity: policy.playerIntegrity,
       secureBrowserRestriction: policy.secureBrowserRestriction,
     };
+    const normalizedEmail = normalizeViewerEmail(input.email);
+    const identityKey = viewerIdentityKey(normalizedEmail, config);
+    const encryptedEmail = encryptViewerEmail(normalizedEmail, tenantId, config);
     let [user] = await db
       .select()
       .from(endUsers)
-      .where(
-        and(eq(endUsers.tenantId, tenantId), eq(endUsers.externalUserId, input.externalUserId)),
-      )
+      .where(and(eq(endUsers.tenantId, tenantId), eq(endUsers.externalUserId, identityKey)))
       .limit(1);
     if (!user)
       [user] = await db
         .insert(endUsers)
         .values({
           tenantId,
-          externalUserId: input.externalUserId,
-          displayLabel: input.displayLabel,
+          externalUserId: identityKey,
+          displayLabel: encryptedEmail,
         })
         .returning();
+    else if (!String(user.displayLabel || "").startsWith("enc:v1:")) {
+      [user] = await db
+        .update(endUsers)
+        .set({ displayLabel: encryptedEmail, updatedAt: new Date() })
+        .where(eq(endUsers.id, user.id))
+        .returning();
+    }
     if (user.status !== "active") throw new AppError("USER_BLOCKED", "User is blocked", 403);
     recordTiming("user");
-    const externalDeviceId =
-      policy.deviceTracking && input.deviceId ? input.deviceId : "unidentified";
+    const externalDeviceId = input.deviceId;
     let [device] = await db
       .select()
       .from(devices)
@@ -267,10 +277,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           tenantId,
           endUserId: user.id,
           externalDeviceId,
-          deviceName:
-            policy.deviceTracking && input.deviceId
-              ? input.client.deviceName
-              : input.client.deviceName || "Unidentified device",
+          deviceName: input.client.deviceName || "Browser device",
           browser: input.client.browser,
           os: input.client.os,
         })
@@ -335,8 +342,8 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         assetId: asset.id,
         endUserId: user.id,
         deviceId: device.id,
-        ip,
-        userAgent,
+        ip: input.viewerIp || ip,
+        userAgent: input.viewerUserAgent || userAgent,
         expiresAt,
       })
       .returning();
@@ -374,7 +381,6 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       await queueWebhook(db, tenantId, "playback.started", {
         sessionId: session.id,
         assetId: asset.id,
-        externalUserId: input.externalUserId,
       });
     recordTiming("usage_and_webhook");
     return {
@@ -398,7 +404,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       watermark: policy.watermark
         ? {
             enabled: true,
-            label: input.displayLabel || input.externalUserId,
+            label: normalizedEmail,
             sessionCode: session.id.slice(0, 8),
             minMoveSeconds: 20,
             maxMoveSeconds: 45,
