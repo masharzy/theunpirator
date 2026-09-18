@@ -24,15 +24,15 @@ export function CustomerRecordsPage({ eyebrow, title, description, endpoint, emp
       .then((response) => setItems(response.items || []))
       .catch((failure) => setError(failure.message));
   }, [endpoint]);
-  const columns = useMemo(
-    () =>
-      items?.[0]
-        ? Object.keys(items[0])
-            .filter((key) => !["metadata", "tenantId"].includes(key))
-            .slice(0, 7)
-        : [],
-    [items],
-  );
+  const columns = useMemo(() => {
+    if (!items?.[0]) return [];
+    const keys = Object.keys(items[0]).filter((key) => !["metadata", "tenantId"].includes(key));
+    const prioritized = [
+      ...["id", "viewerEmail", "email"].filter((key) => keys.includes(key)),
+      ...keys.filter((key) => !["id", "viewerEmail", "email"].includes(key)),
+    ];
+    return prioritized.slice(0, 7);
+  }, [items]);
   return (
     <div className="space-y-8">
       <PageHeader eyebrow={eyebrow} title={title} description={description} />
