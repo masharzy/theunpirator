@@ -231,6 +231,9 @@ export default function Dashboard() {
                     <p className="mt-1 text-xs uppercase tracking-[.12em] text-[#8a9483]">
                       {asset.provider}
                     </p>
+                    <p className="mt-1 text-xs text-[#8a9483]">
+                      {new Date(asset.createdAt).toLocaleString()}
+                    </p>
                   </div>
                   <StatusPill status={asset.status} />
                 </Link>
