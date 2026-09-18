@@ -65,7 +65,8 @@ function Section({ title, description, children }) {
 
 function EvidenceRows({ evidence }) {
   const rows = Object.entries(evidence || {}).filter(([, value]) => value != null && value !== "");
-  if (!rows.length) return <p className="mt-3 text-sm text-[#7b8574]">No extra evidence recorded.</p>;
+  if (!rows.length)
+    return <p className="mt-3 text-sm text-[#7b8574]">No extra evidence recorded.</p>;
   return (
     <dl className="mt-2">
       {rows.map(([key, value]) => (
@@ -151,13 +152,21 @@ function EventDrawer({ selectedEvent, onClose }) {
     ? `${detail.site.name} · ${detail.site.domain}`
     : [event?.siteName, event?.siteDomain].filter(Boolean).join(" · ") || "Site unavailable";
   const deviceLabel =
-    detail?.device?.deviceName || event?.deviceName || detail?.device?.externalDeviceId || "Device unavailable";
+    detail?.device?.deviceName ||
+    event?.deviceName ||
+    detail?.device?.externalDeviceId ||
+    "Device unavailable";
   const browserLabel = [detail?.device?.browser || event?.browser, detail?.device?.os || event?.os]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Security event details">
+    <div
+      className="fixed inset-0 z-[80]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Security event details"
+    >
       <button
         type="button"
         className="absolute inset-0 cursor-default bg-[#172014]/30 backdrop-blur-[2px]"
@@ -167,7 +176,9 @@ function EventDrawer({ selectedEvent, onClose }) {
       <aside className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[#dde2d8] bg-[#f7f8f4] shadow-2xl">
         <div className="flex items-start gap-4 border-b border-[#e0e4dc] bg-white px-5 py-5 sm:px-6">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#7b856f]">Security incident</p>
+            <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#7b856f]">
+              Security incident
+            </p>
             <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-[#20291c]">
               {cleanType(event?.type)}
             </h2>
@@ -196,7 +207,8 @@ function EventDrawer({ selectedEvent, onClose }) {
           <div className="space-y-4">
             {partial && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                Full enrichment is temporarily unavailable. Showing the incident data that is currently accessible.
+                Full enrichment is temporarily unavailable. Showing the incident data that is
+                currently accessible.
               </div>
             )}
 
@@ -211,7 +223,10 @@ function EventDrawer({ selectedEvent, onClose }) {
               />
             </Section>
 
-            <Section title="Affected playback" description="Human-readable context for the viewer and content involved.">
+            <Section
+              title="Affected playback"
+              description="Human-readable context for the viewer and content involved."
+            >
               <DetailRow label="Viewer" value={viewerEmail} />
               <DetailRow label="Content" value={assetTitle} />
               <DetailRow label="Site" value={siteLabel} />
@@ -220,16 +235,24 @@ function EventDrawer({ selectedEvent, onClose }) {
               <DetailRow
                 label="Session state"
                 value={
-                  metadata.sessionStatusAtEvent || detail?.session?.status || "Not captured for this event"
+                  metadata.sessionStatusAtEvent ||
+                  detail?.session?.status ||
+                  "Not captured for this event"
                 }
               />
-              <DetailRow label="Request IP" value={detail?.session?.ip || metadata.ip || "Not available"} />
+              <DetailRow
+                label="Request IP"
+                value={detail?.session?.ip || metadata.ip || "Not available"}
+              />
             </Section>
 
             <Section title="Timeline">
               <DetailRow label="Occurred" value={formatDate(event?.createdAt)} />
               <DetailRow label="Session started" value={formatDate(detail?.session?.startedAt)} />
-              <DetailRow label="Last heartbeat" value={formatDate(detail?.session?.lastHeartbeatAt)} />
+              <DetailRow
+                label="Last heartbeat"
+                value={formatDate(detail?.session?.lastHeartbeatAt)}
+              />
               <DetailRow label="Expires" value={formatDate(detail?.session?.expiresAt)} />
               <DetailRow label="Ended" value={formatDate(detail?.session?.endedAt)} />
             </Section>
@@ -249,11 +272,23 @@ function EventDrawer({ selectedEvent, onClose }) {
               <div className="border-t border-[#edf0e9] px-4 pb-5 sm:px-5">
                 <dl>
                   <DetailRow label="Event ID" value={event?.id} mono />
-                  <DetailRow label="Session ID" value={detail?.session?.id || event?.sessionId} mono />
-                  <DetailRow label="Viewer ID" value={detail?.viewer?.id || event?.endUserId} mono />
+                  <DetailRow
+                    label="Session ID"
+                    value={detail?.session?.id || event?.sessionId}
+                    mono
+                  />
+                  <DetailRow
+                    label="Viewer ID"
+                    value={detail?.viewer?.id || event?.endUserId}
+                    mono
+                  />
                   <DetailRow label="Asset ID" value={detail?.asset?.id || event?.assetId} mono />
                   <DetailRow label="Site ID" value={detail?.site?.id || event?.siteId} mono />
-                  <DetailRow label="Device ID" value={detail?.device?.id || detail?.session?.deviceId} mono />
+                  <DetailRow
+                    label="Device ID"
+                    value={detail?.device?.id || detail?.session?.deviceId}
+                    mono
+                  />
                   <DetailRow label="Event producer" value={metadata.source || "Not available"} />
                   <DetailRow
                     label="User agent"
@@ -402,7 +437,10 @@ export default function SecurityPage() {
       />
 
       {message && (
-        <div className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+        <div
+          className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
           <span>{message}</span>
           <button
             type="button"
@@ -517,7 +555,10 @@ export default function SecurityPage() {
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#879080]">
             <p>{resultLabel}</p>
-            <p>Viewer email search uses the complete email address; other context supports partial search.</p>
+            <p>
+              Viewer email search uses the complete email address; other context supports partial
+              search.
+            </p>
           </div>
         </div>
       </Surface>
@@ -559,7 +600,9 @@ export default function SecurityPage() {
                   <p className="mt-1 truncate text-xs font-medium text-[#5e6958]">
                     {event.viewerEmail || "Viewer email unavailable"}
                   </p>
-                  <p className="mt-1 text-[11px] text-[#929b8b]">Risk score {event.riskScore ?? 0}</p>
+                  <p className="mt-1 text-[11px] text-[#929b8b]">
+                    Risk score {event.riskScore ?? 0}
+                  </p>
                 </div>
 
                 <div className="min-w-0">
@@ -567,7 +610,8 @@ export default function SecurityPage() {
                     {event.assetTitle || "Content unavailable"}
                   </p>
                   <p className="mt-1 truncate text-xs text-[#7f8978]">
-                    {[event.siteName, event.siteDomain].filter(Boolean).join(" · ") || "Site unavailable"}
+                    {[event.siteName, event.siteDomain].filter(Boolean).join(" · ") ||
+                      "Site unavailable"}
                   </p>
                 </div>
 
@@ -595,7 +639,8 @@ export default function SecurityPage() {
 
           <div className="flex flex-col gap-3 border-t border-[#e7ebe2] bg-[#fafbf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-[#7b8574]">
-              Page <span className="font-semibold text-[#46513f]">{pagination.page}</span> of {pagination.totalPages}
+              Page <span className="font-semibold text-[#46513f]">{pagination.page}</span> of{" "}
+              {pagination.totalPages}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -623,7 +668,8 @@ export default function SecurityPage() {
 
       <div className="flex items-center gap-2 text-xs text-[#7b8574]">
         <MonitorSmartphone size={14} />
-        Select an incident to inspect the viewer, content, device, timeline and enforcement evidence.
+        Select an incident to inspect the viewer, content, device, timeline and enforcement
+        evidence.
       </div>
 
       <EventDrawer selectedEvent={selectedEvent} onClose={() => setSelectedEvent(null)} />

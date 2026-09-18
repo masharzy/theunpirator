@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { and, count, desc, eq, gte, ilike, inArray, lte, or } from "drizzle-orm";
-import { assets, devices, endUsers, playbackSessions, securityEvents, sites } from "@unpirator/db/schema";
+import {
+  assets,
+  devices,
+  endUsers,
+  playbackSessions,
+  securityEvents,
+  sites,
+} from "@unpirator/db/schema";
 import {
   decryptViewerEmail,
   normalizeViewerEmail,
@@ -44,7 +51,9 @@ export function securityConsoleRouter({ db, config, requireTenantAdmin }) {
       const requestedPage = positiveInt(req.query.page, 1, 1000000);
       const limit = positiveInt(req.query.limit, 25, 100);
       const search = String(req.query.search || "").trim();
-      const severityInput = String(req.query.severity || "").trim().toLowerCase();
+      const severityInput = String(req.query.severity || "")
+        .trim()
+        .toLowerCase();
       const severity = SEVERITIES.has(severityInput) ? severityInput : "all";
       const type = String(req.query.type || "").trim();
       const from = parseDate(req.query.from);
@@ -155,12 +164,7 @@ export function securityConsoleRouter({ db, config, requireTenantAdmin }) {
         ? await db
             .select({ id: endUsers.id, displayLabel: endUsers.displayLabel })
             .from(endUsers)
-            .where(
-              and(
-                eq(endUsers.tenantId, req.tenantId),
-                inArray(endUsers.id, viewerIdsForRows),
-              ),
-            )
+            .where(and(eq(endUsers.tenantId, req.tenantId), inArray(endUsers.id, viewerIdsForRows)))
         : [];
       const viewerEmails = new Map(
         viewerRows.map((viewer) => [
