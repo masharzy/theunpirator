@@ -28,6 +28,25 @@ export function effectiveSessionStatus(session, now = new Date()) {
   return "active";
 }
 
+export async function settleSessionRevoke({ state, existing, revoke, readDurable }) {
+  if (["revoked", "ended"].includes(state)) {
+    return { session: existing, didRevoke: false, secondaryError: null };
+  }
+
+  try {
+    const session = await revoke();
+    return {
+      session,
+      didRevoke: session?.status === "revoked",
+      secondaryError: null,
+    };
+  } catch (error) {
+    const durable = await readDurable();
+    if (durable?.status !== "revoked") throw error;
+    return { session: durable, didRevoke: true, secondaryError: error };
+  }
+}
+
 export async function reconcileExpiredSessions(db, tenantId, now = new Date()) {
   await db.execute(sql`
     UPDATE playback_sessions
