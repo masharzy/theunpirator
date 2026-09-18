@@ -23,10 +23,28 @@ import {
   Surface,
 } from "@/components/console-kit";
 
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let amount = bytes;
+  let unit = "B";
+  for (const nextUnit of units) {
+    amount /= 1024;
+    unit = nextUnit;
+    if (amount < 1024) break;
+  }
+  return `${amount.toFixed(amount >= 100 ? 0 : amount >= 10 ? 1 : 2)} ${unit}`;
+}
+
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [billing, setBilling] = useState(null);
-  const [usage, setUsage] = useState({});
+  const [usage, setUsage] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -34,22 +52,24 @@ export default function Dashboard() {
       .then(([summaryData, billingData, usageData]) => {
         setSummary(summaryData);
         setBilling(billingData);
-        setUsage(usageData.metrics || {});
+        setUsage(usageData);
       })
       .catch((requestError) => setError(requestError.message));
   }, []);
 
   const counts = summary?.counts || {};
-  const entitlements = billing?.entitlements || {};
   const recentAssets = summary?.recentAssets || [];
   const recentSecurity = summary?.recentSecurity || [];
+  const metrics = usage?.metrics || {};
+  const headline = usage?.headline;
+  const headlineFormat = headline?.unit === "bytes" ? formatBytes : formatNumber;
   const steps = [
     ["Add a site", counts.sites > 0],
     ["Verify a domain", counts.verifiedSites > 0],
     ["Add a provider connection", counts.connections > 0],
     ["Create an API key", counts.apiKeys > 0],
     ["Register an asset", counts.assets > 0],
-    ["Start protected playback", Number(usage.playback_sessions || 0) > 0],
+    ["Start protected playback", Number(metrics.playback_sessions || 0) > 0],
   ];
 
   return (
@@ -102,18 +122,22 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="p-6">
-            <div className="grid gap-5 md:grid-cols-2">
+            {headline?.percent != null ? (
               <ProgressMeter
-                label="Sites"
-                used={counts.sites || 0}
-                limit={entitlements.max_sites}
+                label={headline.label}
+                used={headline.used}
+                limit={headline.limit}
+                format={headlineFormat}
               />
-              <ProgressMeter
-                label="Concurrent streams"
-                used={counts.activeSessions || 0}
-                limit={entitlements.max_concurrent_streams}
-              />
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-[#e2e7dc] bg-[#f8faf4] p-5">
+                <p className="text-sm font-semibold text-[#33402d]">No metered billing cap</p>
+                <p className="mt-1 text-sm leading-6 text-[#74806d]">
+                  Workspace capacity and live stream limits are tracked separately from billing-period
+                  usage.
+                </p>
+              </div>
+            )}
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/dashboard/plans"
