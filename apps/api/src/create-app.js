@@ -40,6 +40,7 @@ import { workspaceRouter } from "./routes/workspace.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { publicRouter } from "./routes/public.js";
 import { integrationHealthRouter } from "./routes/integration-health.js";
+import { operationsLogsRouter } from "./routes/operations-logs.js";
 
 export function createApp(overrides = {}) {
   const config = overrides.config || loadConfig();
@@ -182,6 +183,13 @@ export function createApp(overrides = {}) {
     auth,
     csrfGuard,
     integrationHealthRouter({ db, requireTenantDeveloper: tenantDeveloper }),
+  );
+
+  app.use(
+    "/v1/operations-logs",
+    auth,
+    csrfGuard,
+    operationsLogsRouter({ db, requireTenantDeveloper: tenantDeveloper }),
   );
 
   app.use(
