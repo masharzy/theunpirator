@@ -34,8 +34,8 @@ const sections = [
     id: "viewers",
     title: "4. Viewers, devices and authorization",
     body: [
-      "Your application remains responsible for authenticating viewers and deciding whether a viewer is entitled to access a particular video. The Unpirator may enforce additional plan-enabled controls after your application authorizes playback, such as device requirements, device limits, concurrency limits, session revocation or watermarking.",
-      "Where your integration sends viewer information, use a stable opaque external user identifier whenever possible. Human-readable labels such as an email address or name are optional unless a particular feature you choose to use requires them. You are responsible for ensuring that any viewer data you send is lawful and appropriate for your use case.",
+      "Your application remains responsible for authenticating viewers and deciding whether a viewer is entitled to access a particular video. Protected playback requires your server to provide the authenticated viewer email and the official player to provide a stable application-generated device ID. Additional controls such as device limits, concurrency limits, session revocation and dynamic watermarking depend on the active plan.",
+      "The viewer email must come from your trusted server-side authentication context, not from browser-supplied request data. The Unpirator stores only the playback and security identity linkage needed to operate the service, and does not require the viewer's password or unrelated profile fields. You are responsible for ensuring that any viewer data you send is lawful and appropriate for your use case.",
     ],
   },
   {
@@ -106,7 +106,7 @@ const sections = [
     id: "privacy",
     title: "13. Privacy and data processing",
     body: [
-      "Our Privacy Policy explains the categories of information processed through the service, including workspace data, viewer identifiers, device identifiers, playback telemetry and security events. By using the service, you acknowledge that processing as described in the Privacy Policy.",
+      "Our Privacy Policy explains the categories of information processed through the service, including workspace data, authenticated viewer email, application-generated device identifiers, playback telemetry and security events. By using the service, you acknowledge that processing as described in the Privacy Policy.",
       "Where a customer sends end-user information to The Unpirator on behalf of its own users, the customer is responsible for the notices, permissions and lawful basis required for that data. Additional data-processing terms may be agreed separately where required.",
     ],
   },
@@ -141,7 +141,7 @@ export default function TermsPage() {
               Rules for creating a workspace, connecting media and using The Unpirator's protected
               playback infrastructure.
             </p>
-            <p className="mt-6 text-sm text-[#7a7a7a]">Effective September 17, 2026</p>
+            <p className="mt-6 text-sm text-[#7a7a7a]">Effective September 18, 2026</p>
           </div>
         </section>
 
