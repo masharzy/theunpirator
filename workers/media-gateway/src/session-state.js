@@ -77,31 +77,38 @@ export class SessionState {
       const body = await request.json();
       const session = await this.state.storage.get("session");
       const sequence = Number(body.sequence);
+      const deny = (reason, status = 403) =>
+        Response.json({ error: "denied", reason }, { status });
+
+      if (!session) return deny("session_missing");
+      if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);
+      if (session.expiresAt <= Date.now()) return deny("session_expired");
       if (
-        !session ||
-        session.status !== "active" ||
-        session.expiresAt <= Date.now() ||
-        (session.features?.playerIntegrity !== false &&
-          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
-        !["video", "audio"].includes(body.track) ||
-        !Number.isInteger(body.variant) ||
-        body.variant < 0 ||
-        !Number.isInteger(sequence) ||
-        sequence < 0 ||
-        (session.windows
-          ? !this.inWindow(session, body)
-          : sequence > Number(session.allowedSequence || 8))
+        session.features?.playerIntegrity !== false &&
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000
       )
-        return Response.json({ error: "denied" }, { status: 403 });
+        return deny("integrity_stale");
+      if (!["video", "audio"].includes(body.track)) return deny("invalid_track");
+      if (!Number.isInteger(body.variant) || body.variant < 0) return deny("invalid_variant");
+      if (!Number.isInteger(sequence) || sequence < 0) return deny("invalid_sequence");
+      if (
+        session.windows
+          ? !this.inWindow(session, body)
+          : sequence > Number(session.allowedSequence || 8)
+      )
+        return deny("sequence_out_of_window");
+
       const bucket = Math.floor(Date.now() / 60_000);
       const rateKey = `ticket-rate:${bucket}`;
       const count = Number((await this.state.storage.get(rateKey)) || 0);
-      if (count >= 180) return Response.json({ error: "rate_limited" }, { status: 429 });
+      if (count >= 180) return deny("rate_limited", 429);
+
       const usageKey = `usage:${bucket}:${body.track}:${body.variant}:${sequence}`;
       const attempts = Number((await this.state.storage.get(usageKey)) || 0);
       // Tickets remain single-use. A small mint allowance lets the player recover when
       // the upstream range fetch fails after a ticket has already been consumed.
-      if (attempts >= 8) return Response.json({ error: "replay" }, { status: 403 });
+      if (attempts >= 8) return deny("replay_limit");
+
       await this.state.storage.put(usageKey, attempts + 1);
       await this.state.storage.put(rateKey, count + 1);
       const ticket = crypto.randomUUID() + crypto.randomUUID();
@@ -113,6 +120,7 @@ export class SessionState {
       });
       return Response.json({ ticket, expiresIn: 20 });
     }
+
     if (request.method === "POST" && url.pathname === "/consume") {
       const body = await request.json();
       const key = `ticket:${body.ticket || ""}`;
@@ -121,41 +129,50 @@ export class SessionState {
         this.state.storage.get(key),
         this.state.storage.get("mediaKey"),
       ]);
+      const deny = (reason) => Response.json({ error: "denied", reason }, { status: 403 });
+
+      if (!session) return deny("session_missing");
+      if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);
+      if (session.expiresAt <= Date.now()) return deny("session_expired");
       if (
-        !session ||
-        session.status !== "active" ||
-        session.expiresAt <= Date.now() ||
-        (session.features?.playerIntegrity !== false &&
-          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
-        !ticket ||
-        ticket.expiresAt <= Date.now() ||
-        ticket.track !== body.track ||
-        ticket.variant !== body.variant ||
-        ticket.sequence !== body.sequence ||
-        (session.windows && !this.inWindow(session, ticket)) ||
-        !mediaKey
+        session.features?.playerIntegrity !== false &&
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000
       )
-        return Response.json({ error: "denied" }, { status: 403 });
+        return deny("integrity_stale");
+      if (!ticket) return deny("ticket_missing_or_used");
+      if (ticket.expiresAt <= Date.now()) return deny("ticket_expired");
+      if (ticket.track !== body.track) return deny("ticket_track_mismatch");
+      if (ticket.variant !== body.variant) return deny("ticket_variant_mismatch");
+      if (ticket.sequence !== body.sequence) return deny("ticket_sequence_mismatch");
+      if (session.windows && !this.inWindow(session, ticket)) return deny("sequence_out_of_window");
+      if (!mediaKey) return deny("media_key_unavailable");
+
       await this.state.storage.delete(key);
       return Response.json({ ok: true, keyBase64: mediaKey });
     }
+
     if (request.method === "POST" && url.pathname === "/resource-ticket") {
       const body = await request.json();
       const session = await this.state.storage.get("session");
       const resourceId = String(body.resourceId || "");
+      const deny = (reason, status = 403) =>
+        Response.json({ error: "denied", reason }, { status });
+
+      if (!session) return deny("session_missing");
+      if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);
+      if (session.expiresAt <= Date.now()) return deny("session_expired");
       if (
-        !session ||
-        session.status !== "active" ||
-        session.expiresAt <= Date.now() ||
-        (session.features?.playerIntegrity !== false &&
-          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
-        !/^(root|[a-f0-9]{40})$/.test(resourceId)
+        session.features?.playerIntegrity !== false &&
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000
       )
-        return Response.json({ error: "denied" }, { status: 403 });
+        return deny("integrity_stale");
+      if (!/^(root|[a-f0-9]{40})$/.test(resourceId)) return deny("invalid_resource");
+
       const bucket = Math.floor(Date.now() / 60_000);
       const rateKey = `resource-rate:${bucket}`;
       const count = Number((await this.state.storage.get(rateKey)) || 0);
-      if (count >= 240) return Response.json({ error: "rate_limited" }, { status: 429 });
+      if (count >= 240) return deny("rate_limited", 429);
+
       const ticket = crypto.randomUUID() + crypto.randomUUID();
       await Promise.all([
         this.state.storage.put(rateKey, count + 1),
@@ -166,6 +183,7 @@ export class SessionState {
       ]);
       return Response.json({ ticket, expiresIn: 20 });
     }
+
     if (request.method === "POST" && url.pathname === "/consume-resource") {
       const body = await request.json();
       const key = `resource-ticket:${body.ticket || ""}`;
@@ -174,21 +192,25 @@ export class SessionState {
         this.state.storage.get(key),
         this.state.storage.get("mediaKey"),
       ]);
+      const deny = (reason) => Response.json({ error: "denied", reason }, { status: 403 });
+
+      if (!session) return deny("session_missing");
+      if (session.status !== "active") return deny(`session_${session.status || "inactive"}`);
+      if (session.expiresAt <= Date.now()) return deny("session_expired");
       if (
-        !session ||
-        session.status !== "active" ||
-        session.expiresAt <= Date.now() ||
-        (session.features?.playerIntegrity !== false &&
-          Date.now() - Number(session.lastIntegrityAt || 0) > 15_000) ||
-        !ticket ||
-        ticket.expiresAt <= Date.now() ||
-        ticket.resourceId !== body.resourceId ||
-        !mediaKey
+        session.features?.playerIntegrity !== false &&
+        Date.now() - Number(session.lastIntegrityAt || 0) > 15_000
       )
-        return Response.json({ error: "denied" }, { status: 403 });
+        return deny("integrity_stale");
+      if (!ticket) return deny("ticket_missing_or_used");
+      if (ticket.expiresAt <= Date.now()) return deny("ticket_expired");
+      if (ticket.resourceId !== body.resourceId) return deny("resource_mismatch");
+      if (!mediaKey) return deny("media_key_unavailable");
+
       await this.state.storage.delete(key);
       return Response.json({ ok: true, keyBase64: mediaKey });
     }
+
     if (request.method === "POST" && url.pathname === "/lease") {
       const body = await request.json();
       const session = await this.state.storage.get("session");
