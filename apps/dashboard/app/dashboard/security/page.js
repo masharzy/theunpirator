@@ -161,6 +161,26 @@ function EventDrawer({ selectedEvent, onClose }) {
               </div>
             )}
 
+            <Section title="Incident reason">
+              <DetailRow label="Reason" value={detail?.reason?.title || cleanType(event?.type)} />
+              <DetailRow
+                label="What happened"
+                value={
+                  detail?.reason?.explanation ||
+                  "The gateway recorded this event while processing protected playback."
+                }
+              />
+              <DetailRow
+                label="Evidence"
+                value={
+                  detail?.reason?.evidence
+                    ? JSON.stringify(detail.reason.evidence)
+                    : metadata.path || "—"
+                }
+                mono
+              />
+            </Section>
+
             <Section title="Event">
               <DetailRow label="Event ID" value={event?.id} mono />
               <DetailRow label="Type" value={cleanType(event?.type)} />
@@ -190,6 +210,7 @@ function EventDrawer({ selectedEvent, onClose }) {
                 label="Viewer"
                 value={detail?.viewer?.displayLabel || detail?.viewer?.externalUserId || event?.endUserId || "—"}
               />
+              <DetailRow label="Viewer email" value={detail?.viewer?.email || "Not provided by customer app"} />
               <DetailRow label="Viewer ID" value={detail?.viewer?.externalUserId || event?.endUserId || "—"} mono />
               <DetailRow label="Viewer status" value={detail?.viewer?.status || "—"} />
               <DetailRow
