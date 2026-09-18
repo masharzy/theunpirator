@@ -223,6 +223,7 @@ export function DashboardShell({ children }) {
                   <Link
                     key={href}
                     href={href}
+                    prefetch={false}
                     className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-[#172014] font-semibold text-white shadow-sm" : "text-[#5d6857] hover:bg-[#f1f4eb] hover:text-[#1f291c]"}`}
                   >
                     <Icon size={16} />
@@ -306,6 +307,7 @@ export function DashboardShell({ children }) {
             </span>
             <Link
               href="/dashboard/usage"
+              prefetch={false}
               className="w-20 rounded-lg px-1 py-1.5 transition hover:bg-white/70 md:w-24"
               aria-label={`Plan usage ${usagePercent} percent. Open Usage & Analytics.`}
               title="Open Usage & Analytics"
@@ -326,6 +328,7 @@ export function DashboardShell({ children }) {
             </Link>
             <Link
               href="/dashboard/notifications"
+              prefetch={false}
               className="relative rounded-xl border border-[#dce2d4] bg-white p-2.5 text-[#56634e]"
               aria-label={`${unread} unread notifications`}
             >
@@ -339,6 +342,7 @@ export function DashboardShell({ children }) {
             {auth?.account?.platformRole && (
               <Link
                 href="/admin"
+                prefetch={false}
                 className="hidden rounded-xl bg-[#172014] px-3 py-2 text-xs font-semibold text-white sm:inline-flex"
               >
                 Admin Console
@@ -346,6 +350,7 @@ export function DashboardShell({ children }) {
             )}
             <Link
               href="/dashboard/account"
+              prefetch={false}
               className="grid size-9 place-items-center rounded-full bg-[#172014] text-xs font-bold uppercase text-white"
               aria-label="Open account settings"
             >
