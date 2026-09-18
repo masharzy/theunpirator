@@ -1,5 +1,6 @@
 import {
   createHash,
+  createHmac,
   createPrivateKey,
   createPublicKey,
   randomBytes,
@@ -11,6 +12,16 @@ import {
 } from "node:crypto";
 
 export const sha256 = (value) => createHash("sha256").update(String(value)).digest("hex");
+
+export function blindIndex(value, base64Key, context = "") {
+  const key = Buffer.from(base64Key || "", "base64");
+  if (key.length !== 32) throw new Error("APP_ENCRYPTION_KEY_BASE64 must decode to 32 bytes");
+  return createHmac("sha256", key)
+    .update(String(context))
+    .update("\0")
+    .update(String(value))
+    .digest("hex");
+}
 export const randomToken = (bytes = 32) => randomBytes(bytes).toString("base64url");
 export const safeEqual = (a, b) => {
   const aa = Buffer.from(String(a));
@@ -56,17 +67,18 @@ export function verifyPlaybackToken(token, { ring, nowSeconds = Math.floor(Date.
   return { kid, payload };
 }
 
-export function encryptJson(value, base64Key) {
+export function encryptJson(value, base64Key, additionalData = "") {
   const key = Buffer.from(base64Key || "", "base64");
   if (key.length !== 32) throw new Error("APP_ENCRYPTION_KEY_BASE64 must decode to 32 bytes");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  if (additionalData) cipher.setAAD(Buffer.from(String(additionalData), "utf8"));
   const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, ciphertext]).toString("base64");
 }
 
-export function decryptJson(encoded, base64Key) {
+export function decryptJson(encoded, base64Key, additionalData = "") {
   const key = Buffer.from(base64Key || "", "base64");
   if (key.length !== 32) throw new Error("APP_ENCRYPTION_KEY_BASE64 must decode to 32 bytes");
   const packed = Buffer.from(encoded, "base64");
@@ -74,6 +86,7 @@ export function decryptJson(encoded, base64Key) {
   const tag = packed.subarray(12, 28);
   const ciphertext = packed.subarray(28);
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  if (additionalData) decipher.setAAD(Buffer.from(String(additionalData), "utf8"));
   decipher.setAuthTag(tag);
   return JSON.parse(
     Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8"),
