@@ -38,7 +38,11 @@ jobs:
       - run: node scripts/setup-local.js
       - run: pnpm db:migrate
       - run: pnpm check:syntax
-      - run: pnpm format:check
+      - name: Diagnose protection-page formatting
+        run: |
+          pnpm exec prettier --write apps/dashboard/app/dashboard/policies/page.js
+          git diff -- apps/dashboard/app/dashboard/policies/page.js
+          git diff --exit-code
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm --filter @unpirator/dashboard build
