@@ -48,11 +48,12 @@ export async function settleSessionRevoke({ state, existing, revoke, readDurable
 }
 
 export async function reconcileExpiredSessions(db, tenantId, now = new Date()) {
+  const cutoff = (now instanceof Date ? now : new Date(now)).toISOString();
   await db.execute(sql`
     UPDATE playback_sessions
     SET status = 'ended', ended_at = COALESCE(ended_at, expires_at)
     WHERE tenant_id = ${tenantId}
       AND status = 'active'
-      AND expires_at <= ${now}
+      AND expires_at <= ${cutoff}::timestamptz
   `);
 }
