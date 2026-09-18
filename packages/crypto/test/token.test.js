@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { signPlaybackToken, verifyPlaybackToken, encryptJson, decryptJson } from "../src/index.js";
+import { blindIndex, signPlaybackToken, verifyPlaybackToken, encryptJson, decryptJson } from "../src/index.js";
 
 describe("crypto", () => {
   it("signs and verifies playback grants", () => {
@@ -19,5 +19,24 @@ describe("crypto", () => {
     const key = Buffer.alloc(32, 7).toString("base64");
     const encrypted = encryptJson({ secret: "value" }, key);
     expect(decryptJson(encrypted, key)).toEqual({ secret: "value" });
+  });
+
+  it("binds encrypted viewer identity to tenant context", () => {
+    const key = Buffer.alloc(32, 9).toString("base64");
+    const encrypted = encryptJson({ email: "viewer@example.com" }, key, "viewer-email:tenant-a");
+    expect(decryptJson(encrypted, key, "viewer-email:tenant-a")).toEqual({
+      email: "viewer@example.com",
+    });
+    expect(() => decryptJson(encrypted, key, "viewer-email:tenant-b")).toThrow();
+  });
+
+  it("creates deterministic context-separated blind indexes", () => {
+    const key = Buffer.alloc(32, 11).toString("base64");
+    const first = blindIndex("viewer@example.com", key, "viewer-email");
+    const second = blindIndex("viewer@example.com", key, "viewer-email");
+    const differentContext = blindIndex("viewer@example.com", key, "other-context");
+    expect(first).toBe(second);
+    expect(first).not.toBe(differentContext);
+    expect(first).not.toContain("viewer@example.com");
   });
 });
