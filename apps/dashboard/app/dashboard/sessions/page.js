@@ -67,6 +67,9 @@ export default function SessionsPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate font-mono text-xs">{s.id}</p>
+                    <p className="mt-1 truncate text-xs font-medium text-[#586451]">
+                      {s.viewerEmail || "Email unavailable"}
+                    </p>
                     <p className="mt-1 truncate text-xs text-[#7d8876]">Asset {s.assetId}</p>
                   </div>
                 </div>
