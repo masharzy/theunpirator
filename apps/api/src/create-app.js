@@ -28,6 +28,7 @@ import { assetsRouter } from "./routes/assets.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { playbackRouter } from "./routes/playback.js";
 import { securityRouter } from "./routes/security.js";
+import { viewersRouter } from "./routes/viewers.js";
 import { usageRouter } from "./routes/usage.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminCommerceRouter } from "./routes/admin-commerce.js";
@@ -133,6 +134,12 @@ export function createApp(overrides = {}) {
     auth,
     csrfGuard,
     securityRouter({ db, config, requireTenantAdmin: tenantAdmin, playbackService }),
+  );
+  app.use(
+    "/v1/viewers",
+    auth,
+    csrfGuard,
+    viewersRouter({ db, config, requireTenantAdmin: tenantAdmin }),
   );
   app.use("/v1/usage", usageRouter({ db, dashboardAuth: auth, requireTenantViewer: tenantViewer }));
 
