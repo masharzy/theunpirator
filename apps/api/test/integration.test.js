@@ -374,7 +374,9 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
 
     const platformSecurity = await admin.get("/v1/admin/security");
     expect(platformSecurity.status).toBe(200);
-    expect(platformSecurity.body.items.find((event) => event.id === securityEvent.id)).toMatchObject({
+    expect(
+      platformSecurity.body.items.find((event) => event.id === securityEvent.id),
+    ).toMatchObject({
       viewerEmail: `viewer-${run}@integration.example`,
     });
 

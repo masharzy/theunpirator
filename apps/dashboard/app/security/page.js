@@ -54,9 +54,9 @@ export default function SecurityPage() {
                   Security is not a label. It is the controls that actually run.
                 </h1>
                 <p className="mt-6 max-w-2xl text-base leading-7 text-[#b8c2b3] sm:text-lg">
-                  There is no customer-facing Standard, Strict or Maximum mode. Authenticated
-                  viewer email and stable device identity are baseline playback requirements; the
-                  purchased plan decides which additional protection features are enabled.
+                  There is no customer-facing Standard, Strict or Maximum mode. Authenticated viewer
+                  email and stable device identity are baseline playback requirements; the purchased
+                  plan decides which additional protection features are enabled.
                 </p>
               </div>
 
