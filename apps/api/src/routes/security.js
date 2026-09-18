@@ -149,6 +149,48 @@ function explainSecurityEvent(event) {
       evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
     };
   }
+  if (event.type === "ORIGIN_REDIRECT_BLOCKED") {
+    return {
+      title: "Media origin redirect was blocked",
+      explanation:
+        "The upstream media server tried to redirect playback to a host that is not approved by this asset's origin policy, or to an address blocked by the gateway SSRF policy. The gateway did not follow the redirect.",
+      evidence: {
+        code,
+        status,
+        path,
+        upstreamStatus: metadata.upstreamStatus ?? null,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
+  if (event.type === "ORIGIN_REDIRECT_INVALID") {
+    return {
+      title: "Media origin returned an invalid redirect",
+      explanation:
+        "The upstream media server returned a redirect that did not contain a usable location. The gateway stopped instead of following an ambiguous destination.",
+      evidence: {
+        code,
+        status,
+        path,
+        upstreamStatus: metadata.upstreamStatus ?? null,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
+  if (event.type === "ORIGIN_REDIRECT_LIMIT") {
+    return {
+      title: "Media origin exceeded the redirect limit",
+      explanation:
+        "The media request crossed the gateway's bounded redirect limit. Playback was stopped to avoid redirect loops and unbounded origin traversal.",
+      evidence: {
+        code,
+        status,
+        path,
+        upstreamStatus: metadata.upstreamStatus ?? null,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
+    };
+  }
   if (event.type === "ORIGIN_FAILURE") {
     return {
       title: "Upstream media origin returned an unexpected response",
