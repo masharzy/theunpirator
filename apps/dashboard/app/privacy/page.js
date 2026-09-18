@@ -10,7 +10,7 @@ const sections = [
     title: "1. Scope",
     body: [
       "This Privacy Policy explains how The Unpirator processes information when customers create accounts, configure workspaces, connect media providers, integrate protected playback, manage viewers and devices, use billing features or contact support.",
-      "The Unpirator is designed so that customers can use protected playback without sending unnecessary personal information. In many integrations, a stable opaque external user ID is sufficient for viewer-level controls.",
+      "The Unpirator is designed to minimize viewer information while still providing accountable protected playback. Protected playback requires the customer's backend to provide the authenticated viewer email and a stable application-generated device ID; unrelated profile data is not required.",
     ],
   },
   {
@@ -33,24 +33,24 @@ const sections = [
     id: "viewer-data",
     title: "4. Viewer information",
     body: [
-      "A customer server may send a stable external user ID so playback sessions, limits, revocation and security events can be associated with the correct viewer. We recommend opaque identifiers that do not directly reveal the viewer's identity.",
-      "A display label, such as a name, email address, account label or student identifier, may be sent when the customer wants a readable label in the workspace, watermarking or operational tools. Display labels are optional for the standard playback flow unless a specific enabled feature requires one.",
-      "The customer, not The Unpirator, determines whether a viewer is entitled to watch a particular video. Customers are responsible for the lawful basis, notices and permissions required for the end-user data they send to the service.",
+      "For protected playback, the customer's backend sends the authenticated viewer email after authenticating the viewer and checking access to the requested content. The browser is not treated as a trusted source of viewer email.",
+      "The Unpirator does not mirror the customer's viewer profile or password database. For operational correlation, the service stores an internal viewer record, a keyed lookup derived from normalized email, and an application-encrypted copy of the email so authorized workspace and security views can identify the viewer when necessary.",
+      "When dynamic watermarking is enabled, the authenticated viewer email may be displayed to that viewer inside the protected player together with session-specific information. Customers are responsible for the lawful basis, notices and permissions required for the viewer data they send to the service.",
     ],
   },
   {
     id: "device-data",
     title: "5. Device identifiers",
     body: [
-      "The player or customer application may provide a random application-generated device ID. A stable device ID allows plan-enabled features such as device history, device limits, device blocking, revocation and more accurate session control to work across playback requests.",
-      "Device ID is not intended to be a hardware serial number or invasive fingerprint. If a customer's plan does not require a device ID, protected playback may operate without one, although device-specific controls may be unavailable or less accurate.",
+      "The official player generates a random stable application device ID and sends it during playback bootstrap. Protected playback requires this device identifier so the authenticated viewer email can be associated with the device, playback sessions and security events.",
+      "The device ID is not intended to be a hardware serial number or invasive hardware fingerprint. Clearing browser storage may create a new application device identifier, and customers should not treat it as a government or hardware identity.",
     ],
   },
   {
     id: "telemetry",
     title: "6. Playback, usage and security telemetry",
     body: [
-      "We may process playback-session identifiers, asset and site references, timestamps, request outcomes, device context, client or browser context, IP-derived network information, usage counters, concurrency state, revocation state, security events, gateway activity and error logs.",
+      "We may process playback-session identifiers, asset and site references, timestamps, request outcomes, authenticated viewer email linkage, device context, client or browser context, viewer IP/network information supplied by the customer's server, usage counters, concurrency state, revocation state, security events, gateway activity and error logs.",
       "This information is used to create and validate protected sessions, enforce plan limits, detect abuse, operate revocation and device controls, troubleshoot failures, measure usage, support customers and maintain service reliability and security.",
     ],
   },
@@ -98,7 +98,7 @@ const sections = [
     id: "security",
     title: "12. Security",
     body: [
-      "We use technical and organizational measures intended to protect customer and operational data, including access controls, separation of browser and server trust boundaries, short-lived playback authorization, secret-handling controls and encrypted handling of sensitive configuration where supported.",
+      "We use technical and organizational measures intended to protect customer and operational data, including access controls, separation of browser and server trust boundaries, short-lived playback authorization, secret-handling controls, keyed viewer lookup values and application-level encryption of stored viewer email.",
       "No system can guarantee absolute security. Customers remain responsible for securing their own application, authentication system, API keys, provider credentials, domains, storage accounts and authorization logic.",
     ],
   },
@@ -129,8 +129,8 @@ const sections = [
     id: "children",
     title: "16. Children and education customers",
     body: [
-      "The Unpirator may be used by education platforms, but it is not designed to require a child's real name or email for standard protected playback. Education customers are responsible for determining whether they may lawfully send student or child data and for obtaining any notices, consents or agreements required for their users.",
-      "Customers serving minors should minimize the data they send and use opaque viewer identifiers wherever practical.",
+      "The Unpirator may be used by education platforms. The current protected-playback identity model requires the authenticated viewer email, so education customers must determine whether they may lawfully send that email and obtain any notices, consents or agreements required for their users.",
+      "Customers serving minors should minimize all other viewer data and avoid sending profile fields that are not required for protected playback, security operations or their chosen features.",
     ],
   },
   {
@@ -164,7 +164,7 @@ export default function PrivacyPage() {
               How The Unpirator handles workspace, viewer, device, playback and security data while
               operating protected video delivery.
             </p>
-            <p className="mt-6 text-sm text-[#7a7a7a]">Effective September 17, 2026</p>
+            <p className="mt-6 text-sm text-[#7a7a7a]">Effective September 18, 2026</p>
           </div>
         </section>
 
@@ -181,8 +181,9 @@ export default function PrivacyPage() {
 
           <article className="max-w-3xl">
             <div className="rounded-2xl border border-[#e2e2e2] bg-white px-5 py-4 text-sm leading-6 text-[#606060]">
-              Privacy by design: the standard integration can use opaque viewer IDs and a random
-              application-generated device ID instead of requiring real-world identity data.
+              Privacy by design: protected playback uses only the authenticated viewer email needed
+              for accountability plus a random application-generated device ID. Unpirator does not
+              require the customer's broader viewer profile or password database.
             </div>
 
             <div className="mt-10 divide-y divide-[#e6e6e6]">
