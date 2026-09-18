@@ -9,7 +9,7 @@ function Records({ items, empty = "No records in this section." }) {
     );
   const columns = Object.keys(items[0])
     .filter((k) => !["metadata", "encryptedConfig", "secretHash"].includes(k))
-    .slice(0, 7);
+    .slice(0, 9);
   return (
     <div className="overflow-auto rounded-2xl border bg-white">
       <table className="w-full text-left text-xs">
