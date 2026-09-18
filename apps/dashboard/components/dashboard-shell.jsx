@@ -4,15 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
-  BookMarked,
   Bell,
+  BookMarked,
   BookOpen,
   ChevronDown,
   Clapperboard,
   CreditCard,
-  FileClock,
   FileSearch,
-  FlaskConical,
   Gauge,
   Headphones,
   KeyRound,
@@ -20,10 +18,8 @@ import {
   Menu,
   MonitorSmartphone,
   PlugZap,
-  ReceiptText,
   Settings,
   ShieldAlert,
-  ShieldCheck,
   Users,
   WalletCards,
   Waypoints,
@@ -37,32 +33,29 @@ import { useAuth } from "@/components/auth-provider";
 
 const groups = [
   ["Overview", [[Gauge, "/dashboard", "Overview"]]],
-  ["Setup", [[BookOpen, "/dashboard/onboarding", "Onboarding"]]],
+  [
+    "Setup",
+    [
+      [BookOpen, "/dashboard/onboarding", "Onboarding"],
+      [Waypoints, "/dashboard/sites", "Sites"],
+      [PlugZap, "/dashboard/integration", "Integration"],
+    ],
+  ],
   [
     "Media",
     [
-      [Waypoints, "/dashboard/sites", "Sites"],
       [Clapperboard, "/dashboard/assets", "Assets / Videos"],
       [Users, "/dashboard/viewers", "Viewers"],
-      [MonitorSmartphone, "/dashboard/devices", "Devices"],
       [MonitorSmartphone, "/dashboard/sessions", "Playback Sessions"],
     ],
   ],
-  [
-    "Security",
-    [
-      [ShieldAlert, "/dashboard/security", "Security Center"],
-      [ShieldCheck, "/dashboard/policies", "Policies"],
-    ],
-  ],
+  ["Security", [[ShieldAlert, "/dashboard/security", "Security Center"]]],
   [
     "Developer",
     [
       [KeyRound, "/dashboard/api-keys", "API Keys"],
       [Webhook, "/dashboard/webhooks", "Webhooks"],
-      [PlugZap, "/dashboard/integration", "Integration"],
       [FileSearch, "/dashboard/logs", "Logs"],
-      [FlaskConical, "/dashboard/playback-lab", "Playback Lab"],
     ],
   ],
   [
@@ -70,8 +63,7 @@ const groups = [
     [
       [WalletCards, "/dashboard/plans", "Plan"],
       [Activity, "/dashboard/usage", "Usage & Analytics"],
-      [ReceiptText, "/dashboard/payments", "Payments"],
-      [FileClock, "/dashboard/billing-history", "Billing History"],
+      [CreditCard, "/dashboard/billing", "Billing"],
     ],
   ],
   [
@@ -233,7 +225,9 @@ export function DashboardShell({ children }) {
           </button>
         </div>
       )}
-      <aside className="hidden border-r border-[#dde3d5] bg-white p-5 lg:block">{nav}</aside>
+      <aside className="hidden border-r border-[#dde3d5] bg-white p-5 lg:sticky lg:top-0 lg:block lg:h-screen lg:self-start lg:overflow-y-auto">
+        {nav}
+      </aside>
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
