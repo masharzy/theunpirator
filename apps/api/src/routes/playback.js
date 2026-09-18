@@ -6,7 +6,11 @@ import { AppError, notFound } from "../errors.js";
 import { assets, endUsers, playbackSessions, sites } from "@unpirator/db/schema";
 import { writeAudit } from "../services/audit.js";
 import { decryptViewerEmail } from "../services/viewer-identity.js";
-import { effectiveSessionStatus, reconcileExpiredSessions } from "../services/session-state.js";
+import {
+  effectiveSessionStatus,
+  reconcileExpiredSessions,
+  settleSessionRevoke,
+} from "../services/session-state.js";
 
 export function dashboardTestSessionInput(req) {
   return parseOrThrow(playbackSessionSchema, {
@@ -202,53 +206,44 @@ export function playbackRouter({
       try {
         const now = new Date();
         await reconcileExpiredSessions(db, req.tenantId, now);
-        const [existing] = await db
-          .select()
-          .from(playbackSessions)
-          .where(
-            and(
-              eq(playbackSessions.id, req.params.sessionId),
-              eq(playbackSessions.tenantId, req.tenantId),
-            ),
-          )
-          .limit(1);
+        const readSession = async () => {
+          const [session] = await db
+            .select()
+            .from(playbackSessions)
+            .where(
+              and(
+                eq(playbackSessions.id, req.params.sessionId),
+                eq(playbackSessions.tenantId, req.tenantId),
+              ),
+            )
+            .limit(1);
+          return session;
+        };
+        const existing = await readSession();
         if (!existing) throw notFound("Playback session not found");
 
         const state = effectiveSessionStatus(existing, now);
-        let session = existing;
-        let didRevoke = false;
-        if (!["revoked", "ended"].includes(state)) {
-          try {
-            session = await playbackService.revoke({
+        const { session, didRevoke, secondaryError } = await settleSessionRevoke({
+          state,
+          existing,
+          revoke: () =>
+            playbackService.revoke({
               tenantId: req.tenantId,
               sessionId: req.params.sessionId,
-            });
-            didRevoke = session.status === "revoked";
-          } catch (error) {
-            const [durable] = await db
-              .select()
-              .from(playbackSessions)
-              .where(
-                and(
-                  eq(playbackSessions.id, req.params.sessionId),
-                  eq(playbackSessions.tenantId, req.tenantId),
-                ),
-              )
-              .limit(1);
-            if (durable?.status !== "revoked") throw error;
-            session = durable;
-            didRevoke = true;
-            console.warn(
-              JSON.stringify({
-                component: "playback-revoke",
-                phase: "secondary-sync-failed",
-                sessionId: req.params.sessionId,
-                requestId: req.id,
-                error: error?.message || "unknown",
-              }),
-            );
-          }
-        }
+            }),
+          readDurable: readSession,
+        });
+
+        if (secondaryError)
+          console.warn(
+            JSON.stringify({
+              component: "playback-revoke",
+              phase: "secondary-sync-failed",
+              sessionId: req.params.sessionId,
+              requestId: req.id,
+              error: secondaryError.message || "unknown",
+            }),
+          );
 
         if (didRevoke)
           await writeAudit(db, {
