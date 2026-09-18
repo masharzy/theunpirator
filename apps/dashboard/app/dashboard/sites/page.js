@@ -63,7 +63,11 @@ function VerificationPanel({ siteId, domain, busy, onVerify }) {
             Required
           </span>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3" role="tablist" aria-label="Verification method">
+        <div
+          className="mt-4 grid gap-2 sm:grid-cols-3"
+          role="tablist"
+          aria-label="Verification method"
+        >
           {METHODS.map((item) => (
             <button
               key={item.id}
@@ -103,7 +107,11 @@ function VerificationPanel({ siteId, domain, busy, onVerify }) {
                     className="shrink-0"
                     onClick={() => copy(value, field)}
                   >
-                    {copied === field ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied === field ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
                     {copied === field ? "Copied" : "Copy"}
                   </Button>
                 </dd>
@@ -224,11 +232,15 @@ export default function Page() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-[#e0e5d9] bg-[#f8faf4] px-4 py-3.5">
-          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#879080]">Registered</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#879080]">
+            Registered
+          </p>
           <p className="mt-1 text-2xl font-semibold text-[#263120]">{items.length}</p>
         </div>
         <div className="rounded-2xl border border-[#dce7cf] bg-[#f3f8ea] px-4 py-3.5">
-          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#71805b]">Verified</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#71805b]">
+            Verified
+          </p>
           <p className="mt-1 text-2xl font-semibold text-[#405525]">{verifiedCount}</p>
         </div>
       </div>
@@ -241,11 +253,16 @@ export default function Page() {
             </div>
             <div>
               <h2 className="font-semibold text-[#263120]">Add a site</h2>
-              <p className="mt-0.5 text-xs text-[#7d8776]">Use the hostname that serves your player.</p>
+              <p className="mt-0.5 text-xs text-[#7d8776]">
+                Use the hostname that serves your player.
+              </p>
             </div>
           </div>
         </div>
-        <form className="grid items-end gap-4 p-5 md:grid-cols-[1fr_1fr_auto] sm:p-6" onSubmit={create}>
+        <form
+          className="grid items-end gap-4 p-5 md:grid-cols-[1fr_1fr_auto] sm:p-6"
+          onSubmit={create}
+        >
           <label className="grid gap-2 text-sm font-medium text-[#465041]">
             Site name
             <Input
@@ -273,7 +290,10 @@ export default function Page() {
       </Surface>
 
       {error && (
-        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
           {error}
         </div>
       )}
@@ -281,7 +301,9 @@ export default function Page() {
       <Surface className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e9e1] px-5 py-4 sm:px-6">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#879080]">Workspace origins</p>
+            <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#879080]">
+              Workspace origins
+            </p>
             <h2 className="mt-1 font-semibold text-[#263120]">Registered sites</h2>
           </div>
           <p className="text-xs text-[#879080]">{items.length} total</p>
@@ -294,7 +316,9 @@ export default function Page() {
                 <Globe2 className="h-5 w-5" />
               </div>
               <p className="mt-4 font-medium text-[#34402f]">No sites yet</p>
-              <p className="mt-1 text-sm text-[#7d8776]">Add your first playback origin above.</p>
+              <p className="mt-1 text-sm text-[#7d8776]">
+                Add your first playback origin above.
+              </p>
             </div>
           </div>
         ) : (
@@ -306,8 +330,14 @@ export default function Page() {
                 <div key={site.id} className="px-5 py-5 sm:px-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3.5">
-                      <div className={`mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl ${verified ? "bg-[#edf5d8] text-[#5e7737]" : "bg-[#f2f4ef] text-[#7c8775]"}`}>
-                        {verified ? <CircleCheck className="h-5 w-5" /> : <Globe2 className="h-5 w-5" />}
+                      <div
+                        className={`mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl ${verified ? "bg-[#edf5d8] text-[#5e7737]" : "bg-[#f2f4ef] text-[#7c8775]"}`}
+                      >
+                        {verified ? (
+                          <CircleCheck className="h-5 w-5" />
+                        ) : (
+                          <Globe2 className="h-5 w-5" />
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -325,7 +355,9 @@ export default function Page() {
                         </div>
                         <p className="mt-1 truncate text-sm text-[#65705f]">{site.domain}</p>
                         <p className="mt-1 text-xs text-[#969f90]">
-                          {verified ? `Verified ${formatVerifiedAt(site.domainVerifiedAt)}` : "Playback remains locked until ownership is verified."}
+                          {verified
+                            ? `Verified ${formatVerifiedAt(site.domainVerifiedAt)}`
+                            : "Playback remains locked until ownership is verified."}
                         </p>
                       </div>
                     </div>
@@ -338,7 +370,11 @@ export default function Page() {
                       >
                         <ShieldCheck className="h-4 w-4" />
                         {expanded ? "Hide setup" : "Set up verification"}
-                        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        {expanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
                       </Button>
                     )}
                   </div>
@@ -348,7 +384,10 @@ export default function Page() {
                       {domains[site.id]?.length ? (
                         domains[site.id].map((item) =>
                           item.verifiedAt ? (
-                            <div key={item.id} className="flex items-center gap-2 rounded-xl bg-[#f3f8ea] px-4 py-3 text-sm font-medium text-[#536b31]">
+                            <div
+                              key={item.id}
+                              className="flex items-center gap-2 rounded-xl bg-[#f3f8ea] px-4 py-3 text-sm font-medium text-[#536b31]"
+                            >
                               <CircleCheck className="h-4 w-4" />
                               {item.domain} is verified
                             </div>
