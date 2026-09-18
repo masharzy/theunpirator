@@ -39,6 +39,7 @@ import { randomToken, sha256 } from "@unpirator/crypto";
 import { writeAudit } from "../services/audit.js";
 import { sendEmail } from "../services/email.js";
 import { notFound } from "../errors.js";
+import { decryptViewerEmail, publicViewer } from "../services/viewer-identity.js";
 
 const allowedStatuses = new Set(["active", "disabled", "suspended"]);
 const providerStatuses = new Set(["healthy", "degraded", "down", "disabled"]);
@@ -610,15 +611,65 @@ export function adminRouter({
               .from(providerConnections)
               .where(eq(providerConnections.tenantId, tenantId)),
           assets: () => db.select().from(assets).where(eq(assets.tenantId, tenantId)),
-          viewers: () => db.select().from(endUsers).where(eq(endUsers.tenantId, tenantId)),
-          devices: () => db.select().from(devices).where(eq(devices.tenantId, tenantId)),
-          sessions: () =>
-            db
+          viewers: async () => {
+            const viewers = await db
               .select()
+              .from(endUsers)
+              .where(eq(endUsers.tenantId, tenantId))
+              .orderBy(desc(endUsers.updatedAt))
+              .limit(1000);
+            return viewers.map((viewer) => publicViewer(viewer, tenantId, config));
+          },
+          devices: async () => {
+            const rows = await db
+              .select({
+                id: devices.id,
+                viewerEmailEncrypted: endUsers.displayLabel,
+                externalDeviceId: devices.externalDeviceId,
+                deviceName: devices.deviceName,
+                browser: devices.browser,
+                os: devices.os,
+                status: devices.status,
+                firstSeenAt: devices.firstSeenAt,
+                lastSeenAt: devices.lastSeenAt,
+              })
+              .from(devices)
+              .leftJoin(endUsers, eq(endUsers.id, devices.endUserId))
+              .where(eq(devices.tenantId, tenantId))
+              .orderBy(desc(devices.lastSeenAt))
+              .limit(1000);
+            return rows.map(({ viewerEmailEncrypted, ...device }) => ({
+              id: device.id,
+              viewerEmail: decryptViewerEmail(viewerEmailEncrypted, tenantId, config),
+              ...device,
+            }));
+          },
+          sessions: async () => {
+            const rows = await db
+              .select({
+                id: playbackSessions.id,
+                viewerEmailEncrypted: endUsers.displayLabel,
+                assetId: playbackSessions.assetId,
+                deviceId: playbackSessions.deviceId,
+                status: playbackSessions.status,
+                ip: playbackSessions.ip,
+                userAgent: playbackSessions.userAgent,
+                startedAt: playbackSessions.startedAt,
+                lastHeartbeatAt: playbackSessions.lastHeartbeatAt,
+                expiresAt: playbackSessions.expiresAt,
+                endedAt: playbackSessions.endedAt,
+              })
               .from(playbackSessions)
+              .leftJoin(endUsers, eq(endUsers.id, playbackSessions.endUserId))
               .where(eq(playbackSessions.tenantId, tenantId))
               .orderBy(desc(playbackSessions.startedAt))
-              .limit(200),
+              .limit(200);
+            return rows.map(({ viewerEmailEncrypted, ...session }) => ({
+              id: session.id,
+              viewerEmail: decryptViewerEmail(viewerEmailEncrypted, tenantId, config),
+              ...session,
+            }));
+          },
           usage: () => db.select().from(usageRollups).where(eq(usageRollups.tenantId, tenantId)),
           subscription: () =>
             db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)),
@@ -628,13 +679,35 @@ export function adminRouter({
               .from(paymentRequests)
               .where(eq(paymentRequests.tenantId, tenantId))
               .orderBy(desc(paymentRequests.createdAt)),
-          security: () =>
-            db
-              .select()
+          security: async () => {
+            const rows = await db
+              .select({
+                id: securityEvents.id,
+                type: securityEvents.type,
+                severity: securityEvents.severity,
+                riskScore: securityEvents.riskScore,
+                viewerEmailEncrypted: endUsers.displayLabel,
+                siteId: securityEvents.siteId,
+                assetId: securityEvents.assetId,
+                sessionId: securityEvents.sessionId,
+                metadata: securityEvents.metadata,
+                createdAt: securityEvents.createdAt,
+              })
               .from(securityEvents)
+              .leftJoin(playbackSessions, eq(playbackSessions.id, securityEvents.sessionId))
+              .leftJoin(
+                endUsers,
+                sql`${endUsers.id} = coalesce(${securityEvents.endUserId}, ${playbackSessions.endUserId})`,
+              )
               .where(eq(securityEvents.tenantId, tenantId))
               .orderBy(desc(securityEvents.createdAt))
-              .limit(200),
+              .limit(200);
+            return rows.map(({ viewerEmailEncrypted, ...event }) => ({
+              id: event.id,
+              viewerEmail: decryptViewerEmail(viewerEmailEncrypted, tenantId, config),
+              ...event,
+            }));
+          },
           audit: () =>
             db
               .select()
@@ -1059,12 +1132,35 @@ export function adminRouter({
   });
   router.get("/security", requirePlatformPermission("security.read"), async (_req, res, next) => {
     try {
+      const rows = await db
+        .select({
+          id: securityEvents.id,
+          tenantId: securityEvents.tenantId,
+          type: securityEvents.type,
+          severity: securityEvents.severity,
+          riskScore: securityEvents.riskScore,
+          viewerEmailEncrypted: endUsers.displayLabel,
+          siteId: securityEvents.siteId,
+          assetId: securityEvents.assetId,
+          sessionId: securityEvents.sessionId,
+          metadata: securityEvents.metadata,
+          createdAt: securityEvents.createdAt,
+        })
+        .from(securityEvents)
+        .leftJoin(playbackSessions, eq(playbackSessions.id, securityEvents.sessionId))
+        .leftJoin(
+          endUsers,
+          sql`${endUsers.id} = coalesce(${securityEvents.endUserId}, ${playbackSessions.endUserId})`,
+        )
+        .orderBy(desc(securityEvents.createdAt))
+        .limit(200);
       res.json({
-        items: await db
-          .select()
-          .from(securityEvents)
-          .orderBy(desc(securityEvents.createdAt))
-          .limit(200),
+        items: rows.map(({ viewerEmailEncrypted, ...event }) => ({
+          id: event.id,
+          tenantId: event.tenantId,
+          viewerEmail: decryptViewerEmail(viewerEmailEncrypted, event.tenantId, config),
+          ...event,
+        })),
       });
     } catch (e) {
       next(e);
