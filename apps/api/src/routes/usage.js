@@ -76,9 +76,7 @@ export function usageRouter({ db, dashboardAuth, requireTenantViewer }) {
           ),
       ]);
 
-      const metrics = Object.fromEntries(
-        rows.map((row) => [row.type, Number(row.quantity || 0)]),
-      );
+      const metrics = Object.fromEntries(rows.map((row) => [row.type, Number(row.quantity || 0)]));
       const counts = {
         sites: Number(siteRows[0]?.count || 0),
         assets: Number(assetRows[0]?.count || 0),

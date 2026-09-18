@@ -133,8 +133,8 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-[#e2e7dc] bg-[#f8faf4] p-5">
                 <p className="text-sm font-semibold text-[#33402d]">No metered billing cap</p>
                 <p className="mt-1 text-sm leading-6 text-[#74806d]">
-                  Workspace capacity and live stream limits are tracked separately from billing-period
-                  usage.
+                  Workspace capacity and live stream limits are tracked separately from
+                  billing-period usage.
                 </p>
               </div>
             )}

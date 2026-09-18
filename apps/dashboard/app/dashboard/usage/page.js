@@ -99,7 +99,9 @@ export default function UsagePage() {
 
       <Surface className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#74806d]">Current plan</p>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#74806d]">
+            Current plan
+          </p>
           <p className="mt-2 text-xl font-semibold text-[#172014]">
             {usage?.subscription?.planName || "No active plan"}
           </p>
@@ -119,8 +121,8 @@ export default function UsagePage() {
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-[#172014]">Billing-period usage</h2>
           <p className="mt-1 text-sm text-[#74806d]">
-            Only customer-facing metered activity appears here. Internal heartbeat telemetry is not a
-            plan quota.
+            Only customer-facing metered activity appears here. Internal heartbeat telemetry is not
+            a plan quota.
           </p>
         </div>
         {metered.length ? (
@@ -140,8 +142,8 @@ export default function UsagePage() {
         <div>
           <h2 className="font-semibold">Workspace capacity</h2>
           <p className="mt-1 text-sm text-[#74806d]">
-            Resource limits are capacity controls. They do not contribute to the navbar billing usage
-            percentage.
+            Resource limits are capacity controls. They do not contribute to the navbar billing
+            usage percentage.
           </p>
         </div>
         <div className="mt-6 grid gap-6 md:grid-cols-2">
