@@ -27,7 +27,7 @@ const capabilities = [
   [
     Fingerprint,
     "Viewer accountability",
-    "When included in the active plan, device identity and watermarking help connect playback activity to a viewer.",
+    "Protected playback always binds the authenticated viewer email to a stable application device ID; plan-enabled watermarking can display that trusted identity during playback.",
   ],
   [
     MonitorSmartphone,
@@ -55,7 +55,7 @@ const flow = [
   [
     "02",
     "Your server authorizes the viewer",
-    "Authentication and access checks happen in your application, not in an untrusted browser request.",
+    "Your backend authenticates the viewer, resolves their email from trusted server-side auth state and checks access before Unpirator creates playback.",
   ],
   [
     "03",
