@@ -3,6 +3,15 @@ import { blindIndex, decryptJson, encryptJson } from "@unpirator/crypto";
 const EMAIL_PREFIX = "enc:v1:";
 const EMAIL_CONTEXT = "viewer-email";
 
+function viewerEmailEncryptionKey(config) {
+  const derivedHex = blindIndex(
+    "viewer-email-encryption-key",
+    config.APP_ENCRYPTION_KEY_BASE64,
+    "key-derivation:v1",
+  );
+  return Buffer.from(derivedHex, "hex").toString("base64");
+}
+
 export function normalizeViewerEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -22,7 +31,7 @@ export function encryptViewerEmail(email, tenantId, config) {
   if (!normalized) throw new Error("Viewer email is required");
   return `${EMAIL_PREFIX}${encryptJson(
     { email: normalized },
-    config.APP_ENCRYPTION_KEY_BASE64,
+    viewerEmailEncryptionKey(config),
     `${EMAIL_CONTEXT}:${tenantId}`,
   )}`;
 }
@@ -33,17 +42,24 @@ export function decryptViewerEmail(value, tenantId, config) {
   if (!text.startsWith(EMAIL_PREFIX)) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? normalizeViewerEmail(text) : null;
   }
+  const decodeWith = (key) =>
+    decryptJson(text.slice(EMAIL_PREFIX.length), key, `${EMAIL_CONTEXT}:${tenantId}`);
   try {
-    const decoded = decryptJson(
-      text.slice(EMAIL_PREFIX.length),
-      config.APP_ENCRYPTION_KEY_BASE64,
-      `${EMAIL_CONTEXT}:${tenantId}`,
-    );
+    const decoded = decodeWith(viewerEmailEncryptionKey(config));
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(decoded?.email || "")
       ? normalizeViewerEmail(decoded.email)
       : null;
   } catch {
-    return null;
+    // Compatibility for the brief pre-key-separation v1 rollout. New writes always use
+    // the derived viewer-email encryption key.
+    try {
+      const decoded = decodeWith(config.APP_ENCRYPTION_KEY_BASE64);
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(decoded?.email || "")
+        ? normalizeViewerEmail(decoded.email)
+        : null;
+    } catch {
+      return null;
+    }
   }
 }
 
