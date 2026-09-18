@@ -39,7 +39,7 @@ const STACKS = {
     label: "Next.js",
     short: "Next.js",
     packages: "@unpirator/react @unpirator/integration-nextjs",
-    install: "npm install @unpirator/react@0.1.12 @unpirator/integration-nextjs@0.1.1",
+    install: "npm install @unpirator/react@0.2.0 @unpirator/integration-nextjs@0.2.0",
     serverLabel: "Your class page / server loader",
     server: `import { createUnpiratorServerClient } from "@unpirator/integration-nextjs";
 
@@ -84,15 +84,15 @@ export const POST = createUnpiratorPlaybackHandler({
   resolveViewer: async () => {
     const session = await auth();
 
-    if (!session?.user?.id) {
+    if (!session?.user?.id || !session?.user?.email) {
       const error = new Error("Sign in required");
       error.status = 401;
       throw error;
     }
 
     return {
-      id: session.user.id,
-      // label is optional; omit it if you do not want to send a name/email.
+      id: session.user.id, // stays inside YOUR authorization callback
+      email: session.user.email, // trusted identity forwarded to Unpirator
     };
   },
 
@@ -128,7 +128,7 @@ export function LessonVideo({ playbackRef }) {
     label: "React + Node backend",
     short: "React",
     packages: "@unpirator/react",
-    install: "npm install @unpirator/react@0.1.12",
+    install: "npm install @unpirator/react@0.2.0",
     serverLabel: "Your existing server/controller",
     server: `// YOUR APP SERVER — Express example.
 // The browser must never receive video.privateUrl or UNPIRATOR_API_KEY.
@@ -173,7 +173,7 @@ app.get("/api/classes/:id", async (req, res) => {
     route: `app.post("/api/unpirator/playback", async (req, res) => {
   // YOUR APP: resolve the signed-in user from your real session/auth system.
   const viewer = await getLoggedInUser(req);
-  if (!viewer) {
+  if (!viewer?.email) {
     return res.status(401).json({ error: "Sign in required" });
   }
 
@@ -200,8 +200,11 @@ app.get("/api/classes/:id", async (req, res) => {
       body: JSON.stringify({
         siteId: process.env.UNPIRATOR_SITE_ID,
         assetId: req.body.playbackRef,
-        externalUserId: String(viewer.id),
+        email: viewer.email,
         deviceId: req.body.deviceId,
+        viewerIp: String(req.headers["x-forwarded-for"] || req.ip || "")
+          .split(",")[0].trim(),
+        viewerUserAgent: String(req.headers["user-agent"] || ""),
         client: req.body.client || {},
       }),
     },
@@ -232,7 +235,7 @@ export function LessonVideo({ playbackRef }) {
     short: "PHP",
     packages: "@unpirator/web-component",
     install: `<script type="module"
-  src="https://esm.sh/@unpirator/web-component@0.1.11">
+  src="https://esm.sh/@unpirator/web-component@0.2.0">
 </script>`,
     serverLabel: "Controller that already loads your class",
     server: `// YOUR APP: load the video from your own DB as usual.
@@ -267,7 +270,7 @@ $playbackRef = $result['playbackRef'];
     routeLabel: "routes/web.php / controller",
     route: `Route::post('/api/unpirator/playback', function (Request $request) {
     $viewer = Auth::user();
-    if (! $viewer) {
+    if (! $viewer || ! $viewer->email) {
         return response()->json(['error' => 'Sign in required'], 401);
     }
 
@@ -292,8 +295,10 @@ $playbackRef = $result['playbackRef'];
         CURLOPT_POSTFIELDS => json_encode([
             'siteId' => env('UNPIRATOR_SITE_ID'),
             'assetId' => $request->input('playbackRef'),
-            'externalUserId' => (string) $viewer->id,
+            'email' => strtolower($viewer->email),
             'deviceId' => $request->input('deviceId'),
+            'viewerIp' => $request->ip(),
+            'viewerUserAgent' => (string) $request->userAgent(),
         ]),
     ]);
 
@@ -316,7 +321,7 @@ $playbackRef = $result['playbackRef'];
     short: "Django",
     packages: "@unpirator/web-component",
     install: `<script type="module"
-  src="https://esm.sh/@unpirator/web-component@0.1.11">
+  src="https://esm.sh/@unpirator/web-component@0.2.0">
 </script>`,
     serverLabel: "View/controller that already loads your class",
     server: `# YOUR APP: load your existing video record.
@@ -350,7 +355,7 @@ playback_ref = response.json()["playbackRef"]
     routeLabel: "views.py",
     route: `def unpirator_playback(request):
     viewer = getattr(request, "user", None)
-    if not viewer or not viewer.is_authenticated:
+    if not viewer or not viewer.is_authenticated or not viewer.email:
         return JsonResponse({"error": "Sign in required"}, status=401)
 
     body = json.loads(request.body)
@@ -368,8 +373,11 @@ playback_ref = response.json()["playbackRef"]
         json={
             "siteId": os.environ["UNPIRATOR_SITE_ID"],
             "assetId": body.get("playbackRef"),
-            "externalUserId": str(viewer.id),
+            "email": viewer.email.lower(),
             "deviceId": body.get("deviceId"),
+            "viewerIp": request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
+              or request.META.get("REMOTE_ADDR", ""),
+            "viewerUserAgent": request.META.get("HTTP_USER_AGENT", ""),
         },
         headers={
             "Authorization":
@@ -394,7 +402,7 @@ playback_ref = response.json()["playbackRef"]
     short: "HTML",
     packages: "@unpirator/web-component",
     install: `<script type="module"
-  src="https://esm.sh/@unpirator/web-component@0.1.11">
+  src="https://esm.sh/@unpirator/web-component@0.2.0">
 </script>`,
     serverLabel: "Any server-side language you control",
     server: `// Static HTML alone cannot hold UNPIRATOR_API_KEY securely.
@@ -1061,8 +1069,9 @@ export function DocsClient() {
 
             <div className="docs-note">
               The Next.js helper is deny-by-default: <code>resolveViewer</code> and
-              <code>authorizePlayback</code> are required. Only intentionally public/guest playback
-              should opt in with <code>allowGuests: true</code>.
+              <code>authorizePlayback</code> are required. <code>resolveViewer</code> must return
+              the authenticated viewer email; protected playback does not accept a browser-chosen
+              guest identity.
             </div>
 
             <div className="docs-step-banner">
@@ -1081,7 +1090,7 @@ export function DocsClient() {
 
           <section id="request" className="docs-section">
             <div className="docs-kicker">04 · WHAT THE PLAYER SENDS</div>
-            <h2>No magic values. Here is where each field comes from.</h2>
+            <h2>No browser-trusted identity. Here is where each field comes from.</h2>
 
             <div className="docs-origin-table">
               <div>
@@ -1091,27 +1100,27 @@ export function DocsClient() {
               </div>
               <div>
                 <code>deviceId</code>
-                <strong>Optional · recommended</strong>
+                <strong>Required · generated automatically</strong>
                 <p>
-                  The SDK generates a random stable UUID automatically. It is not a hardware
-                  fingerprint. Sending it enables accurate device limits, device revocation and
-                  device history.
+                  The official SDK generates a random stable UUID. It is not a hardware
+                  fingerprint. It links the authenticated email to the device/session history and
+                  enables device controls.
                 </p>
               </div>
               <div>
-                <code>externalUserId</code>
-                <strong>From YOUR server authentication</strong>
+                <code>email</code>
+                <strong>Required · resolved by YOUR server</strong>
                 <p>
-                  Use a stable opaque account ID from your server session. It does not need to be a
-                  name or email, and browser-supplied identity must never be trusted.
+                  Your backend reads the authenticated viewer email from its own trusted session or
+                  verified access token. The browser never supplies a trusted viewer email.
                 </p>
               </div>
               <div>
-                <code>displayLabel</code>
-                <strong>Optional user label</strong>
+                <code>viewerIp / viewerUserAgent</code>
+                <strong>Derived by YOUR server</strong>
                 <p>
-                  Only send a name/email/account label if you want readable labels in protection
-                  features or dashboards. Unpirator does not require it for identity.
+                  Forward the incoming viewer request context so Security Center shows the viewer
+                  device/network context instead of your Node/PHP/Python server request.
                 </p>
               </div>
               <div>
@@ -1134,11 +1143,10 @@ Content-Type: application/json
 }`}</CodeBlock>
 
             <div className="docs-note">
-              Your server adds the trusted <code>externalUserId</code>, <code>siteId</code> and
-              server-only API key before calling Unpirator. <code>displayLabel</code> is optional.{" "}
-              <code>deviceId</code> is also optional for custom clients, but recommended; without it
-              playback still works while precise per-device limits, revocation and history are
-              unavailable.
+              Your server adds the trusted <code>email</code>, <code>siteId</code>,
+              viewer request context and server-only API key before calling Unpirator. The player
+              supplies the required random stable <code>deviceId</code>. Any email included in
+              browser JSON must be ignored.
             </div>
 
             <div className="docs-callout">
