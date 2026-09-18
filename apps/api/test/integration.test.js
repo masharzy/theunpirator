@@ -128,7 +128,7 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
         max_webhooks: 5,
         max_team_members: 5,
         max_devices_per_user: 2,
-        max_concurrent_streams: 1,
+        max_concurrent_streams: 3,
         monthly_gateway_requests: 10000,
         monthly_egress_bytes: 10_000_000_000,
         monthly_playback_minutes: 10000,
