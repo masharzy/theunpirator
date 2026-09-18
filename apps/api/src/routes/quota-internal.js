@@ -32,9 +32,7 @@ export function quotaInternalRouter({ db, config }) {
         .limit(1);
       if (!session) return res.status(403).json({ error: { code: "SESSION_REVOKED" } });
 
-      const result = await db.transaction((tx) =>
-        reserveDeliveryQuotaTx(tx, { tenantId, bytes }),
-      );
+      const result = await db.transaction((tx) => reserveDeliveryQuotaTx(tx, { tenantId, bytes }));
       if (!result.allowed) {
         const status = result.code === "SUBSCRIPTION_REQUIRED" ? 403 : 429;
         return res.status(status).json({

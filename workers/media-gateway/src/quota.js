@@ -17,11 +17,13 @@ export async function reserveDeliveryQuota(env, claims, bytes = 0) {
   });
   if (response.ok) return;
   const body = await response.json().catch(() => ({}));
-  const code = body?.error?.code || (response.status === 429 ? "PLAN_QUOTA_EXCEEDED" : "QUOTA_UNAVAILABLE");
+  const code =
+    body?.error?.code || (response.status === 429 ? "PLAN_QUOTA_EXCEEDED" : "QUOTA_UNAVAILABLE");
   const error = securityError(
     code,
     response.status === 429 ? 429 : response.status >= 500 ? 503 : response.status,
-    body?.error?.message || (response.status === 429 ? "Plan usage limit reached" : "Usage enforcement unavailable"),
+    body?.error?.message ||
+      (response.status === 429 ? "Plan usage limit reached" : "Usage enforcement unavailable"),
   );
   error.quota = true;
   throw error;

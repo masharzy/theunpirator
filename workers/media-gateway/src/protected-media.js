@@ -55,7 +55,7 @@ export function parseSidx(buffer, indexEnd) {
   const view = new DataView(buffer);
   let boxStart = -1;
   let boxSize = 0;
-  for (let offset = 0; offset + 8 <= view.byteLength; ) {
+  for (let offset = 0; offset + 8 <= view.byteLength;) {
     const size = view.getUint32(offset);
     const type = String.fromCharCode(...new Uint8Array(buffer, offset + 4, 4));
     if (type === "sidx") {

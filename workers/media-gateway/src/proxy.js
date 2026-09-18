@@ -177,7 +177,8 @@ async function finalize(request, response, sourceUrl, source, assetId, env, clai
     headers.set("cache-control", "private, no-store");
     return new Response(rewritten, { status: response.status, headers });
   }
-  const length = request.method === "HEAD" ? 0 : Number(response.headers.get("content-length") || 0);
+  const length =
+    request.method === "HEAD" ? 0 : Number(response.headers.get("content-length") || 0);
   await reserveDeliveryQuota(env, claims, Number.isFinite(length) ? length : 0);
   return new Response(response.body, {
     status: response.status,
