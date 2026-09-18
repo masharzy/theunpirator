@@ -19,22 +19,62 @@ function cleanIncidentTitle(type) {
     .replace(/^./, (value) => value.toUpperCase());
 }
 
+function denialExplanation(reason, kind) {
+  const prefix = kind === "consume" ? "The protected segment was not released" : "No segment ticket was issued";
+  const reasons = {
+    session_missing: `${prefix} because the gateway session state was missing.`,
+    session_active: `${prefix} because the session state was inconsistent.`,
+    session_revoked: `${prefix} because the playback session had been revoked.`,
+    session_blocked: `${prefix} because the playback session had been blocked.`,
+    session_inactive: `${prefix} because the playback session was not active.`,
+    session_expired: `${prefix} because the playback session had expired.`,
+    integrity_stale:
+      `${prefix} because the protected player had not refreshed its integrity state within the required 15-second window.`,
+    invalid_track: `${prefix} because the requested media track was invalid.`,
+    invalid_variant: `${prefix} because the requested quality variant was invalid.`,
+    invalid_sequence: `${prefix} because the requested segment sequence was invalid.`,
+    sequence_out_of_window:
+      `${prefix} because the segment was outside the server-authorized playback/seek window.`,
+    rate_limited:
+      `${prefix} because the session exceeded the protected-ticket issuance rate limit.`,
+    replay_limit:
+      `${prefix} because the same segment reached the bounded ticket re-mint limit.`,
+    ticket_missing_or_used:
+      `${prefix} because the one-time segment ticket was missing or had already been consumed.`,
+    ticket_expired: `${prefix} because the one-time segment ticket had expired.`,
+    ticket_track_mismatch: `${prefix} because the ticket did not match the requested media track.`,
+    ticket_variant_mismatch:
+      `${prefix} because the ticket did not match the requested quality variant.`,
+    ticket_sequence_mismatch:
+      `${prefix} because the ticket did not match the requested segment sequence.`,
+    media_key_unavailable:
+      `${prefix} because the protected session encryption key was unavailable.`,
+    invalid_resource: `${prefix} because the protected resource identifier was invalid.`,
+    resource_mismatch:
+      `${prefix} because the one-time resource ticket did not match the requested resource.`,
+  };
+  return reasons[reason] || null;
+}
+
 function explainSecurityEvent(event) {
   const metadata = event.metadata || {};
   const code = metadata.code || event.type;
   const status = metadata.status ?? metadata.upstreamStatus ?? null;
   const message = metadata.message || null;
+  const reason = metadata.reason || null;
   const path = metadata.path || null;
 
   if (event.type === "SEGMENT_TICKET_DENIED") {
     return {
       title: "Segment ticket request was denied",
       explanation:
-        message ||
+        denialExplanation(reason, "issue") ||
+        (message && message !== "Playback request denied" ? message : null) ||
         "The media gateway asked the playback session to issue a segment ticket, but the session state rejected the request. No protected segment ticket was issued.",
       evidence: {
         code,
         status,
+        reason,
         path,
         sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
         note: metadata.status
@@ -47,9 +87,16 @@ function explainSecurityEvent(event) {
     return {
       title: "Segment ticket was invalid or already unusable",
       explanation:
-        message ||
+        denialExplanation(reason, "consume") ||
+        (message && message !== "Playback request denied" ? message : null) ||
         "The gateway could not consume the supplied segment ticket for this protected media chunk. The ticket was invalid, expired, mismatched, or already consumed.",
-      evidence: { code, status, path, sessionStatusAtEvent: metadata.sessionStatusAtEvent || null },
+      evidence: {
+        code,
+        status,
+        reason,
+        path,
+        sessionStatusAtEvent: metadata.sessionStatusAtEvent || null,
+      },
     };
   }
   if (event.type === "TOKEN_EXPIRED") {
