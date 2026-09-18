@@ -45,7 +45,9 @@ export default function ResetPassword() {
       <section className="auth-panel">
         <p className="eyebrow">NEW CREDENTIAL</p>
         <h1>Choose a new password.</h1>
-        <p className="mt-2 text-sm text-[#687260]">Use at least 8 characters with a mix of letters and a number.</p>
+        <p className="mt-2 text-sm text-[#687260]">
+          Use at least 8 characters with a mix of letters and a number.
+        </p>
         <form onSubmit={submit} noValidate className="mt-6 space-y-4">
           <div>
             <Input
@@ -61,8 +63,16 @@ export default function ResetPassword() {
             />
             <PasswordChecklist value={password} />
           </div>
-          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-          {success && <p role="status" className="text-sm text-emerald-700">{success}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p role="status" className="text-sm text-emerald-700">
+              {success}
+            </p>
+          )}
           <Button disabled={busy}>{busy ? "Updating…" : "Update password"}</Button>
         </form>
         <Link href="/login">Return to sign in</Link>

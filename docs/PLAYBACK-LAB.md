@@ -34,7 +34,6 @@ The dashboard sends this configuration to the authenticated control API over HTT
 
 `Allowed hosts` limits redirects and resolved media requests. If left blank, Playback Lab derives the host from an HTTP source URL. Object references such as S3 keys require an explicit allowed host.
 
-
 ## Viewer identity during tests
 
 Playback Lab uses the same v0.2 trust boundary as customer integrations. The dashboard test endpoint

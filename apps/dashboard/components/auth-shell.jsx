@@ -26,7 +26,9 @@ export function AuthShell({ mode = "login", title, intro, children }) {
             </div>
 
             <h1 className="mt-8 max-w-lg text-[44px] font-semibold leading-[1.04] tracking-[-.05em] text-[#20251d] xl:text-[52px]">
-              {registering ? "Set up protected playback without changing your product." : "Everything behind playback, without the noise."}
+              {registering
+                ? "Set up protected playback without changing your product."
+                : "Everything behind playback, without the noise."}
             </h1>
             <p className="mt-6 max-w-lg text-base leading-7 text-[#666c62]">
               {registering

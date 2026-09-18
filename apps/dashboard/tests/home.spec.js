@@ -72,11 +72,13 @@ test("auth forms show written validation without browser bubbles", async ({ page
 
   const password = page.getByPlaceholder("8+ characters");
   await password.fill("Abcdef1");
-  await expect(page.getByText("At least 8 characters").locator(".."))
-    .not.toHaveClass(/text-emerald-700/);
+  await expect(page.getByText("At least 8 characters").locator("..")).not.toHaveClass(
+    /text-emerald-700/,
+  );
   await password.fill("Abcdefg1");
-  await expect(page.getByText("At least 8 characters").locator(".."))
-    .toHaveClass(/text-emerald-700/);
+  await expect(page.getByText("At least 8 characters").locator("..")).toHaveClass(
+    /text-emerald-700/,
+  );
 
   await page.goto("/login");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();

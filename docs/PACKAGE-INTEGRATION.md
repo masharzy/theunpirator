@@ -150,12 +150,7 @@ Browser:
 import { UnpiratorPlayer } from "@unpirator/react";
 
 export function LessonVideo({ playbackRef, authToken }) {
-  return (
-    <UnpiratorPlayer
-      playbackRef={playbackRef}
-      getAccessToken={() => authToken}
-    />
-  );
+  return <UnpiratorPlayer playbackRef={playbackRef} getAccessToken={() => authToken} />;
 }
 ```
 
@@ -187,25 +182,22 @@ app.post("/api/unpirator/playback", requireUser, async (req, res) => {
     .slice(0, 64);
   const viewerUserAgent = String(req.headers["user-agent"] || "").slice(0, 512);
 
-  const upstream = await fetch(
-    `${process.env.UNPIRATOR_API_URL}/v1/playback/sessions`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${process.env.UNPIRATOR_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        siteId: process.env.UNPIRATOR_SITE_ID,
-        assetId: req.body.playbackRef,
-        email: viewer.email,
-        deviceId,
-        viewerIp,
-        viewerUserAgent,
-        client: req.body.client || {},
-      }),
+  const upstream = await fetch(`${process.env.UNPIRATOR_API_URL}/v1/playback/sessions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.UNPIRATOR_API_KEY}`,
+      "content-type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      siteId: process.env.UNPIRATOR_SITE_ID,
+      assetId: req.body.playbackRef,
+      email: viewer.email,
+      deviceId,
+      viewerIp,
+      viewerUserAgent,
+      client: req.body.client || {},
+    }),
+  });
 
   const data = await upstream.json();
   res.set("Cache-Control", "no-store");
@@ -220,10 +212,7 @@ Do not forward `req.body.email` even if the browser sends it.
 The React player can send a Firebase ID token:
 
 ```jsx
-<UnpiratorPlayer
-  playbackRef={playbackRef}
-  getAccessToken={() => firebaseUser.getIdToken()}
-/>
+<UnpiratorPlayer playbackRef={playbackRef} getAccessToken={() => firebaseUser.getIdToken()} />
 ```
 
 The customer server verifies that token with Firebase Admin SDK, reads the verified user's email,
@@ -237,7 +226,8 @@ Browser/template:
 ```html
 <unpirator-player
   playback-ref="<?= htmlspecialchars($playbackRef) ?>"
-  endpoint="/api/unpirator/playback">
+  endpoint="/api/unpirator/playback"
+>
 </unpirator-player>
 ```
 
@@ -404,17 +394,17 @@ identity model.
 
 ## Errors
 
-| Result | Meaning |
-| --- | --- |
-| `400 VALIDATION_ERROR` | Required session field is missing or malformed |
-| `400 DEVICE_ID_REQUIRED` | Stable device ID was not provided |
+| Result                      | Meaning                                                       |
+| --------------------------- | ------------------------------------------------------------- |
+| `400 VALIDATION_ERROR`      | Required session field is missing or malformed                |
+| `400 DEVICE_ID_REQUIRED`    | Stable device ID was not provided                             |
 | `401 VIEWER_EMAIL_REQUIRED` | Customer server did not resolve an authenticated viewer email |
-| `401` | Workspace API key or customer authentication is invalid |
-| `403 CONTENT_ACCESS_DENIED` | Customer authorization rejected the content |
-| `403` | Site/origin/feature/viewer/device policy rejected playback |
-| `404` | Site/asset/provider resource is missing |
-| `409` | Concurrency or state conflict |
-| `429` | Rate or quota policy reached |
+| `401`                       | Workspace API key or customer authentication is invalid       |
+| `403 CONTENT_ACCESS_DENIED` | Customer authorization rejected the content                   |
+| `403`                       | Site/origin/feature/viewer/device policy rejected playback    |
+| `404`                       | Site/asset/provider resource is missing                       |
+| `409`                       | Concurrency or state conflict                                 |
+| `429`                       | Rate or quota policy reached                                  |
 
 ## Release
 

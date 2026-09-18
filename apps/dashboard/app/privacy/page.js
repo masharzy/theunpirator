@@ -170,9 +170,16 @@ export default function PrivacyPage() {
 
         <div className="mx-auto grid max-w-6xl gap-12 px-5 py-12 md:px-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:py-16">
           <aside className="hidden lg:block">
-            <nav className="sticky top-28 space-y-2 text-sm text-[#666]" aria-label="Privacy sections">
+            <nav
+              className="sticky top-28 space-y-2 text-sm text-[#666]"
+              aria-label="Privacy sections"
+            >
               {sections.map((section) => (
-                <a key={section.id} href={`#${section.id}`} className="block py-1 hover:text-[#171717]">
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="block py-1 hover:text-[#171717]"
+                >
                   {section.title.replace(/^\d+\.\s/, "")}
                 </a>
               ))}
@@ -189,14 +196,21 @@ export default function PrivacyPage() {
             <div className="mt-10 divide-y divide-[#e6e6e6]">
               {sections.map((section) => (
                 <section key={section.id} id={section.id} className="scroll-mt-28 py-8 first:pt-0">
-                  <h2 className="text-xl font-semibold tracking-[-.02em] sm:text-2xl">{section.title}</h2>
+                  <h2 className="text-xl font-semibold tracking-[-.02em] sm:text-2xl">
+                    {section.title}
+                  </h2>
                   <div className="mt-4 space-y-4 text-[15px] leading-7 text-[#5f5f5f]">
                     {section.body.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
                     ))}
                     {section.id === "contact" && (
                       <p>
-                        <Link className="font-semibold text-[#242424] underline underline-offset-4" href="/contact">Contact The Unpirator</Link>
+                        <Link
+                          className="font-semibold text-[#242424] underline underline-offset-4"
+                          href="/contact"
+                        >
+                          Contact The Unpirator
+                        </Link>
                       </p>
                     )}
                   </div>

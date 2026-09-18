@@ -140,8 +140,8 @@ export default function UsagePage() {
       <Surface className="p-6">
         <h2 className="font-semibold">Live limits</h2>
         <p className="mt-1 text-sm text-[#74806d]">
-          These do not contribute to the navbar usage percentage because they are simultaneous limits,
-          not billing-period consumption.
+          These do not contribute to the navbar usage percentage because they are simultaneous
+          limits, not billing-period consumption.
         </p>
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <ProgressMeter
@@ -157,7 +157,9 @@ export default function UsagePage() {
                 ? formatNumber(entitlements.max_devices_per_user)
                 : "No configured limit"}
             </p>
-            <p className="mt-1 text-xs text-[#87917f]">Maximum active devices allowed per viewer.</p>
+            <p className="mt-1 text-xs text-[#87917f]">
+              Maximum active devices allowed per viewer.
+            </p>
           </div>
         </div>
       </Surface>
@@ -178,7 +180,9 @@ export default function UsagePage() {
               </div>
             ))
           ) : (
-            <p className="text-sm text-[#87917f]">No metered activity yet in this billing period.</p>
+            <p className="text-sm text-[#87917f]">
+              No metered activity yet in this billing period.
+            </p>
           )}
         </div>
       </Surface>

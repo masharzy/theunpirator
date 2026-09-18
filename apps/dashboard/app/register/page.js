@@ -20,11 +20,13 @@ export default function RegisterPage() {
 
   function validate() {
     const next = {};
-    if (tenantName.trim().length < 2) next.tenantName = "Organization name must be at least 2 characters.";
+    if (tenantName.trim().length < 2)
+      next.tenantName = "Organization name must be at least 2 characters.";
     if (!email.trim()) next.email = "Enter your email address.";
     else if (!emailLooksValid(email)) next.email = "Enter a valid email address.";
     if (!password) next.password = "Create a password.";
-    else if (!passwordIsValid(password)) next.password = "Complete all password requirements below.";
+    else if (!passwordIsValid(password))
+      next.password = "Complete all password requirements below.";
     setFieldErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -67,7 +69,9 @@ export default function RegisterPage() {
             aria-invalid={Boolean(fieldErrors.tenantName)}
             className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
           />
-          {fieldErrors.tenantName && <p className="mt-2 text-sm text-red-600">{fieldErrors.tenantName}</p>}
+          {fieldErrors.tenantName && (
+            <p className="mt-2 text-sm text-red-600">{fieldErrors.tenantName}</p>
+          )}
         </label>
 
         <label className="block">
@@ -101,16 +105,24 @@ export default function RegisterPage() {
             className="h-12 rounded-lg border-[#d9dcd6] bg-white px-3.5 text-[15px] shadow-none focus-visible:ring-[#9aa095]"
           />
           <PasswordChecklist value={password} />
-          {fieldErrors.password && <p className="mt-2 text-sm text-red-600">{fieldErrors.password}</p>}
+          {fieldErrors.password && (
+            <p className="mt-2 text-sm text-red-600">{fieldErrors.password}</p>
+          )}
         </label>
 
         {error && (
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700">
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700"
+          >
             {error}
           </div>
         )}
 
-        <Button className="h-12 w-full rounded-lg bg-[#20251d] text-sm font-semibold text-white hover:bg-[#32382e]" disabled={busy}>
+        <Button
+          className="h-12 w-full rounded-lg bg-[#20251d] text-sm font-semibold text-white hover:bg-[#32382e]"
+          disabled={busy}
+        >
           {busy ? "Creating workspace…" : "Create workspace"}
           {!busy && <ArrowRight className="ml-2 size-4" />}
         </Button>
