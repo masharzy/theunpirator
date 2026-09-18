@@ -191,6 +191,10 @@ function EventDrawer({ selectedEvent, onClose }) {
 
             <Section title="Playback context">
               <DetailRow
+                label="Status at event"
+                value={metadata.sessionStatusAtEvent || "Not captured for this older event"}
+              />
+              <DetailRow
                 label="Site"
                 value={detail?.site ? `${detail.site.name} · ${detail.site.domain}` : event?.siteId || "—"}
                 mono={!detail?.site && Boolean(event?.siteId)}
@@ -207,11 +211,10 @@ function EventDrawer({ selectedEvent, onClose }) {
 
             <Section title="Viewer & device">
               <DetailRow
-                label="Viewer"
-                value={detail?.viewer?.displayLabel || detail?.viewer?.externalUserId || event?.endUserId || "—"}
+                label="Viewer email"
+                value={detail?.viewer?.email || event?.viewerEmail || "Unavailable for this older event"}
               />
-              <DetailRow label="Viewer email" value={detail?.viewer?.email || "Not provided by customer app"} />
-              <DetailRow label="Viewer ID" value={detail?.viewer?.externalUserId || event?.endUserId || "—"} mono />
+              <DetailRow label="Viewer record" value={detail?.viewer?.id || event?.endUserId || "—"} mono />
               <DetailRow label="Viewer status" value={detail?.viewer?.status || "—"} />
               <DetailRow
                 label="Device"
@@ -307,6 +310,9 @@ export default function SecurityPage() {
               >
                 <div className="min-w-0">
                   <p className="font-medium">{cleanType(event.type)}</p>
+                  <p className="mt-1 truncate text-xs font-medium text-[#5e6958]">
+                    {event.viewerEmail || "Viewer email unavailable"}
+                  </p>
                   <p className="mt-1 font-mono text-[11px] text-[#87917f]">
                     risk {event.riskScore}
                   </p>
