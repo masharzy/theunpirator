@@ -127,7 +127,7 @@ export default function PlansPage() {
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-[#7b8574]">
-                  Current plan
+                  {billing?.subscription ? "Current plan" : "Protection status"}
                 </p>
                 <p className="mt-2 truncate text-lg font-semibold text-[#263120]">
                   {billing?.subscription?.planName || currentPlan?.name || "No active plan"}
