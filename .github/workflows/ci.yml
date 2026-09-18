@@ -38,6 +38,7 @@ jobs:
       - run: node scripts/setup-local.js
       - run: pnpm db:migrate
       - run: pnpm check:syntax
+      - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm --filter @unpirator/dashboard build
@@ -57,14 +58,7 @@ jobs:
             cat /tmp/unpirator-dashboard.log
             exit 1
           fi
-          if ! pnpm test:e2e; then
-            echo "=== API log ==="
-            cat /tmp/unpirator-api.log
-            echo "=== Dashboard log ==="
-            cat /tmp/unpirator-dashboard.log
-            exit 1
-          fi
-      - run: pnpm format:check
+          pnpm test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
