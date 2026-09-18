@@ -105,6 +105,45 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
         ).status,
       ).toBe(200);
     }
+    const testPlanId = `integration-${run}`;
+    await database.db.insert(plans).values({
+      id: testPlanId,
+      name: `Integration plan ${run}`,
+      status: "active",
+      entitlements: {
+        secure_gateway: true,
+        protected_delivery: true,
+        player_integrity: true,
+        secure_browser_restriction: false,
+        dynamic_watermark: true,
+        device_control: true,
+        concurrent_stream_control: true,
+        webhooks: false,
+        youtube_custom: false,
+        max_sites: 5,
+        max_assets: 50,
+        max_api_keys: 5,
+        max_webhooks: 5,
+        max_team_members: 5,
+        max_devices_per_user: 2,
+        max_concurrent_streams: 1,
+        monthly_gateway_requests: 10000,
+        monthly_egress_bytes: 10_000_000_000,
+        monthly_playback_minutes: 10000,
+        monthly_playback_sessions: 10000,
+        session_policy: "block_new",
+      },
+    });
+    await database.db.insert(subscriptions).values(
+      [tenant, otherTenant].map((tenantId) => ({
+        tenantId,
+        planId: testPlanId,
+        status: "active",
+        periodStart: new Date(),
+        periodEnd: new Date(Date.now() + 30 * 86400_000),
+      })),
+    );
+
     admin = request.agent(app);
     const adminEmail = `admin-${run}@integration.example`;
     const adminRegistration = await admin.post("/v1/auth/register").send({
