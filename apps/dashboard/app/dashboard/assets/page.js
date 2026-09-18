@@ -237,6 +237,9 @@ export default function AssetsPage() {
                 <p className="mt-2 text-xs uppercase tracking-[.12em] text-[#899283]">
                   {item.provider} · plan-protected
                 </p>
+                <p className="mt-3 text-xs text-[#7b8574]">
+                  Created at: {new Date(item.createdAt).toLocaleString()}
+                </p>
                 <p className="mt-5 truncate font-mono text-[10px] text-[#9aa292]">{item.id}</p>
               </Surface>
             </Link>
