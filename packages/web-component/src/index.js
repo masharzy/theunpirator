@@ -42,15 +42,6 @@ export class UnpiratorPlayerElement extends ElementBase {
     if (this.isConnected) this.mount();
   }
 
-  set currentUser(value) {
-    this._currentUser = value;
-    if (this.isConnected) this.mount();
-  }
-
-  get currentUser() {
-    return this._currentUser;
-  }
-
   set headers(value) {
     this._headers = value;
     if (this.isConnected) this.mount();
@@ -112,7 +103,6 @@ export class UnpiratorPlayerElement extends ElementBase {
           assetId,
           playbackRef,
           title: this.getAttribute("title") || undefined,
-          currentUser: this.currentUser,
           headers: this.headers,
           getHeaders: this.getHeaders,
           getAccessToken: this.getAccessToken,
