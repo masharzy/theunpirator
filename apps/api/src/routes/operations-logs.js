@@ -4,6 +4,7 @@ import {
   describeOperationEvent,
   parseOperationLogQuery,
 } from "../services/operations-log.js";
+import { paginationMeta } from "../services/list-query.js";
 
 // Keep this route in the API deploy graph so dashboard log requests resolve after release.
 export function operationsLogsRouter({ db, requireTenantDeveloper }) {
@@ -39,16 +40,10 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
           },
         };
       });
-      const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
       res.set("cache-control", "no-store").json({
         items,
-        pagination: {
-          page: query.page,
-          pageSize: query.pageSize,
-          total,
-          totalPages,
-        },
+        pagination: paginationMeta({ page: query.page, limit: query.limit, total }),
       });
     } catch (error) {
       next(error);
