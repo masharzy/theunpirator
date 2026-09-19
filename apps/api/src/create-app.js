@@ -24,8 +24,10 @@ import { createPlaybackService } from "./services/playback.js";
 import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./routes/auth.js";
 import { sitesRouter } from "./routes/sites.js";
+import { assetConsoleRouter } from "./routes/asset-console.js";
 import { assetsRouter } from "./routes/assets.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
+import { sessionConsoleRouter } from "./routes/session-console.js";
 import { playbackRouter } from "./routes/playback.js";
 import { securityConsoleRouter } from "./routes/security-console.js";
 import { securityRouter } from "./routes/security.js";
@@ -106,6 +108,7 @@ export function createApp(overrides = {}) {
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
         ? requireVerifiedEmail(req, res, next)
         : next(),
+    assetConsoleRouter({ db, requireTenantDeveloper: tenantDeveloper }),
     assetsRouter({ db, config, requireTenantDeveloper: tenantDeveloper }),
   );
   app.use(
@@ -120,6 +123,12 @@ export function createApp(overrides = {}) {
   app.use(
     "/v1/playback",
     createRateLimiter(cache, { prefix: "playback", limit: 240, windowSeconds: 60 }),
+    sessionConsoleRouter({
+      db,
+      config,
+      dashboardAuth: auth,
+      requireTenantAdmin: tenantAdmin,
+    }),
     playbackRouter({
       playbackService,
       apiKeyAuth: apiKeyAuth(db, "playback:create"),

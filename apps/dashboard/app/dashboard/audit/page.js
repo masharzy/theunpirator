@@ -56,7 +56,7 @@ export default function AuditPage() {
   const [items, setItems] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: 25,
+    limit: 25,
     total: 0,
     totalPages: 1,
   });
@@ -80,10 +80,10 @@ export default function AuditPage() {
   const endpoint = useMemo(() => {
     const params = new URLSearchParams({
       page: String(page),
-      pageSize: "25",
+      limit: "25",
       category,
     });
-    if (search) params.set("q", search);
+    if (search) params.set("search", search);
     return `/v1/audit?${params}`;
   }, [category, page, search]);
 
@@ -96,7 +96,7 @@ export default function AuditPage() {
     api(endpoint, { signal: controller.signal })
       .then((response) => {
         setItems(response.items || []);
-        setPagination(response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 });
+        setPagination(response.pagination || { page, limit: 25, total: 0, totalPages: 1 });
         setSummary(response.summary || { total: 0, last24Hours: 0, actorCount: 0 });
       })
       .catch((failure) => {

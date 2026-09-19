@@ -3,6 +3,8 @@
 import Link from "next/link";
 import {
   Activity,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Monitor,
   Radio,
@@ -13,11 +15,12 @@ import {
   Wifi,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeader, Surface } from "@/components/console-kit";
 
+const PAGE_SIZE = 25;
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
@@ -80,8 +83,8 @@ function platformName(userAgent = "") {
   return "Device unknown";
 }
 
-function deviceIcon(userAgent = "") {
-  return /Android|iPhone|iPad|iPod/i.test(userAgent) ? Smartphone : Monitor;
+function deviceIcon(value = "") {
+  return /Android|iPhone|iPad|iPod|iOS/i.test(value) ? Smartphone : Monitor;
 }
 
 function SessionStatus({ status }) {
@@ -156,82 +159,80 @@ function LoadingRows() {
 
 export default function SessionsPage() {
   const [items, setItems] = useState([]);
-  const [assets, setAssets] = useState([]);
-  const [sites, setSites] = useState([]);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrevious: false,
+  });
+  const [summary, setSummary] = useState({ all: 0, active: 0, idle: 0, ended: 0, revoked: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmingId, setConfirmingId] = useState(null);
   const [revokingId, setRevokingId] = useState(null);
 
-  async function load({ background = false } = {}) {
-    if (background) setRefreshing(true);
-    else setLoading(true);
-    setError("");
-    try {
-      const [sessionResult, assetResult, siteResult] = await Promise.allSettled([
-        api("/v1/playback/sessions"),
-        api("/v1/assets"),
-        api("/v1/sites"),
-      ]);
-      if (sessionResult.status === "rejected") throw sessionResult.reason;
-      setItems(sessionResult.value.items || []);
-      if (assetResult.status === "fulfilled") setAssets(assetResult.value.items || []);
-      if (siteResult.status === "fulfilled") setSites(siteResult.value.items || []);
-    } catch (requestError) {
-      setError(requestError?.message || "Unable to load playback sessions");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(query.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
-    load();
-  }, []);
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
 
-  const assetMap = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
-  const siteMap = useMemo(() => new Map(sites.map((site) => [site.id, site])), [sites]);
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(PAGE_SIZE),
+      status: filter,
+      sort: "newest",
+    });
+    if (search) params.set("search", search);
 
-  const counts = useMemo(() => {
-    const next = { all: items.length, active: 0, idle: 0, ended: 0, revoked: 0 };
-    for (const item of items) {
-      if (Object.prototype.hasOwnProperty.call(next, item.status)) next[item.status] += 1;
-    }
-    return next;
-  }, [items]);
-
-  const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return [...items]
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .filter((session) => filter === "all" || session.status === filter)
-      .filter((session) => {
-        if (!term) return true;
-        const asset = assetMap.get(session.assetId);
-        const site = siteMap.get(session.siteId);
-        return [
-          session.id,
-          session.viewerEmail,
-          session.assetId,
-          asset?.title,
-          session.siteId,
-          site?.name,
-          site?.domain,
-          session.deviceId,
-          session.ip,
-          session.userAgent,
-          session.status,
-        ].some((value) =>
-          String(value || "")
-            .toLowerCase()
-            .includes(term),
+    api(`/v1/playback/sessions?${params.toString()}`, { signal: controller.signal })
+      .then((data) => {
+        setItems(data.items || []);
+        setPagination(
+          data.pagination || {
+            page,
+            limit: PAGE_SIZE,
+            total: 0,
+            totalPages: 1,
+            hasNext: false,
+            hasPrevious: page > 1,
+          },
         );
+        setSummary(data.summary || { all: 0, active: 0, idle: 0, ended: 0, revoked: 0 });
+        if (data.pagination?.page && data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      })
+      .catch((requestError) => {
+        if (requestError.name !== "AbortError") {
+          setError(requestError?.message || "Unable to load playback sessions");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       });
-  }, [assetMap, filter, items, query, siteMap]);
+
+    return () => controller.abort();
+  }, [filter, page, refreshNonce, search]);
 
   async function revoke(session) {
     setRevokingId(session.id);
@@ -248,13 +249,18 @@ export default function SessionsPage() {
       );
       setConfirmingId(null);
       setNotice(`Playback access revoked for ${session.viewerEmail || "this viewer"}.`);
-      load({ background: true });
+      setRefreshing(true);
+      setRefreshNonce((value) => value + 1);
     } catch (requestError) {
       setError(requestError?.message || "Unable to revoke playback session");
     } finally {
       setRevokingId(null);
     }
   }
+
+  const hasFilters = Boolean(search || filter !== "all");
+  const resultStart = pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0;
+  const resultEnd = Math.min(pagination.page * pagination.limit, pagination.total);
 
   return (
     <div className="space-y-7">
@@ -267,7 +273,10 @@ export default function SessionsPage() {
             variant="outline"
             className="border-[#dce3d4] bg-white text-[#46513f]"
             disabled={loading || refreshing}
-            onClick={() => load({ background: true })}
+            onClick={() => {
+              setRefreshing(true);
+              setRefreshNonce((value) => value + 1);
+            }}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing" : "Refresh"}
@@ -278,27 +287,27 @@ export default function SessionsPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Live now"
-          value={counts.active}
+          value={summary.active || 0}
           hint="Heartbeat is current"
           icon={Radio}
           tone="active"
         />
         <MetricCard
           label="Idle"
-          value={counts.idle}
+          value={summary.idle || 0}
           hint="Heartbeat is stale"
           icon={Clock3}
           tone="idle"
         />
         <MetricCard
           label="Ended"
-          value={counts.ended}
+          value={summary.ended || 0}
           hint="Playback naturally closed"
           icon={Activity}
         />
         <MetricCard
           label="Revoked"
-          value={counts.revoked}
+          value={summary.revoked || 0}
           hint="Access stopped manually"
           icon={ShieldOff}
           tone="revoked"
@@ -317,7 +326,7 @@ export default function SessionsPage() {
           <span>{error || notice}</span>
           <button
             type="button"
-            className="mt-0.5 shrink-0 opacity-70 transition hover:opacity-100"
+            className="mt-0.5 shrink-0 cursor-pointer opacity-70 transition hover:opacity-100"
             aria-label="Dismiss message"
             onClick={() => {
               setError("");
@@ -340,14 +349,14 @@ export default function SessionsPage() {
               <input
                 id="session-search"
                 className="min-w-0 flex-1 bg-transparent text-sm text-[#263120] outline-none placeholder:text-[#9aa292]"
-                placeholder="Search viewer, content, site, IP or session ID"
+                placeholder="Full email, content, site, device, IP or session ID"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
               {query && (
                 <button
                   type="button"
-                  className="rounded-lg p-1 text-[#8a9483] transition hover:bg-[#eef1e9] hover:text-[#46513f]"
+                  className="cursor-pointer rounded-lg p-1 text-[#8a9483] transition hover:bg-[#eef1e9] hover:text-[#46513f]"
                   aria-label="Clear search"
                   onClick={() => setQuery("")}
                 >
@@ -366,8 +375,11 @@ export default function SessionsPage() {
                   key={item.id}
                   type="button"
                   aria-pressed={filter === item.id}
-                  onClick={() => setFilter(item.id)}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  onClick={() => {
+                    setFilter(item.id);
+                    setPage(1);
+                  }}
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
                     filter === item.id
                       ? "bg-white text-[#263120] shadow-sm ring-1 ring-[#dfe4d6]"
                       : "text-[#778171] hover:text-[#46513f]"
@@ -379,7 +391,7 @@ export default function SessionsPage() {
                       filter === item.id ? "bg-[#edf5d8] text-[#536b31]" : "bg-white/70"
                     }`}
                   >
-                    {counts[item.id] || 0}
+                    {summary[item.id] || 0}
                   </span>
                 </button>
               ))}
@@ -387,31 +399,31 @@ export default function SessionsPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4 bg-[#fafbf8] px-5 py-3 text-xs text-[#7c8775]">
+        <div className="flex flex-col gap-1 bg-[#fafbf8] px-5 py-3 text-xs text-[#7c8775] sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <p>
-            Showing <span className="font-semibold text-[#46513f]">{visible.length}</span> of{" "}
-            {items.length}
-            {query ? " matching sessions" : " sessions"}
+            {pagination.total
+              ? `Showing ${resultStart}–${resultEnd} of ${pagination.total} matching sessions`
+              : "No matching sessions"}
           </p>
-          <p className="hidden sm:block">
-            Idle sessions remain revocable until they end or expire.
+          <p>
+            Viewer email search uses the complete email address; other context supports partial
+            search.
           </p>
         </div>
       </Surface>
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <LoadingRows />
       ) : items.length === 0 ? (
         <EmptyState
-          title="No playback sessions yet"
-          description="Sessions will appear here as soon as your integration creates a protected playback grant."
-          href="/dashboard/integration"
-          action="Review integration"
-        />
-      ) : visible.length === 0 ? (
-        <EmptyState
-          title="No sessions match this view"
-          description="Try another status filter or clear your search to see more playback sessions."
+          title={hasFilters ? "No sessions match this view" : "No playback sessions yet"}
+          description={
+            hasFilters
+              ? "Try another status filter or clear your search to see more playback sessions."
+              : "Sessions will appear here as soon as your integration creates a protected playback grant."
+          }
+          href={hasFilters ? undefined : "/dashboard/integration"}
+          action={hasFilters ? undefined : "Review integration"}
         />
       ) : (
         <Surface className="overflow-hidden">
@@ -423,13 +435,13 @@ export default function SessionsPage() {
           </div>
 
           <div className="divide-y divide-[#edf0e9]">
-            {visible.map((session) => {
-              const asset = assetMap.get(session.assetId);
-              const site = siteMap.get(session.siteId);
-              const DeviceIcon = deviceIcon(session.userAgent);
+            {items.map((session) => {
+              const DeviceIcon = deviceIcon(session.os || session.userAgent);
               const canRevoke = session.status === "active" || session.status === "idle";
               const confirming = confirmingId === session.id;
               const revoking = revokingId === session.id;
+              const browser = session.browser || browserName(session.userAgent);
+              const platform = session.os || platformName(session.userAgent);
 
               return (
                 <article key={session.id} className="group p-5 transition hover:bg-[#fcfdf9]">
@@ -457,13 +469,13 @@ export default function SessionsPage() {
                     </div>
 
                     <div className="min-w-0 border-l-0 border-[#edf0e9] lg:border-l lg:pl-5">
-                      {asset ? (
+                      {session.assetTitle ? (
                         <Link
                           href={`/dashboard/assets/${session.assetId}`}
                           className="block truncate text-sm font-semibold text-[#35432f] transition hover:text-[#60783b] hover:underline"
-                          title={asset.title}
+                          title={session.assetTitle}
                         >
-                          {asset.title}
+                          {session.assetTitle}
                         </Link>
                       ) : (
                         <p className="truncate text-sm font-semibold text-[#35432f]">
@@ -471,8 +483,8 @@ export default function SessionsPage() {
                         </p>
                       )}
                       <p className="mt-1 truncate text-xs text-[#7f8978]">
-                        {site?.name || "Site unavailable"}
-                        {site?.domain ? ` · ${site.domain}` : ""}
+                        {session.siteName || "Site unavailable"}
+                        {session.siteDomain ? ` · ${session.siteDomain}` : ""}
                       </p>
                     </div>
 
@@ -480,7 +492,7 @@ export default function SessionsPage() {
                       <div className="flex items-center gap-2 text-sm font-medium text-[#46513f]">
                         <DeviceIcon size={15} className="shrink-0 text-[#70805d]" />
                         <span className="truncate">
-                          {browserName(session.userAgent)} · {platformName(session.userAgent)}
+                          {browser} · {platform}
                         </span>
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 text-xs text-[#7f8978]">
@@ -512,7 +524,7 @@ export default function SessionsPage() {
                         <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-1.5">
                           <button
                             type="button"
-                            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#6f7869] hover:bg-white"
+                            className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#6f7869] hover:bg-white"
                             disabled={revoking}
                             onClick={() => setConfirmingId(null)}
                           >
@@ -520,7 +532,7 @@ export default function SessionsPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                            className="cursor-pointer rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                             disabled={revoking}
                             onClick={() => revoke(session)}
                           >
@@ -565,6 +577,31 @@ export default function SessionsPage() {
                 </article>
               );
             })}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-[#e7ebe2] bg-[#fafbf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-[#7b8574]">
+              Page <span className="font-semibold text-[#46513f]">{pagination.page}</span> of{" "}
+              {pagination.totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!pagination.hasPrevious || loading || refreshing}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                <ChevronLeft size={14} /> Previous
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!pagination.hasNext || loading || refreshing}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                Next <ChevronRight size={14} />
+              </Button>
+            </div>
           </div>
         </Surface>
       )}

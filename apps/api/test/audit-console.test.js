@@ -2,25 +2,37 @@ import { describe, expect, it } from "vitest";
 import { describeAuditEntry, parseAuditQuery } from "../src/services/audit-console.js";
 
 describe("audit console", () => {
-  it("normalizes server-side search, category and pagination", () => {
-    expect(
-      parseAuditQuery({
-        q: "  viewer  ",
-        category: "access",
-        page: "2",
-        pageSize: "50",
-      }),
-    ).toEqual({
-      q: "viewer",
+  it("normalizes canonical server-side search, category and pagination", () => {
+    const result = parseAuditQuery({
+      search: "  viewer  ",
+      category: "access",
+      page: "2",
+      limit: "50",
+    });
+
+    expect(result).toMatchObject({
+      search: "viewer",
       category: "access",
       page: 2,
-      pageSize: 50,
+      limit: 50,
+      sort: "newest",
+      from: null,
+      to: null,
+    });
+  });
+
+  it("keeps q and pageSize as backward-compatible aliases", () => {
+    expect(parseAuditQuery({ q: "  site  ", pageSize: "40" })).toMatchObject({
+      search: "site",
+      page: 1,
+      limit: 40,
+      category: "all",
     });
   });
 
   it("rejects unsupported filters", () => {
     expect(() => parseAuditQuery({ category: "security" })).toThrow("Invalid audit filters");
-    expect(() => parseAuditQuery({ pageSize: "500" })).toThrow("Invalid audit filters");
+    expect(() => parseAuditQuery({ limit: "500" })).toThrow("Invalid audit filters");
   });
 
   it("turns viewer actions into readable activity without exposing target ids", () => {
