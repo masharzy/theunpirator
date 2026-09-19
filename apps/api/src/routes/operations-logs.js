@@ -4,6 +4,7 @@ import {
   describeOperationEvent,
   parseOperationLogQuery,
 } from "../services/operations-log.js";
+import { paginationMeta } from "../services/list-query.js";
 
 // Keep this route in the API deploy graph so dashboard log requests resolve after release.
 export function operationsLogsRouter({ db, requireTenantDeveloper }) {
@@ -13,11 +14,14 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
     try {
       const query = parseOperationLogQuery(req.query);
       const statements = buildOperationLogQueries(req.tenantId, query);
-      const [rows, countRows] = await Promise.all([
-        db.execute(statements.rows),
-        db.execute(statements.count),
-      ]);
+      const countRows = await db.execute(statements.count);
       const total = Number(countRows[0]?.total || 0);
+      const pagination = paginationMeta({ page: query.page, limit: query.limit, total });
+      const rowStatement =
+        pagination.page === query.page
+          ? statements.rows
+          : buildOperationLogQueries(req.tenantId, { ...query, page: pagination.page }).rows;
+      const rows = await db.execute(rowStatement);
       const items = rows.map((row) => {
         const description = describeOperationEvent(row);
         return {
@@ -39,16 +43,10 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
           },
         };
       });
-      const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
       res.set("cache-control", "no-store").json({
         items,
-        pagination: {
-          page: query.page,
-          pageSize: query.pageSize,
-          total,
-          totalPages,
-        },
+        pagination,
       });
     } catch (error) {
       next(error);

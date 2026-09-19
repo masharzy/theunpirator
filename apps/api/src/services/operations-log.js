@@ -1,15 +1,9 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { parseListQuery } from "./list-query.js";
 
-const querySchema = z
-  .object({
-    q: z.string().trim().max(120).default(""),
-    category: z.enum(["all", "usage", "security"]).default("all"),
-    level: z.enum(["all", "info", "warning", "critical"]).default("all"),
-    page: z.coerce.number().int().min(1).max(10_000).default(1),
-    pageSize: z.coerce.number().int().min(10).max(100).default(25),
-  })
-  .strict();
+const categorySchema = z.enum(["all", "usage", "security"]).default("all");
+const levelSchema = z.enum(["all", "info", "warning", "critical"]).default("all");
 
 const securityTitles = {
   DEVICE_LIMIT: "Device limit blocked playback",
@@ -55,13 +49,22 @@ function formatBytes(value) {
 }
 
 export function parseOperationLogQuery(input) {
-  const result = querySchema.safeParse(input);
-  if (result.success) return result.data;
-  const error = new Error("Invalid log filters");
-  error.code = "VALIDATION_ERROR";
-  error.status = 400;
-  error.details = result.error.flatten();
-  throw error;
+  try {
+    const list = parseListQuery(input, { maxSearch: 120 });
+    const category = categorySchema.parse(input.category);
+    const level = levelSchema.parse(input.level);
+    return { ...list, category, level };
+  } catch (cause) {
+    if (cause?.code === "VALIDATION_ERROR") {
+      cause.message = "Invalid log filters";
+      throw cause;
+    }
+    const error = new Error("Invalid log filters");
+    error.code = "VALIDATION_ERROR";
+    error.status = 400;
+    error.details = cause?.flatten?.() || null;
+    throw error;
+  }
 }
 
 export function describeOperationEvent(row) {
@@ -114,13 +117,13 @@ export function describeOperationEvent(row) {
 }
 
 export function buildOperationLogQueries(tenantId, query) {
-  const pattern = `%${query.q}%`;
+  const pattern = `%${query.search}%`;
   const usageEnabled = query.category !== "security" && ["all", "info"].includes(query.level);
   const securityEnabled = query.category !== "usage";
-  const usageSearch = query.q
+  const usageSearch = query.search
     ? sql`AND (ue.type ILIKE ${pattern} OR COALESCE(a.title, '') ILIKE ${pattern})`
     : sql``;
-  const securitySearch = query.q
+  const securitySearch = query.search
     ? sql`AND (se.type ILIKE ${pattern} OR COALESCE(a.title, '') ILIKE ${pattern})`
     : sql``;
   const securityLevel =
@@ -131,6 +134,10 @@ export function buildOperationLogQueries(tenantId, query) {
           WHEN LOWER(se.severity) IN ('warning', 'warn', 'medium') THEN 'warning'
           ELSE 'info'
         END = ${query.level}`;
+  const usageFrom = query.from ? sql`AND ue.created_at >= ${query.from}` : sql``;
+  const usageTo = query.to ? sql`AND ue.created_at <= ${query.to}` : sql``;
+  const securityFrom = query.from ? sql`AND se.created_at >= ${query.from}` : sql``;
+  const securityTo = query.to ? sql`AND se.created_at <= ${query.to}` : sql``;
 
   const operations = sql`
     SELECT
@@ -150,6 +157,8 @@ export function buildOperationLogQueries(tenantId, query) {
     WHERE ue.tenant_id = ${tenantId}
       AND ${usageEnabled}
       ${usageSearch}
+      ${usageFrom}
+      ${usageTo}
 
     UNION ALL
 
@@ -171,15 +180,19 @@ export function buildOperationLogQueries(tenantId, query) {
       AND ${securityEnabled}
       AND ${securityLevel}
       ${securitySearch}
+      ${securityFrom}
+      ${securityTo}
   `;
 
-  const offset = (query.page - 1) * query.pageSize;
+  const offset = (query.page - 1) * query.limit;
+  const order =
+    query.sort === "oldest" ? sql`"createdAt" ASC, id ASC` : sql`"createdAt" DESC, id DESC`;
   return {
     rows: sql`
       SELECT *
       FROM (${operations}) operations
-      ORDER BY "createdAt" DESC, id DESC
-      LIMIT ${query.pageSize}
+      ORDER BY ${order}
+      LIMIT ${query.limit}
       OFFSET ${offset}
     `,
     count: sql`
