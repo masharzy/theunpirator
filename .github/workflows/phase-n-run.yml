@@ -28,6 +28,18 @@ jobs:
             exit 0
           fi
           python .github/scripts/phase-n-polish.py
+          python - <<'PY'
+          from pathlib import Path
+          for filename in [
+              "apps/dashboard/app/dashboard/sessions/page.js",
+              "apps/dashboard/app/dashboard/viewers/page.js",
+          ]:
+              path = Path(filename)
+              text = path.read_text()
+              start = text.index("function shortId(")
+              end = text.index("\n}\n", start) + 3
+              path.write_text(text[:start] + text[end:])
+          PY
       - name: Format dashboard changes
         run: |
           if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then exit 0; fi
