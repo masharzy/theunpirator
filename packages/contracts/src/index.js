@@ -121,9 +121,34 @@ export const heartbeatSchema = z
       .optional(),
   })
   .strict();
+
+export const webhookEventTypes = ["playback.started", "playback.revoked"];
+const webhookEventSchema = z.enum(["*", ...webhookEventTypes]);
+const webhookNameSchema = z.string().trim().min(2).max(120);
+const webhookUrlSchema = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((value) => new URL(value).protocol === "https:", "Webhook URL must use HTTPS");
+const webhookEventsSchema = z.array(webhookEventSchema).min(1).max(10);
+
 export const webhookCreateSchema = z
-  .object({ url: z.string().url(), events: z.array(z.string().min(3).max(80)).min(1).max(50) })
+  .object({
+    name: webhookNameSchema,
+    url: webhookUrlSchema,
+    events: webhookEventsSchema,
+  })
   .strict();
+
+export const webhookUpdateSchema = z
+  .object({
+    name: webhookNameSchema.optional(),
+    url: webhookUrlSchema.optional(),
+    events: webhookEventsSchema.optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "Provide at least one field to update");
 
 export function parseOrThrow(schema, value) {
   const result = schema.safeParse(value);
