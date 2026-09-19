@@ -21,14 +21,29 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --write apps/api/src/routes/asset-console.js apps/api/src/routes/session-console.js apps/api/src/services/list-query.js apps/api/src/services/operations-log.js apps/dashboard/app/dashboard/assets/page.js apps/dashboard/app/dashboard/sessions/page.js
-      - name: Commit formatted files
+      - name: Normalize list query callers
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          for (const file of [
+            "apps/dashboard/app/dashboard/audit/page.js",
+            "apps/dashboard/app/dashboard/logs/page.js",
+          ]) {
+            let text = fs.readFileSync(file, "utf8");
+            text = text.replaceAll("pageSize: 25", "limit: 25");
+            text = text.replaceAll('pageSize: "25"', 'limit: "25"');
+            text = text.replaceAll('params.set("q", search)', 'params.set("search", search)');
+            fs.writeFileSync(file, text);
+          }
+          NODE
+      - run: pnpm exec prettier --write apps/api/src/routes/asset-console.js apps/api/src/routes/session-console.js apps/api/src/services/list-query.js apps/api/src/services/operations-log.js apps/dashboard/app/dashboard/assets/page.js apps/dashboard/app/dashboard/sessions/page.js apps/dashboard/app/dashboard/audit/page.js apps/dashboard/app/dashboard/logs/page.js
+      - name: Commit phase K normalization
         run: |
           if git diff --quiet; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/api/src/routes/asset-console.js apps/api/src/routes/session-console.js apps/api/src/services/list-query.js apps/api/src/services/operations-log.js apps/dashboard/app/dashboard/assets/page.js apps/dashboard/app/dashboard/sessions/page.js
-          git commit -m "chore: apply phase k prettier output"
+          git add apps/api/src/routes/asset-console.js apps/api/src/routes/session-console.js apps/api/src/services/list-query.js apps/api/src/services/operations-log.js apps/dashboard/app/dashboard/assets/page.js apps/dashboard/app/dashboard/sessions/page.js apps/dashboard/app/dashboard/audit/page.js apps/dashboard/app/dashboard/logs/page.js
+          git commit -m "refactor: use canonical list query params"
           git push
