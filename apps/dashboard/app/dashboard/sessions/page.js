@@ -405,7 +405,10 @@ export default function SessionsPage() {
               ? `Showing ${resultStart}–${resultEnd} of ${pagination.total} matching sessions`
               : "No matching sessions"}
           </p>
-          <p>Viewer email search uses the complete email address; other context supports partial search.</p>
+          <p>
+            Viewer email search uses the complete email address; other context supports partial
+            search.
+          </p>
         </div>
       </Surface>
 

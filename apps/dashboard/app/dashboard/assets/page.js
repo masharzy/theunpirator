@@ -194,12 +194,16 @@ export default function AssetsPage() {
                   <div className="mt-5 border-t border-[#edf0e9] pt-4 text-xs text-[#7b8574]">
                     <p>Created at: {new Date(item.createdAt).toLocaleString()}</p>
                     {item.updatedAt && item.updatedAt !== item.createdAt && (
-                      <p className="mt-1">Updated at: {new Date(item.updatedAt).toLocaleString()}</p>
+                      <p className="mt-1">
+                        Updated at: {new Date(item.updatedAt).toLocaleString()}
+                      </p>
                     )}
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate font-mono text-[10px] text-[#9aa292]">{item.id}</p>
+                    <p className="min-w-0 truncate font-mono text-[10px] text-[#9aa292]">
+                      {item.id}
+                    </p>
                     <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#536b31]">
                       Open <ArrowRight size={13} />
                     </span>

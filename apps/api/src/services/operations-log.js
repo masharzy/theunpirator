@@ -185,7 +185,8 @@ export function buildOperationLogQueries(tenantId, query) {
   `;
 
   const offset = (query.page - 1) * query.limit;
-  const order = query.sort === "oldest" ? sql`"createdAt" ASC, id ASC` : sql`"createdAt" DESC, id DESC`;
+  const order =
+    query.sort === "oldest" ? sql`"createdAt" ASC, id ASC` : sql`"createdAt" DESC, id DESC`;
   return {
     rows: sql`
       SELECT *

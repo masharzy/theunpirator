@@ -1,19 +1,5 @@
 import { Router } from "express";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  gte,
-  ilike,
-  inArray,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { assets, devices, endUsers, playbackSessions, sites } from "@unpirator/db/schema";
 import {
   decryptViewerEmail,
@@ -64,12 +50,7 @@ function sessionStatusCondition(status, now, heartbeatCutoff) {
   return null;
 }
 
-export function sessionConsoleRouter({
-  db,
-  config,
-  dashboardAuth,
-  requireTenantAdmin,
-}) {
+export function sessionConsoleRouter({ db, config, dashboardAuth, requireTenantAdmin }) {
   const router = Router();
 
   router.get("/sessions", dashboardAuth, requireTenantAdmin, async (req, res, next) => {
@@ -81,7 +62,9 @@ export function sessionConsoleRouter({
       await reconcileExpiredSessions(db, req.tenantId, now);
 
       const query = parseListQuery(req.query, { defaultLimit: 25, maxLimit: 100 });
-      const requestedStatus = String(req.query.status || "all").trim().toLowerCase();
+      const requestedStatus = String(req.query.status || "all")
+        .trim()
+        .toLowerCase();
       const status = STATUS_VALUES.has(requestedStatus) ? requestedStatus : "all";
       const viewerIds = query.search
         ? await viewerIdsForEmailSearch(db, req.tenantId, query.search, config)
@@ -199,10 +182,7 @@ export function sessionConsoleRouter({
           .select({ value: count() })
           .from(playbackSessions)
           .where(
-            and(
-              eq(playbackSessions.tenantId, req.tenantId),
-              eq(playbackSessions.status, "ended"),
-            ),
+            and(eq(playbackSessions.tenantId, req.tenantId), eq(playbackSessions.status, "ended")),
           ),
         db
           .select({ value: count() })

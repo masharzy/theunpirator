@@ -13,7 +13,9 @@ export function assetConsoleRouter({ db, requireTenantDeveloper }) {
     try {
       const query = parseListQuery(req.query, { defaultLimit: 24, maxLimit: 96 });
       const filters = [eq(assets.tenantId, req.tenantId)];
-      const status = String(req.query.status || "all").trim().toLowerCase();
+      const status = String(req.query.status || "all")
+        .trim()
+        .toLowerCase();
       if (status !== "all") filters.push(eq(assets.status, status));
       if (query.from) filters.push(gte(assets.createdAt, query.from));
       if (query.to) filters.push(lte(assets.createdAt, query.to));

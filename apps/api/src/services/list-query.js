@@ -27,17 +27,9 @@ function dateValue(value, field) {
 }
 
 export function hasListQuery(input = {}) {
-  return [
-    "page",
-    "limit",
-    "pageSize",
-    "search",
-    "q",
-    "status",
-    "sort",
-    "from",
-    "to",
-  ].some((key) => input[key] != null && input[key] !== "");
+  return ["page", "limit", "pageSize", "search", "q", "status", "sort", "from", "to"].some(
+    (key) => input[key] != null && input[key] !== "",
+  );
 }
 
 export function parseListQuery(
@@ -57,11 +49,17 @@ export function parseListQuery(
   });
   const search = String(input.search ?? input.q ?? "").trim();
   if (search.length > maxSearch) {
-    throw validationError(`Search must be ${maxSearch} characters or fewer`, "search", search.length);
+    throw validationError(
+      `Search must be ${maxSearch} characters or fewer`,
+      "search",
+      search.length,
+    );
   }
 
   const allowedSorts = sortValues instanceof Set ? sortValues : new Set(sortValues);
-  const sort = String(input.sort || defaultSort).trim().toLowerCase();
+  const sort = String(input.sort || defaultSort)
+    .trim()
+    .toLowerCase();
   if (!allowedSorts.has(sort)) throw validationError("Invalid sort", "sort", sort);
 
   const from = dateValue(input.from, "from");
