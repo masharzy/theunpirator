@@ -2,27 +2,40 @@ import { describe, expect, it } from "vitest";
 import { describeOperationEvent, parseOperationLogQuery } from "../src/services/operations-log.js";
 
 describe("operations log", () => {
-  it("normalizes server-side filters and pagination", () => {
+  it("normalizes canonical server-side filters and pagination", () => {
     expect(
       parseOperationLogQuery({
-        q: "  playback  ",
+        search: "  playback  ",
         category: "usage",
         level: "info",
         page: "2",
-        pageSize: "50",
+        limit: "50",
       }),
-    ).toEqual({
-      q: "playback",
+    ).toMatchObject({
+      search: "playback",
       category: "usage",
       level: "info",
       page: 2,
-      pageSize: 50,
+      limit: 50,
+      sort: "newest",
+      from: null,
+      to: null,
+    });
+  });
+
+  it("keeps q and pageSize as backward-compatible aliases", () => {
+    expect(parseOperationLogQuery({ q: " gateway ", pageSize: "40" })).toMatchObject({
+      search: "gateway",
+      page: 1,
+      limit: 40,
+      category: "all",
+      level: "all",
     });
   });
 
   it("rejects unsupported filters", () => {
     expect(() => parseOperationLogQuery({ category: "admin" })).toThrow("Invalid log filters");
-    expect(() => parseOperationLogQuery({ pageSize: "500" })).toThrow("Invalid log filters");
+    expect(() => parseOperationLogQuery({ limit: "500" })).toThrow("Invalid log filters");
   });
 
   it("turns usage telemetry into human-readable operations", () => {
