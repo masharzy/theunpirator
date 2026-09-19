@@ -96,9 +96,7 @@ export default function AuditPage() {
     api(endpoint, { signal: controller.signal })
       .then((response) => {
         setItems(response.items || []);
-        setPagination(
-          response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 },
-        );
+        setPagination(response.pagination || { page, pageSize: 25, total: 0, totalPages: 1 });
         setSummary(response.summary || { total: 0, last24Hours: 0, actorCount: 0 });
       })
       .catch((failure) => {
@@ -131,7 +129,12 @@ export default function AuditPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Audit entries" value={summary.total} hint="Workspace history" icon={Activity} />
+        <Metric
+          label="Audit entries"
+          value={summary.total}
+          hint="Workspace history"
+          icon={Activity}
+        />
         <Metric
           label="Last 24 hours"
           value={summary.last24Hours}
