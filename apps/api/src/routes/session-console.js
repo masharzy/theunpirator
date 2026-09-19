@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, asc, count, desc, eq, gt, gte, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { assets, devices, endUsers, playbackSessions, sites } from "@unpirator/db/schema";
 import {
   decryptViewerEmail,
@@ -31,18 +31,19 @@ async function viewerIdsForEmailSearch(db, tenantId, term, config) {
 }
 
 function sessionStatusCondition(status, now, heartbeatCutoff) {
+  const activityAt = sql`COALESCE(${playbackSessions.lastHeartbeatAt}, ${playbackSessions.startedAt})`;
   if (status === "active") {
     return and(
       eq(playbackSessions.status, "active"),
       gt(playbackSessions.expiresAt, now),
-      gte(playbackSessions.lastHeartbeatAt, heartbeatCutoff),
+      sql`${activityAt} >= ${heartbeatCutoff}`,
     );
   }
   if (status === "idle") {
     return and(
       eq(playbackSessions.status, "active"),
       gt(playbackSessions.expiresAt, now),
-      lt(playbackSessions.lastHeartbeatAt, heartbeatCutoff),
+      sql`${activityAt} < ${heartbeatCutoff}`,
     );
   }
   if (status === "ended") return eq(playbackSessions.status, "ended");
