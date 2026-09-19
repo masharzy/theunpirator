@@ -1,16 +1,10 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { parseListQuery } from "./list-query.js";
 
-const querySchema = z
-  .object({
-    q: z.string().trim().max(160).default(""),
-    category: z
-      .enum(["all", "workspace", "access", "content", "developer", "billing"])
-      .default("all"),
-    page: z.coerce.number().int().min(1).max(10_000).default(1),
-    pageSize: z.coerce.number().int().min(10).max(100).default(25),
-  })
-  .strict();
+const categorySchema = z
+  .enum(["all", "workspace", "access", "content", "developer", "billing"])
+  .default("all");
 
 const actionCopy = {
   WORKSPACE_SETTINGS_CHANGED: {
@@ -151,13 +145,21 @@ function fallbackTarget(row) {
 }
 
 export function parseAuditQuery(input) {
-  const result = querySchema.safeParse(input);
-  if (result.success) return result.data;
-  const error = new Error("Invalid audit filters");
-  error.code = "VALIDATION_ERROR";
-  error.status = 400;
-  error.details = result.error.flatten();
-  throw error;
+  try {
+    const list = parseListQuery(input, { maxSearch: 160 });
+    const category = categorySchema.parse(input.category);
+    return { ...list, category };
+  } catch (cause) {
+    if (cause?.code === "VALIDATION_ERROR") {
+      cause.message = "Invalid audit filters";
+      throw cause;
+    }
+    const error = new Error("Invalid audit filters");
+    error.code = "VALIDATION_ERROR";
+    error.status = 400;
+    error.details = cause?.flatten?.() || null;
+    throw error;
+  }
 }
 
 export function describeAuditEntry(row) {
@@ -236,8 +238,8 @@ function categoryFilter(category) {
 }
 
 export function buildAuditQueries(tenantId, query) {
-  const pattern = `%${query.q}%`;
-  const search = query.q
+  const pattern = `%${query.search}%`;
+  const search = query.search
     ? sql`AND (
         al.action ILIKE ${pattern}
         OR COALESCE(ac.email, '') ILIKE ${pattern}
@@ -256,6 +258,8 @@ export function buildAuditQueries(tenantId, query) {
       )`
     : sql``;
   const category = categoryFilter(query.category);
+  const from = query.from ? sql`AND al.created_at >= ${query.from}` : sql``;
+  const to = query.to ? sql`AND al.created_at <= ${query.to}` : sql``;
   const joins = sql`
     FROM audit_logs al
     LEFT JOIN accounts ac ON ac.id = al.actor_account_id
@@ -287,8 +291,14 @@ export function buildAuditQueries(tenantId, query) {
     WHERE al.tenant_id = ${tenantId}
       ${category}
       ${search}
+      ${from}
+      ${to}
   `;
-  const offset = (query.page - 1) * query.pageSize;
+  const offset = (query.page - 1) * query.limit;
+  const order =
+    query.sort === "oldest"
+      ? sql`al.created_at ASC, al.id ASC`
+      : sql`al.created_at DESC, al.id DESC`;
 
   return {
     rows: sql`
@@ -313,8 +323,8 @@ export function buildAuditQueries(tenantId, query) {
         al.ip,
         al.created_at AS "createdAt"
       ${joins}
-      ORDER BY al.created_at DESC, al.id DESC
-      LIMIT ${query.pageSize}
+      ORDER BY ${order}
+      LIMIT ${query.limit}
       OFFSET ${offset}
     `,
     count: sql`
