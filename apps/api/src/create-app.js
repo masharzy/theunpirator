@@ -41,6 +41,7 @@ import { webhooksRouter } from "./routes/webhooks.js";
 import { publicRouter } from "./routes/public.js";
 import { integrationHealthRouter } from "./routes/integration-health.js";
 import { operationsLogsRouter } from "./routes/operations-logs.js";
+import { auditRouter } from "./routes/audit.js";
 
 export function createApp(overrides = {}) {
   const config = overrides.config || loadConfig();
@@ -190,6 +191,13 @@ export function createApp(overrides = {}) {
     auth,
     csrfGuard,
     operationsLogsRouter({ db, requireTenantDeveloper: tenantDeveloper }),
+  );
+
+  app.use(
+    "/v1/audit",
+    auth,
+    csrfGuard,
+    auditRouter({ db, requireTenantAdmin: tenantAdmin }),
   );
 
   app.use(
