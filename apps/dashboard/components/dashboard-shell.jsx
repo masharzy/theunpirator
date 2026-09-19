@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useModalA11y } from "@/components/console-kit";
 import { useAuth } from "@/components/auth-provider";
 
 const groups = [
@@ -92,6 +93,7 @@ export function DashboardShell({ children }) {
   const [billing, setBilling] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [usage, setUsage] = useState(null);
+  const mobileNavRef = useModalA11y(menuOpen, () => setMenuOpen(false));
 
   const activeMembership = useMemo(
     () => (auth?.memberships || []).find((m) => m.tenantId === auth?.activeTenantId),
@@ -194,7 +196,8 @@ export function DashboardShell({ children }) {
                     key={href}
                     href={href}
                     prefetch={false}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-[#172014] font-semibold text-white shadow-sm" : "text-[#5d6857] hover:bg-[#f1f4eb] hover:text-[#1f291c]"}`}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9aae7a] focus-visible:ring-offset-2 ${active ? "bg-[#172014] font-semibold text-white shadow-sm" : "text-[#5d6857] hover:bg-[#f1f4eb] hover:text-[#1f291c]"}`}
                   >
                     <Icon size={16} />
                     {name}
@@ -214,6 +217,12 @@ export function DashboardShell({ children }) {
 
   return (
     <div className="min-h-screen bg-[#f2f4ed] lg:grid lg:grid-cols-[270px_1fr]">
+      <a
+        href="#dashboard-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-[#172014] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to dashboard content
+      </a>
       {auth?.impersonation && (
         <div className="fixed inset-x-0 top-0 z-[70] flex items-center justify-center gap-4 bg-[#9f3024] px-4 py-3 text-sm font-semibold text-white shadow-xl">
           You are viewing this workspace as Platform Support
@@ -235,7 +244,15 @@ export function DashboardShell({ children }) {
             className="absolute inset-0 bg-black/35"
             onClick={() => setMenuOpen(false)}
           />
-          <aside className="relative h-full w-[86%] max-w-[320px] overflow-y-auto bg-white p-5 shadow-2xl">
+          <aside
+            id="mobile-dashboard-navigation"
+            ref={mobileNavRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workspace navigation"
+            tabIndex={-1}
+            className="relative h-full w-[86%] max-w-[320px] overflow-y-auto bg-white p-5 shadow-2xl outline-none"
+          >
             <button
               aria-label="Close navigation"
               className="absolute right-4 top-4 rounded-lg border p-2"
@@ -251,7 +268,9 @@ export function DashboardShell({ children }) {
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[#dde3d5] bg-[#f8faf4]/95 px-4 py-3 backdrop-blur md:px-8">
           <button
             aria-label="Open navigation"
-            className="rounded-xl border border-[#dce2d4] bg-white p-2 lg:hidden"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-dashboard-navigation"
+            className="cursor-pointer rounded-xl border border-[#dce2d4] bg-white p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9aae7a] focus-visible:ring-offset-2 lg:hidden"
             onClick={() => setMenuOpen(true)}
           >
             <Menu size={18} />
@@ -334,7 +353,7 @@ export function DashboardShell({ children }) {
             </Link>
           </div>
         </header>
-        <main className="p-4 md:p-8 lg:p-10">
+        <main id="dashboard-main" tabIndex={-1} className="p-4 outline-none md:p-8 lg:p-10">
           {auth?.account && !auth.account.emailVerified && (
             <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
               <span>
