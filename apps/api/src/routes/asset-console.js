@@ -71,7 +71,10 @@ export function assetConsoleRouter({ db, cache, requireTenantDeveloper }) {
 
           const refs = rows.length
             ? await db
-                .select({ id: assetConnectionRefs.id, connectionId: assetConnectionRefs.connectionId })
+                .select({
+                  id: assetConnectionRefs.id,
+                  connectionId: assetConnectionRefs.connectionId,
+                })
                 .from(assetConnectionRefs)
                 .where(
                   inArray(

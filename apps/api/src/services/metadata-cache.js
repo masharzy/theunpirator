@@ -4,7 +4,10 @@ const PREFIX = "unpirator:metadata:v1";
 const VERSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function digest(value) {
-  return createHash("sha256").update(String(value || "default")).digest("base64url").slice(0, 24);
+  return createHash("sha256")
+    .update(String(value || "default"))
+    .digest("base64url")
+    .slice(0, 24);
 }
 
 function scopeKey(scope, namespace) {

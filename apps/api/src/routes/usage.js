@@ -50,7 +50,9 @@ export function usageRouter({ db, cache, dashboardAuth, requireTenantViewer }) {
           const fallback = calendarPeriod(now);
           const periodStart = subscription?.periodStart || fallback.start;
           const periodEnd = subscription?.periodEnd || fallback.end;
-          const quotaContext = subscription ? await getActiveQuotaContext(db, req.tenantId, now) : null;
+          const quotaContext = subscription
+            ? await getActiveQuotaContext(db, req.tenantId, now)
+            : null;
           const [rows, egressRows, siteRows, assetRows, activeRows, rollups] = await Promise.all([
             db
               .select({
