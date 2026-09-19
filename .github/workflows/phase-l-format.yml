@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
 
+# Temporary branch-only formatter used before the single main commit.
 jobs:
   format:
     runs-on: ubuntu-latest
