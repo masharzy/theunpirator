@@ -28,13 +28,17 @@ export function auditRouter({ db, requireTenantAdmin }) {
     try {
       const query = parseAuditQuery(req.query);
       const statements = buildAuditQueries(req.tenantId, query);
-      const [rows, countRows, summaryRows] = await Promise.all([
-        db.execute(statements.rows),
+      const [countRows, summaryRows] = await Promise.all([
         db.execute(statements.count),
         db.execute(statements.summary),
       ]);
       const total = Number(countRows[0]?.total || 0);
       const pagination = paginationMeta({ page: query.page, limit: query.limit, total });
+      const rowStatement =
+        pagination.page === query.page
+          ? statements.rows
+          : buildAuditQueries(req.tenantId, { ...query, page: pagination.page }).rows;
+      const rows = await db.execute(rowStatement);
       const summary = summaryRows[0] || {};
 
       const items = rows.map((row) => {
