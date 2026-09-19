@@ -142,9 +142,12 @@ export default function BillingPage() {
                       Current period
                     </p>
                     <p className="mt-1 text-sm font-medium text-[#34402e]">
-                      {dateOnly(activeSubscription.periodStart)} → {dateOnly(activeSubscription.periodEnd)}
+                      {dateOnly(activeSubscription.periodStart)} →{" "}
+                      {dateOnly(activeSubscription.periodEnd)}
                     </p>
-                    <p className="mt-1 text-xs text-[#899283]">Renew from Plan before access ends.</p>
+                    <p className="mt-1 text-xs text-[#899283]">
+                      Renew from Plan before access ends.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -182,9 +185,12 @@ export default function BillingPage() {
                     <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#8a7a45]">
                       Payment review
                     </p>
-                    <h2 className="mt-2 text-xl font-semibold text-[#3d432f]">{pending.planName}</h2>
+                    <h2 className="mt-2 text-xl font-semibold text-[#3d432f]">
+                      {pending.planName}
+                    </h2>
                     <p className="mt-2 text-sm text-[#6f745f]">
-                      {money(pending.amountMinor, pending.currency)} · Transaction {pending.transactionId}
+                      {money(pending.amountMinor, pending.currency)} · Transaction{" "}
+                      {pending.transactionId}
                     </p>
                     <p className="mt-1 text-xs text-[#8a8d7d]">
                       Submitted {dateTime(pending.submittedAt)}
@@ -240,7 +246,8 @@ export default function BillingPage() {
                         <StatusPill status={payment.status} />
                       </div>
                       <p className="mt-1.5 text-sm text-[#697363]">
-                        {money(payment.amountMinor, payment.currency)} · Transaction {payment.transactionId}
+                        {money(payment.amountMinor, payment.currency)} · Transaction{" "}
+                        {payment.transactionId}
                       </p>
                       {(payment.rejectionReason || payment.reviewNote) && (
                         <p className="mt-2 text-xs leading-5 text-[#8a7468]">
