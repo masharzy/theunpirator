@@ -26,6 +26,10 @@ function dateValue(value, field) {
   return parsed;
 }
 
+function firstPresent(primary, fallback) {
+  return primary == null || primary === "" ? fallback : primary;
+}
+
 export function hasListQuery(input = {}) {
   return ["page", "limit", "pageSize", "search", "q", "status", "sort", "from", "to"].some(
     (key) => input[key] != null && input[key] !== "",
@@ -43,11 +47,11 @@ export function parseListQuery(
   } = {},
 ) {
   const page = positiveInteger(input.page, 1, { field: "page", max: 1_000_000 });
-  const limit = positiveInteger(input.limit ?? input.pageSize, defaultLimit, {
+  const limit = positiveInteger(firstPresent(input.limit, input.pageSize), defaultLimit, {
     field: "limit",
     max: maxLimit,
   });
-  const search = String(input.search ?? input.q ?? "").trim();
+  const search = String(firstPresent(input.search, input.q) || "").trim();
   if (search.length > maxSearch) {
     throw validationError(
       `Search must be ${maxSearch} characters or fewer`,
