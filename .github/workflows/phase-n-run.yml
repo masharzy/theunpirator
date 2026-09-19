@@ -1,0 +1,49 @@
+name: Phase N runner
+
+on:
+  push:
+    branches:
+      - phase-n-ux
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply polish
+        run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then
+            echo "Bot follow-up run; source is already polished."
+            exit 0
+          fi
+          python .github/scripts/phase-n-polish.py
+      - name: Format dashboard changes
+        run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then exit 0; fi
+          pnpm exec prettier --write apps/dashboard
+      - name: Fast verification
+        run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then exit 0; fi
+          pnpm check:syntax
+          pnpm format:check
+          pnpm lint
+          pnpm --filter @unpirator/dashboard build
+      - name: Commit branch result
+        run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/dashboard
+          git commit -m "feat: finalize dashboard ux and accessibility"
+          git push
