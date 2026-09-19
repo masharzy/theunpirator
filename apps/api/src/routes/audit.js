@@ -4,6 +4,7 @@ import {
   describeAuditEntry,
   parseAuditQuery,
 } from "../services/audit-console.js";
+import { paginationMeta } from "../services/list-query.js";
 
 function redactMetadata(value) {
   if (Array.isArray(value)) return value.map(redactMetadata);
@@ -33,7 +34,7 @@ export function auditRouter({ db, requireTenantAdmin }) {
         db.execute(statements.summary),
       ]);
       const total = Number(countRows[0]?.total || 0);
-      const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+      const pagination = paginationMeta({ page: query.page, limit: query.limit, total });
       const summary = summaryRows[0] || {};
 
       const items = rows.map((row) => {
@@ -58,12 +59,7 @@ export function auditRouter({ db, requireTenantAdmin }) {
 
       res.set("cache-control", "no-store").json({
         items,
-        pagination: {
-          page: query.page,
-          pageSize: query.pageSize,
-          total,
-          totalPages,
-        },
+        pagination,
         summary: {
           total: Number(summary.total || 0),
           last24Hours: Number(summary.last24Hours || 0),
