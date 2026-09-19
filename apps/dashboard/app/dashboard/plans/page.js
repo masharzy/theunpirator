@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Check,
-  Copy,
-  LockKeyhole,
-  ShieldCheck,
-  Sparkles,
-  WalletCards,
-} from "lucide-react";
+import { Check, Copy, LockKeyhole, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -269,13 +262,12 @@ export default function PlansPage() {
                 <StatusPill status={billing.pendingPayment.status} />
               </div>
               <p className="mt-2 text-sm text-[#6f745f]">
-                {billing.pendingPayment.planName} · {money(
-                  billing.pendingPayment.amountMinor,
-                  billing.pendingPayment.currency,
-                )}
+                {billing.pendingPayment.planName} ·{" "}
+                {money(billing.pendingPayment.amountMinor, billing.pendingPayment.currency)}
               </p>
               <p className="mt-1 text-xs text-[#8a8d7d]">
-                Submitted {dateTime(billing.pendingPayment.submittedAt)} · Transaction {billing.pendingPayment.transactionId}
+                Submitted {dateTime(billing.pendingPayment.submittedAt)} · Transaction{" "}
+                {billing.pendingPayment.transactionId}
               </p>
             </div>
             <Link
@@ -300,11 +292,7 @@ export default function PlansPage() {
             <Surface
               key={plan.id}
               className={`relative flex h-full flex-col p-6 ${
-                active
-                  ? "ring-2 ring-[#91a96b]"
-                  : selected
-                    ? "ring-2 ring-[#bdc9ae]"
-                    : ""
+                active ? "ring-2 ring-[#91a96b]" : selected ? "ring-2 ring-[#bdc9ae]" : ""
               }`}
             >
               <div className="flex items-start justify-between gap-4">
