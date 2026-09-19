@@ -14,11 +14,14 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
     try {
       const query = parseOperationLogQuery(req.query);
       const statements = buildOperationLogQueries(req.tenantId, query);
-      const [rows, countRows] = await Promise.all([
-        db.execute(statements.rows),
-        db.execute(statements.count),
-      ]);
+      const countRows = await db.execute(statements.count);
       const total = Number(countRows[0]?.total || 0);
+      const pagination = paginationMeta({ page: query.page, limit: query.limit, total });
+      const rowStatement =
+        pagination.page === query.page
+          ? statements.rows
+          : buildOperationLogQueries(req.tenantId, { ...query, page: pagination.page }).rows;
+      const rows = await db.execute(rowStatement);
       const items = rows.map((row) => {
         const description = describeOperationEvent(row);
         return {
@@ -43,7 +46,7 @@ export function operationsLogsRouter({ db, requireTenantDeveloper }) {
 
       res.set("cache-control", "no-store").json({
         items,
-        pagination: paginationMeta({ page: query.page, limit: query.limit, total }),
+        pagination,
       });
     } catch (error) {
       next(error);
