@@ -1,0 +1,48 @@
+name: Phase K formatter
+
+on:
+  push:
+    branches:
+      - phase-k-work
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.head_commit.message != 'chore: apply phase k prettier output'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec prettier --write
+          apps/api/src/routes/asset-console.js
+          apps/api/src/routes/session-console.js
+          apps/api/src/services/list-query.js
+          apps/api/src/services/operations-log.js
+          apps/dashboard/app/dashboard/assets/page.js
+          apps/dashboard/app/dashboard/sessions/page.js
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/api/src/routes/asset-console.js \
+            apps/api/src/routes/session-console.js \
+            apps/api/src/services/list-query.js \
+            apps/api/src/services/operations-log.js \
+            apps/dashboard/app/dashboard/assets/page.js \
+            apps/dashboard/app/dashboard/sessions/page.js
+          git commit -m "chore: apply phase k prettier output"
+          git push
