@@ -9,11 +9,13 @@ describe("reconcileExpiredSessions", () => {
     await reconcileExpiredSessions({ execute }, "fb4478e3-40c4-46a8-9f83-ead01a188405", now);
 
     const query = execute.mock.calls[0][0];
-    const dateChunk = query.queryChunks.find(
-      (chunk) => chunk?.value === now.toISOString() || chunk?.value instanceof Date,
-    );
+    const dateChunk = query.queryChunks.find((chunk) => {
+      const value = chunk?.value ?? chunk;
+      return value === now.toISOString() || value instanceof Date;
+    });
+    const boundValue = dateChunk?.value ?? dateChunk;
 
-    expect(dateChunk?.value).toBe(now.toISOString());
-    expect(dateChunk?.value).not.toBeInstanceOf(Date);
+    expect(boundValue).toBe(now.toISOString());
+    expect(boundValue).not.toBeInstanceOf(Date);
   });
 });
