@@ -1,10 +1,6 @@
 import { Router } from "express";
 import { and, count, desc, eq, sql } from "drizzle-orm";
-import {
-  parseOrThrow,
-  webhookCreateSchema,
-  webhookUpdateSchema,
-} from "@unpirator/contracts";
+import { parseOrThrow, webhookCreateSchema, webhookUpdateSchema } from "@unpirator/contracts";
 import { encryptJson, randomToken } from "@unpirator/crypto";
 import { webhookDeliveries, webhookEndpoints } from "@unpirator/db/schema";
 import { AppError, notFound } from "../errors.js";
@@ -18,7 +14,10 @@ function parsePagination(query) {
   const page = Math.max(1, Number.parseInt(query.page || "1", 10) || 1);
   const limit = Math.min(
     MAX_DELIVERY_LIMIT,
-    Math.max(1, Number.parseInt(query.limit || String(DEFAULT_DELIVERY_LIMIT), 10) || DEFAULT_DELIVERY_LIMIT),
+    Math.max(
+      1,
+      Number.parseInt(query.limit || String(DEFAULT_DELIVERY_LIMIT), 10) || DEFAULT_DELIVERY_LIMIT,
+    ),
   );
   return { page, limit, offset: (page - 1) * limit };
 }
@@ -344,7 +343,11 @@ export function webhooksRouter({ db, config, dashboardAuth, csrfGuard, requireTe
         .limit(1);
       if (!delivery) throw notFound("Webhook delivery not found");
       if (delivery.status === "delivered")
-        throw new AppError("WEBHOOK_ALREADY_DELIVERED", "Delivered webhooks cannot be retried", 409);
+        throw new AppError(
+          "WEBHOOK_ALREADY_DELIVERED",
+          "Delivered webhooks cannot be retried",
+          409,
+        );
 
       await db
         .update(webhookDeliveries)
