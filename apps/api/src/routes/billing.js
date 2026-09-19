@@ -11,6 +11,7 @@ import {
 import { getEntitlements } from "../services/entitlements.js";
 import { AppError, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
+import { cachedGlobalJson } from "../services/metadata-cache.js";
 
 const paymentSchema = z
   .object({
@@ -29,6 +30,7 @@ function normalizeTransactionId(value) {
 
 export function billingRouter({
   db,
+  cache,
   dashboardAuth,
   csrfGuard,
   requireTenantViewer,
@@ -94,29 +96,38 @@ export function billingRouter({
 
   router.get("/plans", async (_req, res, next) => {
     try {
-      const items = await db
-        .select({
-          id: billingPlans.id,
-          name: billingPlans.name,
-          description: billingPlans.description,
-          priceMinor: billingPlans.priceMinor,
-          currency: billingPlans.currency,
-          billingInterval: billingPlans.billingInterval,
-          durationDays: billingPlans.durationDays,
-          trialDays: billingPlans.trialDays,
-          badge: billingPlans.badge,
-          entitlements: billingPlans.entitlements,
-        })
-        .from(billingPlans)
-        .where(
-          and(
-            eq(billingPlans.status, "active"),
-            eq(billingPlans.isPublic, true),
-            isNull(billingPlans.archivedAt),
-          ),
-        )
-        .orderBy(billingPlans.sortOrder);
-      res.json({ items });
+      const payload = await cachedGlobalJson({
+        cache,
+        namespace: "billing-plans",
+        key: "public",
+        ttlSeconds: 300,
+        load: async () => {
+          const items = await db
+            .select({
+              id: billingPlans.id,
+              name: billingPlans.name,
+              description: billingPlans.description,
+              priceMinor: billingPlans.priceMinor,
+              currency: billingPlans.currency,
+              billingInterval: billingPlans.billingInterval,
+              durationDays: billingPlans.durationDays,
+              trialDays: billingPlans.trialDays,
+              badge: billingPlans.badge,
+              entitlements: billingPlans.entitlements,
+            })
+            .from(billingPlans)
+            .where(
+              and(
+                eq(billingPlans.status, "active"),
+                eq(billingPlans.isPublic, true),
+                isNull(billingPlans.archivedAt),
+              ),
+            )
+            .orderBy(billingPlans.sortOrder);
+          return { items };
+        },
+      });
+      res.set("cache-control", "private, no-cache").json(payload);
     } catch (error) {
       next(error);
     }

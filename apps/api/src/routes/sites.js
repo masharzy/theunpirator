@@ -8,42 +8,53 @@ import { writeAudit } from "../services/audit.js";
 import { AppError, notFound } from "../errors.js";
 import { getEntitlements } from "../services/entitlements.js";
 import { normalizeQuotaLimit } from "../services/quotas.js";
+import { cachedTenantJson, invalidateTenantCache } from "../services/metadata-cache.js";
 import {
   domainChallenges,
   verifyFileChallenge,
   verifyMetaChallenge,
 } from "../services/domain-verification.js";
 
-export function sitesRouter({ db, requireTenantAdmin }) {
+export function sitesRouter({ db, cache, requireTenantAdmin }) {
   const router = Router();
   router.use(requireTenantAdmin);
   router.get("/", async (req, res, next) => {
     try {
-      const siteRows = await db.select().from(sites).where(eq(sites.tenantId, req.tenantId));
-      const domainRows = siteRows.length
-        ? await db
-            .select({
-              siteId: siteDomains.siteId,
-              domain: siteDomains.domain,
-              verifiedAt: siteDomains.verifiedAt,
-            })
-            .from(siteDomains)
-            .where(
-              inArray(
-                siteDomains.siteId,
-                siteRows.map((site) => site.id),
-              ),
-            )
-        : [];
-      const verificationBySite = new Map(
-        domainRows.map((domain) => [`${domain.siteId}:${domain.domain}`, domain.verifiedAt]),
-      );
-      res.json({
-        items: siteRows.map((site) => ({
-          ...site,
-          domainVerifiedAt: verificationBySite.get(`${site.id}:${site.domain}`) || null,
-        })),
+      const payload = await cachedTenantJson({
+        cache,
+        tenantId: req.tenantId,
+        namespace: "sites",
+        key: "list",
+        ttlSeconds: 60,
+        load: async () => {
+          const siteRows = await db.select().from(sites).where(eq(sites.tenantId, req.tenantId));
+          const domainRows = siteRows.length
+            ? await db
+                .select({
+                  siteId: siteDomains.siteId,
+                  domain: siteDomains.domain,
+                  verifiedAt: siteDomains.verifiedAt,
+                })
+                .from(siteDomains)
+                .where(
+                  inArray(
+                    siteDomains.siteId,
+                    siteRows.map((site) => site.id),
+                  ),
+                )
+            : [];
+          const verificationBySite = new Map(
+            domainRows.map((domain) => [`${domain.siteId}:${domain.domain}`, domain.verifiedAt]),
+          );
+          return {
+            items: siteRows.map((site) => ({
+              ...site,
+              domainVerifiedAt: verificationBySite.get(`${site.id}:${site.domain}`) || null,
+            })),
+          };
+        },
       });
+      res.set("cache-control", "private, no-cache").json(payload);
     } catch (e) {
       next(e);
     }
@@ -85,6 +96,10 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         });
         return created;
       });
+      await Promise.all([
+        invalidateTenantCache(cache, req.tenantId, "sites"),
+        invalidateTenantCache(cache, req.tenantId, "usage-summary"),
+      ]);
       res.status(201).json({ site });
     } catch (e) {
       next(e);
@@ -177,6 +192,7 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         metadata: { domain: domain.domain, method },
         ip: req.ip,
       });
+      await invalidateTenantCache(cache, req.tenantId, "sites");
       res.json({ domain: { id: domain.id, domain: domain.domain, verifiedAt: domain.verifiedAt } });
     } catch (e) {
       next(e);
@@ -197,6 +213,10 @@ export function sitesRouter({ db, requireTenantAdmin }) {
         targetId: req.params.siteId,
         ip: req.ip,
       });
+      await Promise.all([
+        invalidateTenantCache(cache, req.tenantId, "sites"),
+        invalidateTenantCache(cache, req.tenantId, "usage-summary"),
+      ]);
       res.status(204).end();
     } catch (e) {
       next(e);
