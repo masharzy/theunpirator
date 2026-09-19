@@ -8,6 +8,9 @@ WHERE name IS NULL;
 ALTER TABLE webhook_endpoints
   ALTER COLUMN name SET NOT NULL;
 
+ALTER TABLE webhook_endpoints
+  ALTER COLUMN name SET DEFAULT 'Webhook endpoint';
+
 CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_created_idx
   ON webhook_deliveries (endpoint_id, created_at DESC);
 
