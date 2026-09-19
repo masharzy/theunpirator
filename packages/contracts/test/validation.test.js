@@ -4,6 +4,8 @@ import {
   playbackSessionSchema,
   registerSchema,
   siteCreateSchema,
+  webhookCreateSchema,
+  webhookUpdateSchema,
 } from "../src/index.js";
 
 const viewer = {
@@ -112,6 +114,35 @@ describe("public input validation", () => {
     };
     expect(assetSyncSchema.safeParse(input).success).toBe(true);
     expect(assetSyncSchema.safeParse({ ...input, tenantId: "forged" }).success).toBe(false);
+  });
+
+  it("requires HTTPS and supported webhook events", () => {
+    expect(
+      webhookCreateSchema.safeParse({
+        name: "Production",
+        url: "https://example.com/hooks/unpirator",
+        events: ["playback.started", "playback.revoked"],
+      }).success,
+    ).toBe(true);
+    expect(
+      webhookCreateSchema.safeParse({
+        name: "Production",
+        url: "http://example.com/hooks/unpirator",
+        events: ["playback.started"],
+      }).success,
+    ).toBe(false);
+    expect(
+      webhookCreateSchema.safeParse({
+        name: "Production",
+        url: "https://example.com/hooks/unpirator",
+        events: ["unknown.event"],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires at least one webhook update field", () => {
+    expect(webhookUpdateSchema.safeParse({ enabled: false }).success).toBe(true);
+    expect(webhookUpdateSchema.safeParse({}).success).toBe(false);
   });
 
   it("normalizes email addresses and rejects weak passwords", () => {
