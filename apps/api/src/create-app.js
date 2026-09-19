@@ -193,12 +193,7 @@ export function createApp(overrides = {}) {
     operationsLogsRouter({ db, requireTenantDeveloper: tenantDeveloper }),
   );
 
-  app.use(
-    "/v1/audit",
-    auth,
-    csrfGuard,
-    auditRouter({ db, requireTenantAdmin: tenantAdmin }),
-  );
+  app.use("/v1/audit", auth, csrfGuard, auditRouter({ db, requireTenantAdmin: tenantAdmin }));
 
   app.use(
     "/v1/webhooks",
