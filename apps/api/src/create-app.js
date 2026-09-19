@@ -21,6 +21,7 @@ import { apiKeyAuth } from "./middleware/api-key-auth.js";
 import { createRateLimiter } from "./services/rate-limit.js";
 import { createGatewayControl } from "./services/gateway-control.js";
 import { createPlaybackService } from "./services/playback.js";
+import { invalidateGlobalCache, invalidateTenantCache } from "./services/metadata-cache.js";
 import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./routes/auth.js";
 import { sitesRouter } from "./routes/sites.js";
@@ -39,11 +40,18 @@ import { internalRouter } from "./routes/internal.js";
 import { quotaInternalRouter } from "./routes/quota-internal.js";
 import { billingRouter } from "./routes/billing.js";
 import { workspaceRouter } from "./routes/workspace.js";
+import { workspaceMetadataRouter } from "./routes/workspace-metadata.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { publicRouter } from "./routes/public.js";
 import { integrationHealthRouter } from "./routes/integration-health.js";
 import { operationsLogsRouter } from "./routes/operations-logs.js";
 import { auditRouter } from "./routes/audit.js";
+
+function invalidateAfterSuccess(res, callback) {
+  res.once("finish", () => {
+    if (res.statusCode < 400) void callback();
+  });
+}
 
 export function createApp(overrides = {}) {
   const config = overrides.config || loadConfig();
@@ -99,7 +107,12 @@ export function createApp(overrides = {}) {
     authRouter({ db, config, dashboardAuth: auth, csrfGuard }),
   );
 
-  app.use("/v1/sites", auth, csrfGuard, sitesRouter({ db, requireTenantAdmin: tenantAdmin }));
+  app.use(
+    "/v1/sites",
+    auth,
+    csrfGuard,
+    sitesRouter({ db, cache, requireTenantAdmin: tenantAdmin }),
+  );
   app.use(
     "/v1/assets",
     auth,
@@ -108,8 +121,8 @@ export function createApp(overrides = {}) {
       ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
         ? requireVerifiedEmail(req, res, next)
         : next(),
-    assetConsoleRouter({ db, requireTenantDeveloper: tenantDeveloper }),
-    assetsRouter({ db, config, requireTenantDeveloper: tenantDeveloper }),
+    assetConsoleRouter({ db, cache, requireTenantDeveloper: tenantDeveloper }),
+    assetsRouter({ db, cache, config, requireTenantDeveloper: tenantDeveloper }),
   );
   app.use(
     "/v1/api-keys",
@@ -160,18 +173,37 @@ export function createApp(overrides = {}) {
     csrfGuard,
     viewersRouter({ db, config, requireTenantAdmin: tenantAdmin }),
   );
-  app.use("/v1/usage", usageRouter({ db, dashboardAuth: auth, requireTenantViewer: tenantViewer }));
+  app.use(
+    "/v1/usage",
+    usageRouter({ db, cache, dashboardAuth: auth, requireTenantViewer: tenantViewer }),
+  );
 
   app.use(
     "/v1/billing",
     billingRouter({
       db,
+      cache,
       dashboardAuth: auth,
       csrfGuard,
       requireTenantViewer: tenantViewer,
       requireTenantOwner: tenantOwner,
       requireVerifiedEmail,
     }),
+  );
+
+  app.use(
+    "/v1/workspace/settings",
+    auth,
+    csrfGuard,
+    (req, res, next) => {
+      if (req.method === "PATCH") {
+        invalidateAfterSuccess(res, () =>
+          invalidateTenantCache(cache, req.tenantId, "workspace-settings"),
+        );
+      }
+      next();
+    },
+    workspaceMetadataRouter({ db, cache, requireTenantViewer: tenantViewer }),
   );
 
   app.use(
@@ -214,6 +246,13 @@ export function createApp(overrides = {}) {
       requireTenantDeveloper: tenantDeveloper,
     }),
   );
+
+  app.use("/v1/admin/commerce/plans", (req, res, next) => {
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      invalidateAfterSuccess(res, () => invalidateGlobalCache(cache, "billing-plans"));
+    }
+    next();
+  });
 
   app.use(
     "/v1/admin/commerce",

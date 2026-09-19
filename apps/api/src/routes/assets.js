@@ -9,48 +9,59 @@ import { getEntitlements, restrictedFeatureEnabled } from "../services/entitleme
 import { normalizeQuotaLimit } from "../services/quotas.js";
 import { AppError, forbidden, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
+import { cachedTenantJson, invalidateTenantCache } from "../services/metadata-cache.js";
 
-export function assetsRouter({ db, config, requireTenantDeveloper }) {
+export function assetsRouter({ db, cache, config, requireTenantDeveloper }) {
   const router = Router();
   router.use(requireTenantDeveloper);
 
   router.get("/", async (req, res, next) => {
     try {
-      const rows = await db
-        .select({
-          id: assets.id,
-          siteId: assets.siteId,
-          title: assets.title,
-          provider: assets.provider,
-          providerReference: assets.providerReference,
-          allowedHosts: assets.allowedHosts,
-          status: assets.status,
-          createdAt: assets.createdAt,
-          updatedAt: assets.updatedAt,
-        })
-        .from(assets)
-        .where(eq(assets.tenantId, req.tenantId))
-        .orderBy(desc(assets.createdAt));
+      const payload = await cachedTenantJson({
+        cache,
+        tenantId: req.tenantId,
+        namespace: "assets",
+        key: "legacy-list",
+        ttlSeconds: 30,
+        load: async () => {
+          const rows = await db
+            .select({
+              id: assets.id,
+              siteId: assets.siteId,
+              title: assets.title,
+              provider: assets.provider,
+              providerReference: assets.providerReference,
+              allowedHosts: assets.allowedHosts,
+              status: assets.status,
+              createdAt: assets.createdAt,
+              updatedAt: assets.updatedAt,
+            })
+            .from(assets)
+            .where(eq(assets.tenantId, req.tenantId))
+            .orderBy(desc(assets.createdAt));
 
-      let refs = [];
-      if (rows.length) {
-        refs = await db
-          .select()
-          .from(assetConnectionRefs)
-          .where(
-            inArray(
-              assetConnectionRefs.id,
-              rows.map((row) => row.id),
-            ),
-          );
-      }
-      const refMap = new Map(refs.map((row) => [row.id, row.connectionId]));
-      res.json({
-        items: rows.map((row) => ({
-          ...row,
-          connectionId: refMap.get(row.id) || null,
-        })),
+          let refs = [];
+          if (rows.length) {
+            refs = await db
+              .select()
+              .from(assetConnectionRefs)
+              .where(
+                inArray(
+                  assetConnectionRefs.id,
+                  rows.map((row) => row.id),
+                ),
+              );
+          }
+          const refMap = new Map(refs.map((row) => [row.id, row.connectionId]));
+          return {
+            items: rows.map((row) => ({
+              ...row,
+              connectionId: refMap.get(row.id) || null,
+            })),
+          };
+        },
       });
+      res.set("cache-control", "private, no-cache").json(payload);
     } catch (error) {
       next(error);
     }
@@ -80,49 +91,59 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
 
   router.get("/:assetId", async (req, res, next) => {
     try {
-      const [asset] = await db
-        .select({
-          id: assets.id,
-          siteId: assets.siteId,
-          title: assets.title,
-          provider: assets.provider,
-          providerReference: assets.providerReference,
-          allowedHosts: assets.allowedHosts,
-          status: assets.status,
-          createdAt: assets.createdAt,
-          updatedAt: assets.updatedAt,
-        })
-        .from(assets)
-        .where(and(eq(assets.id, req.params.assetId), eq(assets.tenantId, req.tenantId)))
-        .limit(1);
-      if (!asset) throw notFound();
+      const payload = await cachedTenantJson({
+        cache,
+        tenantId: req.tenantId,
+        namespace: "assets",
+        key: `detail:${req.params.assetId}`,
+        ttlSeconds: 60,
+        load: async () => {
+          const [asset] = await db
+            .select({
+              id: assets.id,
+              siteId: assets.siteId,
+              title: assets.title,
+              provider: assets.provider,
+              providerReference: assets.providerReference,
+              allowedHosts: assets.allowedHosts,
+              status: assets.status,
+              createdAt: assets.createdAt,
+              updatedAt: assets.updatedAt,
+            })
+            .from(assets)
+            .where(and(eq(assets.id, req.params.assetId), eq(assets.tenantId, req.tenantId)))
+            .limit(1);
+          if (!asset) throw notFound();
 
-      const [ref] = await db
-        .select({ connectionId: assetConnectionRefs.connectionId })
-        .from(assetConnectionRefs)
-        .where(eq(assetConnectionRefs.id, asset.id))
-        .limit(1);
+          const [ref] = await db
+            .select({ connectionId: assetConnectionRefs.connectionId })
+            .from(assetConnectionRefs)
+            .where(eq(assetConnectionRefs.id, asset.id))
+            .limit(1);
 
-      let connection = null;
-      if (ref?.connectionId) {
-        [connection] = await db
-          .select({
-            id: providerConnections.id,
-            name: providerConnections.name,
-            provider: providerConnections.provider,
-            status: providerConnections.status,
-          })
-          .from(providerConnections)
-          .where(
-            and(
-              eq(providerConnections.id, ref.connectionId),
-              eq(providerConnections.tenantId, req.tenantId),
-            ),
-          )
-          .limit(1);
-      }
+          let connection = null;
+          if (ref?.connectionId) {
+            [connection] = await db
+              .select({
+                id: providerConnections.id,
+                name: providerConnections.name,
+                provider: providerConnections.provider,
+                status: providerConnections.status,
+              })
+              .from(providerConnections)
+              .where(
+                and(
+                  eq(providerConnections.id, ref.connectionId),
+                  eq(providerConnections.tenantId, req.tenantId),
+                ),
+              )
+              .limit(1);
+          }
 
-      res.json({ asset: { ...asset, connectionId: ref?.connectionId || null }, connection });
+          return { asset: { ...asset, connectionId: ref?.connectionId || null }, connection };
+        },
+      });
+      res.set("cache-control", "private, no-cache").json(payload);
     } catch (error) {
       next(error);
     }
@@ -228,6 +249,10 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
         });
         return created;
       });
+      await Promise.all([
+        invalidateTenantCache(cache, req.tenantId, "assets"),
+        invalidateTenantCache(cache, req.tenantId, "usage-summary"),
+      ]);
       res.status(201).json({ asset });
     } catch (error) {
       next(error);
@@ -313,6 +338,7 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
         return row;
       });
 
+      await invalidateTenantCache(cache, req.tenantId, "assets");
       res.json({ asset: updated });
     } catch (error) {
       next(error);
@@ -334,6 +360,10 @@ export function assetsRouter({ db, config, requireTenantDeveloper }) {
         targetId: req.params.assetId,
         ip: req.ip,
       });
+      await Promise.all([
+        invalidateTenantCache(cache, req.tenantId, "assets"),
+        invalidateTenantCache(cache, req.tenantId, "usage-summary"),
+      ]);
       res.status(204).end();
     } catch (error) {
       next(error);
