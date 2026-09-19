@@ -59,12 +59,6 @@ function safeDate(value) {
   return date.toLocaleString();
 }
 
-function shortId(value) {
-  if (!value) return "Unknown";
-  const text = String(value);
-  return text.length > 15 ? `${text.slice(0, 8)}…${text.slice(-5)}` : text;
-}
-
 function browserName(userAgent = "") {
   if (/Edg\//i.test(userAgent)) return "Edge";
   if (/OPR\//i.test(userAgent)) return "Opera";
@@ -455,12 +449,6 @@ export default function SessionsPage() {
                           <p className="truncate text-sm font-semibold text-[#263120]">
                             {session.viewerEmail || "Viewer email unavailable"}
                           </p>
-                          <p
-                            className="mt-1 font-mono text-[10px] text-[#929b8b]"
-                            title={session.id}
-                          >
-                            Session {shortId(session.id)}
-                          </p>
                           <div className="mt-2 lg:hidden">
                             <SessionStatus status={session.status} />
                           </div>
@@ -479,7 +467,7 @@ export default function SessionsPage() {
                         </Link>
                       ) : (
                         <p className="truncate text-sm font-semibold text-[#35432f]">
-                          Asset {shortId(session.assetId)}
+                          Content unavailable
                         </p>
                       )}
                       <p className="mt-1 truncate text-xs text-[#7f8978]">
@@ -548,6 +536,12 @@ export default function SessionsPage() {
                       Session details
                     </summary>
                     <div className="grid gap-3 border-t border-[#edf0e9] px-3.5 py-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <p className="text-[#929b8b]">Session ID</p>
+                        <p className="mt-1 break-all font-mono text-[10px] text-[#46513f]">
+                          {session.id}
+                        </p>
+                      </div>
                       <div>
                         <p className="text-[#929b8b]">Started</p>
                         <p className="mt-1 text-[#46513f]">{safeDate(session.startedAt)}</p>

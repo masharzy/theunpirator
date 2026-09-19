@@ -1,7 +1,83 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, CircleAlert } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { ArrowRight, CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
+
+export function useModalA11y(open, onClose) {
+  const dialogRef = useRef(null);
+  const lastActiveRef = useRef(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    lastActiveRef.current = document.activeElement;
+    document.body.style.overflow = "hidden";
+
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "summary",
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(",");
+
+    const focusFirst = () => {
+      const first = dialog.querySelector(focusableSelector);
+      (first || dialog).focus({ preventScroll: true });
+    };
+    const frame = window.requestAnimationFrame(focusFirst);
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current?.();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll(focusableSelector)].filter(
+        (element) => !element.hasAttribute("disabled") && element.getClientRects().length > 0,
+      );
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      const previous = lastActiveRef.current;
+      if (previous && typeof previous.focus === "function") {
+        window.requestAnimationFrame(() => previous.focus({ preventScroll: true }));
+      }
+    };
+  }, [open]);
+
+  return dialogRef;
+}
 
 export function PageHeader({ eyebrow, title, description, action }) {
   return (
@@ -104,7 +180,17 @@ export function ProgressMeter({ label, used = 0, limit, format = (v) => String(v
           {format(numericUsed)} {finite ? `/ ${format(numericLimit)}` : "· No cap"}
         </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf0e8]">
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf0e8]"
+        role={finite ? "progressbar" : undefined}
+        aria-label={finite ? label : undefined}
+        aria-valuemin={finite ? 0 : undefined}
+        aria-valuemax={finite ? numericLimit : undefined}
+        aria-valuenow={finite ? Math.min(numericUsed, numericLimit) : undefined}
+        aria-valuetext={
+          finite ? `${format(numericUsed)} used of ${format(numericLimit)}` : undefined
+        }
+      >
         <div
           className={`h-full rounded-full ${barClass}`}
           style={{ width: finite ? `${pct}%` : "0%" }}
@@ -135,13 +221,47 @@ export function EmptyState({ title, description, href, action = "Get started" })
         {href && (
           <Link
             href={href}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#172014] px-4 py-2.5 text-sm font-semibold text-white"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#172014] px-4 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8fa868] focus-visible:ring-offset-2"
           >
             {action}
             <ArrowRight size={15} />
           </Link>
         )}
       </div>
+    </div>
+  );
+}
+
+export function LoadingPanel({ label = "Loading workspace data…" }) {
+  return (
+    <Surface className="p-6" aria-busy="true">
+      <div role="status" aria-live="polite" className="space-y-3">
+        <span className="sr-only">{label}</span>
+        <div className="h-4 w-40 animate-pulse rounded bg-[#e9ede4]" />
+        <div className="h-3 w-full max-w-xl animate-pulse rounded bg-[#f0f3ec]" />
+        <div className="h-3 w-2/3 max-w-md animate-pulse rounded bg-[#f0f3ec]" />
+      </div>
+    </Surface>
+  );
+}
+
+export function ErrorPanel({ message, onRetry }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <span>{message}</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2"
+        >
+          <RefreshCw size={14} /> Retry
+        </button>
+      )}
     </div>
   );
 }
