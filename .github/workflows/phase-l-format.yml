@@ -1,0 +1,45 @@
+name: Phase L format
+
+on:
+  push:
+    branches:
+      - phase-l-cache
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format Phase L files
+        run: >-
+          pnpm exec prettier --write
+          apps/api/src/create-app.js
+          apps/api/src/routes/sites.js
+          apps/api/src/routes/asset-console.js
+          apps/api/src/routes/assets.js
+          apps/api/src/routes/usage.js
+          apps/api/src/routes/billing.js
+          apps/api/src/routes/workspace-metadata.js
+          apps/api/src/services/metadata-cache.js
+          apps/api/test/metadata-cache.test.js
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/src/create-app.js apps/api/src/routes/sites.js apps/api/src/routes/asset-console.js apps/api/src/routes/assets.js apps/api/src/routes/usage.js apps/api/src/routes/billing.js apps/api/src/routes/workspace-metadata.js apps/api/src/services/metadata-cache.js apps/api/test/metadata-cache.test.js
+          git commit -m "chore: apply phase l prettier output"
+          git push
