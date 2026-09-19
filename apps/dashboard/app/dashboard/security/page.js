@@ -16,7 +16,14 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { EmptyState, PageHeader, Stat, StatusPill, Surface } from "@/components/console-kit";
+import {
+  EmptyState,
+  PageHeader,
+  Stat,
+  StatusPill,
+  Surface,
+  useModalA11y,
+} from "@/components/console-kit";
 
 const PAGE_SIZE = 25;
 const SEVERITY_OPTIONS = ["all", "critical", "high", "medium", "low", "info"];
@@ -104,6 +111,7 @@ function EventDrawer({ selectedEvent, onClose }) {
   const eventId = selectedEvent?.id;
   const [detail, setDetail] = useState(selectedEvent ? { event: selectedEvent } : null);
   const [partial, setPartial] = useState(false);
+  const drawerRef = useModalA11y(Boolean(eventId), onClose);
 
   useEffect(() => {
     if (!eventId) return;
@@ -127,20 +135,6 @@ function EventDrawer({ selectedEvent, onClose }) {
       active = false;
     };
   }, [eventId, selectedEvent]);
-
-  useEffect(() => {
-    if (!eventId) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (event) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [eventId, onClose]);
 
   if (!eventId) return null;
 
@@ -173,7 +167,11 @@ function EventDrawer({ selectedEvent, onClose }) {
         onClick={onClose}
         aria-label="Close event details"
       />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[#dde2d8] bg-[#f7f8f4] shadow-2xl">
+      <aside
+        ref={drawerRef}
+        tabIndex={-1}
+        className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[#dde2d8] bg-[#f7f8f4] shadow-2xl outline-none"
+      >
         <div className="flex items-start gap-4 border-b border-[#e0e4dc] bg-white px-5 py-5 sm:px-6">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#7b856f]">

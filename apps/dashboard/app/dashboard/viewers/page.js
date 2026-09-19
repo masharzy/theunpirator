@@ -21,7 +21,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { EmptyState, PageHeader, Surface } from "@/components/console-kit";
+import { EmptyState, PageHeader, Surface, useModalA11y } from "@/components/console-kit";
 
 const PAGE_SIZE = 25;
 const FILTERS = [
@@ -50,12 +50,6 @@ function relativeTime(value) {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
   return date.toLocaleDateString();
-}
-
-function shortId(value) {
-  if (!value) return "Unavailable";
-  const text = String(value);
-  return text.length > 15 ? `${text.slice(0, 8)}…${text.slice(-5)}` : text;
 }
 
 function humanize(value) {
@@ -131,19 +125,16 @@ function DeviceIcon({ os = "" }) {
 
 function ViewerDrawer({ detail, loading, busyAction, onClose, onAction }) {
   const [confirmReset, setConfirmReset] = useState(false);
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  const drawerRef = useModalA11y(true, onClose);
 
   return (
     <div className="fixed inset-0 z-50 bg-[#172014]/25 backdrop-blur-[2px]" onMouseDown={onClose}>
       <aside
-        className="ml-auto h-full w-full max-w-2xl overflow-y-auto border-l border-[#dfe4d6] bg-[#f7f8f3] shadow-[-24px_0_70px_rgba(23,32,20,.16)]"
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        className="ml-auto h-full w-full max-w-2xl overflow-y-auto border-l border-[#dfe4d6] bg-[#f7f8f3] shadow-[-24px_0_70px_rgba(23,32,20,.16)] outline-none"
         onMouseDown={(event) => event.stopPropagation()}
         aria-label="Viewer details"
       >
@@ -755,9 +746,6 @@ export default function ViewersPage() {
                     </p>
                     <div className="mt-1.5 flex items-center gap-2">
                       <StatusBadge status={viewer.status} />
-                      <span className="font-mono text-[10px] text-[#a0a89a] md:hidden">
-                        {shortId(viewer.id)}
-                      </span>
                     </div>
                   </div>
                 </div>

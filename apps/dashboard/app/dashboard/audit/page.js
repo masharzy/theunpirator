@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { EmptyState, PageHeader, Surface } from "@/components/console-kit";
+import { EmptyState, PageHeader, Surface, useModalA11y } from "@/components/console-kit";
 
 const categories = {
   workspace: { label: "Workspace", icon: Building2 },
@@ -68,6 +68,7 @@ export default function AuditPage() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const drawerRef = useModalA11y(Boolean(selected), () => setSelected(null));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -110,15 +111,6 @@ export default function AuditPage() {
 
     return () => controller.abort();
   }, [endpoint, page]);
-
-  useEffect(() => {
-    if (!selected) return undefined;
-    const close = (event) => {
-      if (event.key === "Escape") setSelected(null);
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [selected]);
 
   return (
     <div className="space-y-8">
@@ -284,7 +276,11 @@ export default function AuditPage() {
           onMouseDown={() => setSelected(null)}
         >
           <aside
-            className="h-full w-full max-w-xl overflow-y-auto bg-[#fbfcf8] shadow-2xl"
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            className="h-full w-full max-w-xl overflow-y-auto bg-[#fbfcf8] shadow-2xl outline-none"
             onMouseDown={(event) => event.stopPropagation()}
             aria-label="Audit entry details"
           >

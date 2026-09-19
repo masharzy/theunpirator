@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { EmptyState, PageHeader, Surface } from "@/components/console-kit";
+import { EmptyState, PageHeader, Surface, useModalA11y } from "@/components/console-kit";
 
 const categoryUi = {
   usage: { label: "Operations", icon: Activity },
@@ -49,6 +49,7 @@ export default function LogsPage() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const drawerRef = useModalA11y(Boolean(selected), () => setSelected(null));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -87,15 +88,6 @@ export default function LogsPage() {
       });
     return () => controller.abort();
   }, [endpoint, page]);
-
-  useEffect(() => {
-    if (!selected) return undefined;
-    const close = (event) => {
-      if (event.key === "Escape") setSelected(null);
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [selected]);
 
   const updateCategory = (value) => {
     setCategory(value);
@@ -189,7 +181,7 @@ export default function LogsPage() {
                   type="button"
                   key={item.technical.eventId}
                   onClick={() => setSelected(item)}
-                  className="grid w-full gap-4 px-5 py-5 text-left transition hover:bg-[#fafbf8] md:grid-cols-[minmax(0,1fr)_180px_180px] md:items-center"
+                  className="grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition hover:bg-[#fafbf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8fa868] md:grid-cols-[minmax(0,1fr)_180px_180px] md:items-center"
                 >
                   <div className="flex min-w-0 gap-3.5">
                     <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-[#f1f5ec] text-[#627150]">
@@ -260,7 +252,11 @@ export default function LogsPage() {
           onMouseDown={() => setSelected(null)}
         >
           <aside
-            className="h-full w-full max-w-xl overflow-y-auto bg-[#fbfcf8] shadow-2xl"
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            className="h-full w-full max-w-xl overflow-y-auto bg-[#fbfcf8] shadow-2xl outline-none"
             onMouseDown={(event) => event.stopPropagation()}
             aria-label="Log event details"
           >
