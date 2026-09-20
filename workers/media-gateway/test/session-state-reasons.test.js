@@ -22,6 +22,32 @@ function createState() {
 }
 
 describe("protected session denial reasons", () => {
+  it("initializes session state without wrapping request I/O in a storage transaction", async () => {
+    const values = new Map();
+    let transactions = 0;
+    const storage = {
+      alarms: false,
+      transaction: async () => {
+        transactions += 1;
+        throw new Error("request I/O entered transaction");
+      },
+      get: async (key) => values.get(key),
+      put: async (key, value) => values.set(key, value),
+    };
+    const state = new SessionState({ storage });
+    const response = await state.fetch(
+      new Request("https://session/state", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "active", ttlSeconds: 300 }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactions).toBe(0);
+    expect(values.get("session")?.status).toBe("active");
+  });
+
   it("returns a stable reason when a segment is outside the authorized window", async () => {
     const { post } = createState();
     await post("/state", { status: "active", ttlSeconds: 300 });

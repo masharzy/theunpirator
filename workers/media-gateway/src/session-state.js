@@ -4,7 +4,11 @@ export class SessionState {
   }
   async fetch(request) {
     let response;
-    if (this.state.storage.transaction) {
+    const url = new URL(request.url);
+    const initializesSession = request.method === "POST" && url.pathname === "/state";
+    // Initialization is one atomic put. Request-body I/O must not run inside a
+    // Durable Object storage transaction; ticket operations remain transactional.
+    if (this.state.storage.transaction && !initializesSession) {
       response = await this.state.storage.transaction((storage) =>
         new SessionState({ storage }).handle(request.clone()),
       );
@@ -13,7 +17,7 @@ export class SessionState {
     }
     if (
       request.method === "POST" &&
-      new URL(request.url).pathname === "/state" &&
+      url.pathname === "/state" &&
       response.ok &&
       this.state.storage.alarms !== false
     ) {
