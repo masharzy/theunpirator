@@ -5,6 +5,7 @@ import { billingPlans } from "@unpirator/db/commerce-schema";
 import { buildUsageModel } from "../services/usage-model.js";
 import { getActiveQuotaContext, readQuotaRollups } from "../services/quotas.js";
 import { cachedTenantJson } from "../services/metadata-cache.js";
+import { SESSION_ACTIVE_HEARTBEAT_MS } from "../services/session-state.js";
 
 function calendarPeriod(now = new Date()) {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -26,6 +27,7 @@ export function usageRouter({ db, cache, dashboardAuth, requireTenantViewer }) {
         ttlSeconds: 10,
         load: async () => {
           const now = new Date();
+          const heartbeatCutoff = new Date(now.getTime() - SESSION_ACTIVE_HEARTBEAT_MS);
           const [subscription] = await db
             .select({
               planId: subscriptions.planId,
@@ -97,6 +99,7 @@ export function usageRouter({ db, cache, dashboardAuth, requireTenantViewer }) {
                   eq(playbackSessions.tenantId, req.tenantId),
                   eq(playbackSessions.status, "active"),
                   gt(playbackSessions.expiresAt, now),
+                  gte(playbackSessions.lastHeartbeatAt, heartbeatCutoff),
                 ),
               ),
             readQuotaRollups(db, req.tenantId, quotaContext),

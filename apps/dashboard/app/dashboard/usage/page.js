@@ -109,6 +109,9 @@ export default function UsagePage() {
         </div>
         <div className="flex items-center gap-3">
           <StatusPill status={usage?.subscription?.status || "inactive"} />
+          <span aria-hidden="true" className="text-[#b0b8aa]">
+            ·
+          </span>
           <span className="text-sm font-medium text-[#5f6b58]">
             {usage?.headline?.percent != null
               ? `${Math.round(usage.headline.percent)}% ${usage.headline.label}`
