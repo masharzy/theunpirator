@@ -1,5 +1,9 @@
 export function createRateLimiter(cache, { prefix, limit, windowSeconds }) {
+  let degradedUntil = 0;
+
   return async function rateLimit(req, res, next) {
+    if (Date.now() < degradedUntil) return next();
+
     try {
       const identity = req.auth?.accountId || req.apiAuth?.keyId || req.ip || "unknown";
       const bucket = Math.floor(Date.now() / (windowSeconds * 1000));
@@ -13,6 +17,7 @@ export function createRateLimiter(cache, { prefix, limit, windowSeconds }) {
           .json({ error: { code: "RATE_LIMIT", message: "Too many requests", requestId: req.id } });
       next();
     } catch (error) {
+      degradedUntil = Date.now() + Math.min(windowSeconds, 60) * 1000;
       req.log?.warn({ err: error }, "rate limiter degraded open");
       next();
     }
