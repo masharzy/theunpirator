@@ -30,20 +30,21 @@ async function viewerIdsForEmailSearch(db, tenantId, term, config) {
   }
 }
 
-function sessionStatusCondition(status, now, heartbeatCutoff) {
+export function sessionStatusCondition(status, now, heartbeatCutoff) {
   const activityAt = sql`COALESCE(${playbackSessions.lastHeartbeatAt}, ${playbackSessions.startedAt})`;
+  const heartbeatCutoffIso = heartbeatCutoff.toISOString();
   if (status === "active") {
     return and(
       eq(playbackSessions.status, "active"),
       gt(playbackSessions.expiresAt, now),
-      sql`${activityAt} >= ${heartbeatCutoff}`,
+      sql`${activityAt} >= ${heartbeatCutoffIso}`,
     );
   }
   if (status === "idle") {
     return and(
       eq(playbackSessions.status, "active"),
       gt(playbackSessions.expiresAt, now),
-      sql`${activityAt} < ${heartbeatCutoff}`,
+      sql`${activityAt} < ${heartbeatCutoffIso}`,
     );
   }
   if (status === "ended") return eq(playbackSessions.status, "ended");
