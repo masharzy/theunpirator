@@ -1641,9 +1641,17 @@ export function adminRouter({
               eq(playbackSessions.status, "active"),
             ),
           );
+        const revokedAt = new Date();
         await db
           .update(playbackSessions)
-          .set({ status: "revoked", endedAt: new Date() })
+          .set({
+            status: "revoked",
+            endedAt: revokedAt,
+            revokedAt,
+            revocationReason: "platform_bulk_revoke",
+            revokedBy: "platform_admin",
+            revocationMetadata: { note: reason },
+          })
           .where(
             and(
               eq(playbackSessions.tenantId, req.params.tenantId),

@@ -456,7 +456,7 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
     }
   });
 
-  async function revokeMatchingSessions(req, sessionColumn, id) {
+  async function revokeMatchingSessions(req, sessionColumn, id, reason) {
     const sessions = await db
       .select({ id: playbackSessions.id })
       .from(playbackSessions)
@@ -468,7 +468,12 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
         ),
       );
     for (const session of sessions)
-      await playbackService.revoke({ tenantId: req.tenantId, sessionId: session.id });
+      await playbackService.revoke({
+        tenantId: req.tenantId,
+        sessionId: session.id,
+        reason,
+        revokedBy: "workspace_user",
+      });
     return sessions.length;
   }
 
@@ -480,7 +485,12 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
         .where(and(eq(devices.id, req.params.id), eq(devices.tenantId, req.tenantId)))
         .returning({ id: devices.id });
       if (!row) throw notFound();
-      const revoked = await revokeMatchingSessions(req, playbackSessions.deviceId, row.id);
+      const revoked = await revokeMatchingSessions(
+        req,
+        playbackSessions.deviceId,
+        row.id,
+        "device_blocked",
+      );
       await writeAudit(db, {
         tenantId: req.tenantId,
         actorAccountId: req.auth.accountId,
@@ -526,7 +536,12 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
         .where(and(eq(endUsers.id, req.params.id), eq(endUsers.tenantId, req.tenantId)))
         .returning({ id: endUsers.id });
       if (!row) throw notFound();
-      const revoked = await revokeMatchingSessions(req, playbackSessions.endUserId, row.id);
+      const revoked = await revokeMatchingSessions(
+        req,
+        playbackSessions.endUserId,
+        row.id,
+        "viewer_blocked",
+      );
       await writeAudit(db, {
         tenantId: req.tenantId,
         actorAccountId: req.auth.accountId,
@@ -578,7 +593,12 @@ export function securityRouter({ db, config, requireTenantAdmin, playbackService
         .where(and(eq(devices.tenantId, req.tenantId), eq(devices.endUserId, viewer.id)));
       let revoked = 0;
       for (const device of viewerDevices)
-        revoked += await revokeMatchingSessions(req, playbackSessions.deviceId, device.id);
+        revoked += await revokeMatchingSessions(
+          req,
+          playbackSessions.deviceId,
+          device.id,
+          "viewer_devices_reset",
+        );
       for (const device of viewerDevices) {
         await db
           .update(devices)

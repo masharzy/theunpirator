@@ -384,9 +384,17 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt))
           .slice(0, revokeCount);
         for (const old of oldest) {
+          const revokedAt = new Date();
           await db
             .update(playbackSessions)
-            .set({ status: "revoked", endedAt: new Date() })
+            .set({
+              status: "revoked",
+              endedAt: revokedAt,
+              revokedAt,
+              revocationReason: "concurrent_stream_limit",
+              revokedBy: "system",
+              revocationMetadata: { maxConcurrentStreams: maxStreams },
+            })
             .where(eq(playbackSessions.id, old.id));
           await cache.set(`playback:session:${old.id}`, "revoked", { ex: 8 * 3600 });
           await gatewayControl.syncSession(old.id, "revoked", 8 * 3600);
@@ -495,10 +503,24 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         : { enabled: false },
     };
   }
-  async function revoke({ tenantId, sessionId }) {
+  async function revoke({
+    tenantId,
+    sessionId,
+    reason = "manual",
+    revokedBy = "workspace_user",
+    metadata = {},
+  }) {
+    const revokedAt = new Date();
     const [session] = await db
       .update(playbackSessions)
-      .set({ status: "revoked", endedAt: new Date() })
+      .set({
+        status: "revoked",
+        endedAt: revokedAt,
+        revokedAt,
+        revocationReason: reason,
+        revokedBy,
+        revocationMetadata: metadata,
+      })
       .where(and(eq(playbackSessions.id, sessionId), eq(playbackSessions.tenantId, tenantId)))
       .returning();
     if (!session) throw notFound("Playback session not found");
@@ -509,6 +531,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       await queueWebhook(db, tenantId, "playback.revoked", {
         sessionId: session.id,
         assetId: session.assetId,
+        reason: session.revocationReason,
       });
     return session;
   }
