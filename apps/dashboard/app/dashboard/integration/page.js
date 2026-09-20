@@ -40,6 +40,11 @@ function formatObserved(value) {
   return new Date(value).toLocaleString();
 }
 
+function shortId(value) {
+  if (!value || typeof value !== "string") return value;
+  return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
+}
+
 export default function IntegrationPage() {
   const [health, setHealth] = useState(null);
   const [error, setError] = useState("");
@@ -177,6 +182,23 @@ export default function IntegrationPage() {
                     <p className="mt-2 text-xs text-[#8a9384]">
                       Last observed: {formatObserved(item.observedAt)}
                     </p>
+                    {item.evidence && (
+                      <dl className="mt-3 flex flex-wrap gap-2">
+                        {Object.entries(item.evidence).map(([key, value]) => (
+                          <div
+                            key={key}
+                            className="rounded-lg border border-[#e4e8de] bg-[#f8faf5] px-2.5 py-1.5"
+                          >
+                            <dt className="text-[9px] font-bold uppercase tracking-[.08em] text-[#879080]">
+                              {key.replaceAll(/([A-Z])/g, " $1")}
+                            </dt>
+                            <dd className="font-mono text-[11px] text-[#46503f]">
+                              {shortId(Array.isArray(value) ? value.join(", ") : String(value ?? "n/a"))}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
                     {item.fix && (
                       <div className="mt-4 flex gap-3 rounded-xl border border-[#e7eadf] bg-[#fbfcf8] p-4">
                         <Wrench size={16} className="mt-0.5 shrink-0 text-[#6f8150]" />

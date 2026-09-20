@@ -11,8 +11,21 @@ import {
   usageEvents,
 } from "@unpirator/db/schema";
 
-function check(id, status, title, detail, fix, href, observedAt = null) {
-  return { id, status, title, detail, fix, href, observedAt };
+function check(id, status, title, detail, fix, href, observedAt = null, evidence = null) {
+  return { id, status, title, detail, fix, href, observedAt, evidence };
+}
+
+export function isCurrentClientVersion(version) {
+  return typeof version === "string" && version.startsWith("0.2.");
+}
+
+export function findSuccessfulGatewayUsage(events) {
+  return events.find(
+    (item) =>
+      item.type === "gateway_requests" &&
+      Number(item.metadata?.status) >= 200 &&
+      Number(item.metadata?.status) < 400,
+  );
 }
 
 export function integrationHealthRouter({ db, requireTenantDeveloper }) {
@@ -28,7 +41,6 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
         latestViewers,
         latestDevices,
         latestSessions,
-        latestPlaybackUsage,
       ] = await Promise.all([
         db
           .select({
@@ -51,6 +63,7 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
           .select({
             name: apiKeys.name,
             keyPrefix: apiKeys.keyPrefix,
+            scopes: apiKeys.scopes,
             lastUsedAt: apiKeys.lastUsedAt,
             expiresAt: apiKeys.expiresAt,
             createdAt: apiKeys.createdAt,
@@ -88,6 +101,11 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
           .limit(1),
         db
           .select({
+            id: playbackSessions.id,
+            siteId: playbackSessions.siteId,
+            assetId: playbackSessions.assetId,
+            endUserId: playbackSessions.endUserId,
+            deviceId: playbackSessions.deviceId,
             status: playbackSessions.status,
             startedAt: playbackSessions.startedAt,
             lastHeartbeatAt: playbackSessions.lastHeartbeatAt,
@@ -97,31 +115,43 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
           .where(eq(playbackSessions.tenantId, req.tenantId))
           .orderBy(desc(playbackSessions.startedAt))
           .limit(1),
-        db
-          .select({ metadata: usageEvents.metadata, createdAt: usageEvents.createdAt })
-          .from(usageEvents)
-          .where(
-            and(eq(usageEvents.tenantId, req.tenantId), eq(usageEvents.type, "playback_sessions")),
-          )
-          .orderBy(desc(usageEvents.createdAt))
-          .limit(1),
       ]);
 
       const verifiedDomain = verifiedDomains[0] || null;
       const activeKey =
         keyRows.find(
-          (item) => !item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime(),
+          (item) =>
+            (!item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime()) &&
+            (item.scopes?.includes("playback:create") || item.scopes?.includes("*")),
         ) || null;
       const latestAsset = latestAssets[0] || null;
       const latestViewer = latestViewers[0] || null;
       const latestDevice = latestDevices[0] || null;
       const latestSession = latestSessions[0] || null;
-      const playbackUsage = latestPlaybackUsage[0] || null;
+      const correlatedUsage = latestSession
+        ? await db
+            .select({
+              type: usageEvents.type,
+              metadata: usageEvents.metadata,
+              createdAt: usageEvents.createdAt,
+            })
+            .from(usageEvents)
+            .where(
+              and(
+                eq(usageEvents.tenantId, req.tenantId),
+                eq(usageEvents.sessionId, latestSession.id),
+              ),
+            )
+            .orderBy(desc(usageEvents.createdAt))
+        : [];
+      const playbackUsage = correlatedUsage.find((item) => item.type === "playback_sessions") || null;
+      const gatewayUsage = findSuccessfulGatewayUsage(correlatedUsage);
+      const heartbeatUsage = correlatedUsage.find((item) => item.type === "playback_heartbeat");
       const client = playbackUsage?.metadata?.client || {};
       const sdkVersion = typeof client.sdkVersion === "string" ? client.sdkVersion : null;
       const sdkName = typeof client.sdkName === "string" ? client.sdkName : null;
-      const hasIdentity = Boolean(latestViewer && latestDevice);
-      const hasProtectedPlayback = Boolean(latestSession && playbackUsage);
+      const hasIdentity = Boolean(latestSession?.endUserId && latestSession?.deviceId);
+      const hasProtectedPlayback = Boolean(latestSession && playbackUsage && gatewayUsage);
 
       const checks = [
         check(
@@ -151,17 +181,20 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
             : "Create an API key and configure it only in your server-side integration.",
           "/dashboard/api-keys",
           activeKey?.lastUsedAt || activeKey?.createdAt || null,
+          activeKey ? { keyPrefix: activeKey.keyPrefix, scopes: activeKey.scopes } : null,
         ),
         check(
           "sdk-version",
-          sdkVersion ? "pass" : latestSession ? "action" : "waiting",
+          isCurrentClientVersion(sdkVersion) ? "pass" : latestSession ? "action" : "waiting",
           "Plugin / SDK version",
-          sdkVersion
-            ? `${sdkName || "Unpirator SDK"} ${sdkVersion} was observed in the latest protected playback.`
+          isCurrentClientVersion(sdkVersion)
+            ? `${sdkName || "Unpirator SDK"} ${sdkVersion} was observed in the correlated playback session.`
+            : sdkVersion
+              ? `${sdkName || "Unpirator SDK"} ${sdkVersion} is outdated; production requires the 0.2.x line.`
             : latestSession
               ? "Playback has been observed, but the installed client did not report an SDK version."
               : "No SDK version has been observed yet.",
-          sdkVersion
+          isCurrentClientVersion(sdkVersion)
             ? null
             : latestSession
               ? "Upgrade the browser SDK, redeploy the customer app, then start one new protected playback."
@@ -180,7 +213,7 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
             ? null
             : "Resolve the authenticated viewer email on the customer server and send a stable browser deviceId. Never trust a browser-supplied email.",
           "/dashboard/viewers",
-          latestDevice?.lastSeenAt || latestViewer?.updatedAt || null,
+          latestSession?.startedAt || latestDevice?.lastSeenAt || latestViewer?.updatedAt || null,
         ),
         check(
           "asset-sync",
@@ -200,26 +233,57 @@ export function integrationHealthRouter({ db, requireTenantDeveloper }) {
           latestSession ? "pass" : "waiting",
           "Protected playback session",
           latestSession
-            ? `A protected playback session was created successfully; latest state is ${latestSession.status}.`
+            ? `Session ${latestSession.id} was created and is correlated to site ${latestSession.siteId}, asset ${latestSession.assetId}, viewer and device; latest state is ${latestSession.status}.`
             : "No protected playback session has completed successfully yet.",
           latestSession
             ? null
             : "Start one authorized playback from a verified site using an active API key, trusted viewer email and stable deviceId.",
           "/dashboard/sessions",
           latestSession?.lastHeartbeatAt || latestSession?.startedAt || null,
+          latestSession
+            ? {
+                sessionId: latestSession.id,
+                siteId: latestSession.siteId,
+                assetId: latestSession.assetId,
+              }
+            : null,
         ),
         check(
           "gateway-protection",
           hasProtectedPlayback ? "pass" : latestAsset ? "waiting" : "waiting",
           "Gateway & protection path",
           hasProtectedPlayback
-            ? "Gateway session sync and protected delivery completed successfully for the latest recorded playback."
-            : "The protected gateway path has not been proven by a completed playback session yet.",
+            ? `A successful protected media response (${gatewayUsage.metadata.status}) was recorded for session ${latestSession.id}.`
+            : latestSession
+              ? `Session ${latestSession.id} was created, but no successful media response from the protected gateway was recorded.`
+              : "The protected gateway path has not been proven by a playback session yet.",
           hasProtectedPlayback
             ? null
-            : "Create one protected playback session. A successful session confirms gateway sync and the protected-delivery path.",
+            : "Play until a visible frame appears, then rescan. Session creation alone does not prove media delivery.",
           "/dashboard/security",
-          playbackUsage?.createdAt || null,
+          gatewayUsage?.createdAt || null,
+          latestSession
+            ? {
+                sessionId: latestSession.id,
+                gatewayStatus: gatewayUsage?.metadata?.status ?? "not observed",
+              }
+            : null,
+        ),
+        check(
+          "playback-heartbeat",
+          heartbeatUsage ? "pass" : latestSession ? "action" : "waiting",
+          "Sustained playback heartbeat",
+          heartbeatUsage
+            ? `Continued playback activity was recorded for session ${latestSession.id}.`
+            : latestSession
+              ? `Session ${latestSession.id} has no correlated playback heartbeat yet.`
+              : "No playback session is available for heartbeat verification.",
+          heartbeatUsage
+            ? null
+            : "Keep the video playing for at least one heartbeat interval, then run the scan again.",
+          "/dashboard/sessions",
+          heartbeatUsage?.createdAt || null,
+          latestSession ? { sessionId: latestSession.id } : null,
         ),
       ];
 
