@@ -21,7 +21,7 @@ Universal HTML/template integrations can load:
 Published package set:
 
 - `@unpirator/player@0.2.0`
-- `@unpirator/sdk-js@0.2.0`
+- `@unpirator/sdk-js@0.2.1`
 - `@unpirator/web-component@0.2.0`
 - `@unpirator/react@0.2.0`
 - `@unpirator/integration-nextjs@0.2.0`
