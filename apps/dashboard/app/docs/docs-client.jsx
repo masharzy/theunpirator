@@ -854,7 +854,7 @@ export function DocsClient() {
       <header className="docs-hero section-wrap">
         <div>
           <div className="eyebrow">
-            <BookOpen size={14} /> DEVELOPER DOCUMENTATION · TESTED 0.1.x
+            <BookOpen size={14} /> DEVELOPER DOCUMENTATION · TESTED 0.2.x
           </div>
           <h1>
             Your videos stay yours.
@@ -1305,7 +1305,7 @@ UNPIRATOR_SITE_ID=00000000-0000-0000-0000-000000000000`}</CodeBlock>
         <Link href="/" className="wordmark">
           <ShieldCheck size={19} /> unpirator.
         </Link>
-        <p>Developer documentation · packages 0.1.x</p>
+        <p>Developer documentation · packages 0.2.x</p>
         <a href="https://www.npmjs.com/org/unpirator" target="_blank" rel="noreferrer">
           npm packages <ArrowUpRight size={13} />
         </a>
