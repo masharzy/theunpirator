@@ -46,7 +46,7 @@ viewer request rather than to the customer's server-to-server HTTP client.
 ## Packages
 
 - `@unpirator/react@0.2.0`
-- `@unpirator/sdk-js@0.2.0`
+- `@unpirator/sdk-js@0.2.1`
 - `@unpirator/player@0.2.0`
 - `@unpirator/web-component@0.2.0`
 - `@unpirator/integration-nextjs@0.2.0`
