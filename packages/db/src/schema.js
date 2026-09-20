@@ -348,6 +348,10 @@ export const playbackSessions = pgTable(
     lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }).defaultNow().notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    revokedBy: text("revoked_by"),
+    revocationMetadata: jsonb("revocation_metadata").default({}).notNull(),
   },
   (t) => [
     index("playback_sessions_tenant_idx").on(t.tenantId),

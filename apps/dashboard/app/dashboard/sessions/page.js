@@ -52,6 +52,34 @@ const STATUS_STYLES = {
   },
 };
 
+const REVOCATION_REASONS = {
+  manual_dashboard_revoke: "Manually revoked from the workspace dashboard",
+  concurrent_stream_limit: "An older stream was replaced after the concurrent stream limit",
+  device_blocked: "The playback device was blocked",
+  viewer_blocked: "The viewer account was blocked",
+  viewer_devices_reset: "The viewer's registered devices were reset",
+  platform_bulk_revoke: "A platform administrator revoked workspace sessions",
+  manual: "Manually revoked",
+};
+
+const REVOCATION_ACTORS = {
+  system: "System policy",
+  workspace_user: "Workspace administrator",
+  platform_admin: "Platform administrator",
+};
+
+function revocationReason(session) {
+  if (session.status !== "revoked") return "Not applicable";
+  if (!session.revocationReason) return "Reason unavailable (legacy session)";
+  return REVOCATION_REASONS[session.revocationReason] || session.revocationReason;
+}
+
+function revocationActor(session) {
+  if (session.status !== "revoked") return "Not applicable";
+  if (!session.revokedBy) return "Unavailable (legacy session)";
+  return REVOCATION_ACTORS[session.revokedBy] || session.revokedBy;
+}
+
 function safeDate(value) {
   if (!value) return "Not available";
   const date = new Date(value);
@@ -237,7 +265,14 @@ export default function SessionsPage() {
       setItems((current) =>
         current.map((item) =>
           item.id === session.id
-            ? { ...item, status: "revoked", endedAt: new Date().toISOString() }
+            ? {
+                ...item,
+                status: "revoked",
+                endedAt: new Date().toISOString(),
+                revokedAt: new Date().toISOString(),
+                revocationReason: "manual_dashboard_revoke",
+                revokedBy: "workspace_user",
+              }
             : item,
         ),
       );
@@ -560,6 +595,29 @@ export default function SessionsPage() {
                         <p className="text-[#929b8b]">Ended</p>
                         <p className="mt-1 text-[#46513f]">{safeDate(session.endedAt)}</p>
                       </div>
+                      {session.status === "revoked" && (
+                        <>
+                          <div>
+                            <p className="text-[#929b8b]">Revoked</p>
+                            <p className="mt-1 text-[#46513f]">
+                              {safeDate(session.revokedAt || session.endedAt)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[#929b8b]">Revoked by</p>
+                            <p className="mt-1 text-[#46513f]">{revocationActor(session)}</p>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <p className="text-[#929b8b]">Revocation reason</p>
+                            <p className="mt-1 text-[#46513f]">{revocationReason(session)}</p>
+                            {session.revocationMetadata?.note && (
+                              <p className="mt-1 text-[#7f8978]">
+                                Note: {session.revocationMetadata.note}
+                              </p>
+                            )}
+                          </div>
+                        </>
+                      )}
                       <div className="sm:col-span-2 xl:col-span-4">
                         <p className="text-[#929b8b]">User agent</p>
                         <p className="mt-1 break-all font-mono text-[10px] leading-5 text-[#5d6857]">

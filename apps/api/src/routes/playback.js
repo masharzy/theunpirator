@@ -251,6 +251,8 @@ export function playbackRouter({
             playbackService.revoke({
               tenantId: req.tenantId,
               sessionId: req.params.sessionId,
+              reason: "manual_dashboard_revoke",
+              revokedBy: "workspace_user",
             }),
           readDurable: readSession,
         });
