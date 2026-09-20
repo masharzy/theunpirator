@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   assets,
   devices,
@@ -27,6 +27,7 @@ import {
   normalizeQuotaLimit,
   reserveMeteredQuotaTx,
 } from "./quotas.js";
+import { SESSION_ACTIVE_HEARTBEAT_MS } from "./session-state.js";
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
@@ -359,16 +360,19 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     recordTiming("device");
 
     await db.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:concurrency`}, 23))`,
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${user.id}:concurrency`}, 23))`,
     );
+    const heartbeatCutoff = new Date(Date.now() - SESSION_ACTIVE_HEARTBEAT_MS);
     const activeSessions = await db
       .select({ id: playbackSessions.id, startedAt: playbackSessions.startedAt })
       .from(playbackSessions)
       .where(
         and(
           eq(playbackSessions.tenantId, tenantId),
+          eq(playbackSessions.endUserId, user.id),
           eq(playbackSessions.status, "active"),
           gt(playbackSessions.expiresAt, new Date()),
+          gte(playbackSessions.lastHeartbeatAt, heartbeatCutoff),
         ),
       );
     const maxStreams = normalizeQuotaLimit(entitlements.max_concurrent_streams);
