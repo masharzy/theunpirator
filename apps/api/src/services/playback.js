@@ -29,6 +29,24 @@ import {
 } from "./quotas.js";
 import { SESSION_ACTIVE_HEARTBEAT_MS } from "./session-state.js";
 
+export async function syncSessionCacheBestEffort(cache, sessionId, status) {
+  try {
+    await cache.set(`playback:session:${sessionId}`, status, { ex: 8 * 3600 });
+    return true;
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        component: "playback-session-cache",
+        sessionId,
+        status,
+        message: error?.message || "Session cache unavailable",
+      }),
+    );
+    return false;
+  }
+}
+
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
   async function create(args) {
     const started = performance.now();
@@ -400,7 +418,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
               revocationMetadata: { maxConcurrentStreams: maxStreams },
             })
             .where(eq(playbackSessions.id, old.id));
-          await cache.set(`playback:session:${old.id}`, "revoked", { ex: 8 * 3600 });
+          await syncSessionCacheBestEffort(cache, old.id, "revoked");
           await gatewayControl.syncSession(old.id, "revoked", 8 * 3600);
         }
       } else {
@@ -461,7 +479,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       ring: signingRing,
       activeKid: config.ACTIVE_SIGNING_KID,
     });
-    await cache.set(`playback:session:${session.id}`, "active", { ex: 8 * 3600 });
+    await syncSessionCacheBestEffort(cache, session.id, "active");
     recordTiming("token_and_cache");
     await gatewayControl.syncSession(session.id, "active", 8 * 3600, playbackFeatures);
     recordTiming("gateway_sync");
@@ -528,7 +546,7 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
       .where(and(eq(playbackSessions.id, sessionId), eq(playbackSessions.tenantId, tenantId)))
       .returning();
     if (!session) throw notFound("Playback session not found");
-    await cache.set(`playback:session:${session.id}`, "revoked", { ex: 8 * 3600 });
+    await syncSessionCacheBestEffort(cache, session.id, "revoked");
     await gatewayControl.syncSession(session.id, "revoked", 8 * 3600);
     const policy = await getPlaybackPolicy(db, tenantId);
     if (policy.webhooks)
