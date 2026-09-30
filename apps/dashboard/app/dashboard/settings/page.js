@@ -113,18 +113,9 @@ export default function SettingsPage() {
             </p>
             <div className="mt-4 space-y-4">
               <div>
-                <div className="flex items-baseline justify-between gap-2">
-                  <label htmlFor="device-limit" className="text-xs font-semibold text-[#3d4736]">
-                    Devices per viewer
-                  </label>
-                  {deviceControlOn ? (
-                    <span className="text-[11px] text-[#87917f]">
-                      {deviceCeiling == null
-                        ? "No plan ceiling"
-                        : `Plan allows up to ${deviceCeiling}`}
-                    </span>
-                  ) : null}
-                </div>
+                <label htmlFor="device-limit" className="text-xs font-semibold text-[#3d4736]">
+                  Devices per viewer
+                </label>
                 {deviceControlOn ? (
                   <>
                     <Input
@@ -132,8 +123,8 @@ export default function SettingsPage() {
                       className="mt-1.5"
                       type="number"
                       min="1"
-                      max={deviceCeiling ?? 20}
-                      placeholder={deviceCeiling == null ? "Unlimited" : `Up to ${deviceCeiling}`}
+                      max="20"
+                      placeholder={`Default: ${deviceCeiling ?? 2}`}
                       value={deviceLimit}
                       onChange={(e) => setDeviceLimit(e.target.value)}
                     />
@@ -148,18 +139,9 @@ export default function SettingsPage() {
                 )}
               </div>
               <div>
-                <div className="flex items-baseline justify-between gap-2">
-                  <label htmlFor="stream-limit" className="text-xs font-semibold text-[#3d4736]">
-                    Videos playing at once per viewer
-                  </label>
-                  {streamControlOn ? (
-                    <span className="text-[11px] text-[#87917f]">
-                      {streamCeiling == null
-                        ? "No plan ceiling"
-                        : `Plan allows up to ${streamCeiling}`}
-                    </span>
-                  ) : null}
-                </div>
+                <label htmlFor="stream-limit" className="text-xs font-semibold text-[#3d4736]">
+                  Videos playing at once per viewer
+                </label>
                 {streamControlOn ? (
                   <>
                     <Input
@@ -167,8 +149,8 @@ export default function SettingsPage() {
                       className="mt-1.5"
                       type="number"
                       min="1"
-                      max={streamCeiling ?? 20}
-                      placeholder={streamCeiling == null ? "Unlimited" : `Up to ${streamCeiling}`}
+                      max="20"
+                      placeholder={`Default: ${streamCeiling ?? 1}`}
                       value={streamLimit}
                       onChange={(e) => setStreamLimit(e.target.value)}
                     />

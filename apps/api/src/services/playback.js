@@ -49,14 +49,12 @@ export async function syncSessionCacheBestEffort(cache, sessionId, status) {
 }
 
 /**
- * Resolves a per-viewer limit: the tenant's own setting wins, clamped to the
- * plan ceiling; without an override the plan value applies as before.
+ * Resolves a per-viewer limit: the tenant's own setting wins outright; the
+ * plan/entitlements value is only the default when no override exists.
  */
 export function applyViewerLimitOverride(planLimit, override) {
   if (override == null) return planLimit;
-  const requested = Math.max(1, Math.floor(override));
-  if (planLimit == null) return requested;
-  return Math.min(planLimit, requested);
+  return Math.max(1, Math.floor(override));
 }
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
