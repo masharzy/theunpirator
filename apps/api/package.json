@@ -11,7 +11,8 @@
     "bootstrap:admin": "node scripts/bootstrap-super-admin.js",
     "jobs:webhooks": "node src/jobs/webhook-retry.js",
     "jobs:usage": "node src/jobs/usage-rollup.js",
-    "jobs:subscriptions": "node src/jobs/subscription-expiry.js"
+    "jobs:subscriptions": "node src/jobs/subscription-expiry.js",
+    "jobs:piracy-scan": "node src/jobs/piracy-scan.js"
   },
   "dependencies": {
     "@unpirator/cache": "workspace:*",

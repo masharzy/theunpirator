@@ -466,3 +466,73 @@ export const providerHealth = pgTable("provider_health", {
   metadata: jsonb("metadata").default({}).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const piracyWatchlists = pgTable(
+  "piracy_watchlists",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    keywords: jsonb("keywords").default([]).notNull(),
+    telegramChannels: jsonb("telegram_channels").default([]).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    ...timestamps,
+  },
+  (t) => [index("piracy_watchlists_tenant_idx").on(t.tenantId)],
+);
+
+export const piracyFindings = pgTable(
+  "piracy_findings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    watchlistId: uuid("watchlist_id").references(() => piracyWatchlists.id, {
+      onDelete: "set null",
+    }),
+    source: text("source").notNull(), // telegram | youtube | web | manual
+    url: text("url").notNull(),
+    urlHash: text("url_hash").notNull(), // sha256 of the normalized URL, dedupe key
+    title: text("title"),
+    snippet: text("snippet"),
+    matchedKeywords: jsonb("matched_keywords").default([]).notNull(),
+    status: text("status").default("active").notNull(), // active | false_positive
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("piracy_findings_tenant_url_uq").on(t.tenantId, t.urlHash),
+    index("piracy_findings_tenant_status_idx").on(t.tenantId, t.status),
+    index("piracy_findings_watchlist_idx").on(t.watchlistId),
+  ],
+);
+
+export const takedownCases = pgTable(
+  "takedown_cases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    findingId: uuid("finding_id")
+      .references(() => piracyFindings.id, { onDelete: "cascade" })
+      .notNull(),
+    platform: text("platform").notNull(), // telegram | youtube | facebook | web_host
+    status: text("status").default("detected").notNull(), // detected | notice_sent | removed | rejected | withdrawn
+    noticeChannel: text("notice_channel"), // email | web_form
+    noticeSentAt: timestamp("notice_sent_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdById: uuid("created_by_id").references(() => accounts.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("takedown_cases_finding_platform_uq").on(t.findingId, t.platform),
+    index("takedown_cases_tenant_status_idx").on(t.tenantId, t.status),
+  ],
+);

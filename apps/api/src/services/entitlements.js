@@ -15,6 +15,7 @@ const DEFAULTS = {
   max_concurrent_streams: 1,
   session_policy: "block_new",
   youtube_custom: false,
+  piracy_scan: false,
 };
 
 export async function hasActiveSubscription(db, tenantId) {

@@ -161,3 +161,61 @@ export function parseOrThrow(schema, value) {
   }
   return result.data;
 }
+
+const telegramChannelSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(65)
+  .transform((v) => v.replace(/^@/, ""))
+  .refine(
+    (v) => /^[a-zA-Z][a-zA-Z0-9_]{3,63}$/.test(v),
+    "Use the public channel handle, e.g. mychannel",
+  );
+
+export const piracyWatchlistCreateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    keywords: z.array(z.string().trim().min(2).max(120)).min(1).max(50),
+    telegramChannels: z.array(telegramChannelSchema).max(25).default([]),
+    enabled: z.boolean().default(true),
+  })
+  .strict();
+
+export const piracyWatchlistUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120).optional(),
+    keywords: z.array(z.string().trim().min(2).max(120)).min(1).max(50).optional(),
+    telegramChannels: z.array(telegramChannelSchema).max(25).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "Provide at least one field to update");
+
+export const piracyManualFindingSchema = z
+  .object({
+    url: z.string().url().max(2048),
+    title: z.string().trim().max(240).optional(),
+    snippet: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
+export const takedownCaseCreateSchema = z
+  .object({
+    platform: z.enum(["telegram", "youtube", "facebook", "web_host"]),
+    notes: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
+export const takedownCaseUpdateSchema = z
+  .object({
+    status: z.enum(["detected", "notice_sent", "removed", "rejected", "withdrawn"]).optional(),
+    noticeChannel: z.enum(["email", "web_form"]).optional(),
+    notes: z.string().trim().max(2000).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "Provide at least one field to update");
+
+export const piracyFindingStatusSchema = z
+  .object({ status: z.enum(["active", "false_positive"]) })
+  .strict();

@@ -18,6 +18,7 @@ import {
   Menu,
   MonitorSmartphone,
   PlugZap,
+  Radar,
   Settings,
   ShieldAlert,
   Users,
@@ -50,7 +51,13 @@ const groups = [
       [MonitorSmartphone, "/dashboard/sessions", "Playback Sessions"],
     ],
   ],
-  ["Security", [[ShieldAlert, "/dashboard/security", "Security Center"]]],
+  [
+    "Security",
+    [
+      [ShieldAlert, "/dashboard/security", "Security Center"],
+      [Radar, "/dashboard/piracy", "Piracy Monitor"],
+    ],
+  ],
   [
     "Developer",
     [
