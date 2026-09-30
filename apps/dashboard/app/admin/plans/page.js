@@ -33,6 +33,7 @@ const booleanEntitlements = [
   ["concurrent_stream_control", "Concurrent stream control"],
   ["webhooks", "Webhooks"],
   ["youtube_custom", "Restricted YouTube provider"],
+  ["piracy_scan", "Piracy detection & takedowns"],
 ];
 
 const empty = {
@@ -58,6 +59,7 @@ const empty = {
     concurrent_stream_control: false,
     webhooks: false,
     youtube_custom: false,
+    piracy_scan: false,
     max_sites: 1,
     max_devices_per_user: 2,
     max_concurrent_streams: 1,
