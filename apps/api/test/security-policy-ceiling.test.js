@@ -24,7 +24,6 @@ describe("plan-driven playback features", () => {
         dynamic_watermark: true,
         device_control: false,
         concurrent_stream_control: true,
-        webhooks: false,
       }),
       "tenant-1",
     );
@@ -36,7 +35,8 @@ describe("plan-driven playback features", () => {
       watermark: true,
       deviceControl: false,
       concurrentStreamControl: true,
-      webhooks: false,
+      // webhooks are a standard feature for every tenant, not plan-gated
+      webhooks: true,
     });
   });
 
