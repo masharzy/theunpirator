@@ -25,11 +25,15 @@ const numericEntitlements = [
   ["max_api_keys", "API keys", "Server keys for playback integrations"],
   ["max_webhooks", "Webhook endpoints", "Destinations for security events"],
   ["max_team_members", "Team members", "People who can join the workspace"],
-  ["max_devices_per_user", "Devices per viewer", "How many devices one viewer can register"],
+  [
+    "max_devices_per_user",
+    "Devices per viewer (max)",
+    "Ceiling — customers pick their own exact number in workspace settings",
+  ],
   [
     "max_concurrent_streams",
-    "Concurrent streams per viewer",
-    "Videos one viewer can watch at the same time",
+    "Streams per viewer (max)",
+    "Ceiling — customers pick their own exact number in workspace settings",
   ],
   [
     "monthly_gateway_requests",

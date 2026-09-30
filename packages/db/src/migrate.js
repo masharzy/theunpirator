@@ -16,14 +16,21 @@ try {
     await tx`CREATE TABLE IF NOT EXISTS _unpirator_migrations (name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())`;
     for (const name of (await readdir(folder)).filter((v) => v.endsWith(".sql")).sort()) {
       const content = await readFile(new URL(name, folder), "utf8");
-      const checksum = createHash("sha256").update(content).digest("hex");
+      // Accept both the raw bytes and their LF-normalized form: git may
+      // convert line endings between checkouts (autocrlf), and the checksum
+      // recorded at apply time used whichever form the file had then.
+      const rawChecksum = createHash("sha256").update(content).digest("hex");
+      const normalizedChecksum = createHash("sha256")
+        .update(content.replace(/\r\n/g, "\n"))
+        .digest("hex");
       const [existing] = await tx`SELECT checksum FROM _unpirator_migrations WHERE name = ${name}`;
       if (existing) {
-        if (existing.checksum !== checksum) throw new Error(`Applied migration changed: ${name}`);
+        if (existing.checksum !== rawChecksum && existing.checksum !== normalizedChecksum)
+          throw new Error(`Applied migration changed: ${name}`);
         continue;
       }
       await tx.unsafe(content);
-      await tx`INSERT INTO _unpirator_migrations (name, checksum) VALUES (${name}, ${checksum})`;
+      await tx`INSERT INTO _unpirator_migrations (name, checksum) VALUES (${name}, ${normalizedChecksum})`;
       console.log(`Applied ${name}`);
     }
   });

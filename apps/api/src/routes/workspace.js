@@ -25,6 +25,8 @@ import {
 import { encryptJson, randomToken, sha256 } from "@unpirator/crypto";
 import { AppError, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
+import { getEntitlements } from "../services/entitlements.js";
+import { normalizeQuotaLimit } from "../services/quotas.js";
 import { sendEmail } from "../services/email.js";
 
 const roles = ["owner", "admin", "developer", "viewer"];
@@ -41,8 +43,17 @@ const settingsInput = z
     name: z.string().trim().min(2).max(120).optional(),
     timezone: z.string().trim().min(2).max(80).optional(),
     notificationPreferences: z.record(z.string(), z.boolean()).optional(),
+    // Per-viewer policy overrides; null resets to the plan default. The
+    // handler clamps these against the plan ceilings before persisting.
+    deviceLimit: z.number().int().min(1).max(20).nullable().optional(),
+    streamLimit: z.number().int().min(1).max(20).nullable().optional(),
   })
   .strict();
+
+const viewerPolicyCeilings = [
+  ["deviceLimit", "max_devices_per_user", "devices per viewer"],
+  ["streamLimit", "max_concurrent_streams", "concurrent streams per viewer"],
+];
 
 function validateConnection(provider, config) {
   if (!config || typeof config !== "object" || Array.isArray(config))
@@ -332,6 +343,16 @@ export function workspaceRouter({
   router.patch("/settings", csrfGuard, requireTenantAdmin, async (req, res, next) => {
     try {
       const input = settingsInput.parse(req.body);
+      if (input.deviceLimit != null || input.streamLimit != null) {
+        const entitlements = await getEntitlements(db, req.tenantId);
+        for (const [field, ceilingKey, label] of viewerPolicyCeilings) {
+          const value = input[field];
+          if (value == null) continue;
+          const ceiling = normalizeQuotaLimit(entitlements[ceilingKey]);
+          if (ceiling !== null && value > ceiling)
+            throw new AppError("PLAN_LIMIT", `Your plan allows up to ${ceiling} ${label}`, 403);
+        }
+      }
       await db.transaction(async (tx) => {
         if (input.name)
           await tx
@@ -344,6 +365,8 @@ export function workspaceRouter({
             tenantId: req.tenantId,
             timezone: input.timezone || "Asia/Dhaka",
             notificationPreferences: input.notificationPreferences || {},
+            deviceLimitOverride: input.deviceLimit ?? null,
+            streamLimitOverride: input.streamLimit ?? null,
             updatedAt: new Date(),
           })
           .onConflictDoUpdate({
@@ -353,6 +376,8 @@ export function workspaceRouter({
               ...(input.notificationPreferences && {
                 notificationPreferences: input.notificationPreferences,
               }),
+              ...(input.deviceLimit !== undefined && { deviceLimitOverride: input.deviceLimit }),
+              ...(input.streamLimit !== undefined && { streamLimitOverride: input.streamLimit }),
               updatedAt: new Date(),
             },
           });
