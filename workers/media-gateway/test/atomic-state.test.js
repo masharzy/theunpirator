@@ -18,6 +18,14 @@ describe.skipIf(!redis && !upstash)("atomic Redis session state", () => {
     const touched = new Set();
     const wrapped = {
       get: (key) => cache.get(key),
+      set: (key, value, options) => {
+        touched.add(key);
+        return cache.set(key, value, options);
+      },
+      del: (key) => {
+        touched.add(key);
+        return cache.del(key);
+      },
       eval: (script, keys, args) => {
         keys.forEach((key) => touched.add(key));
         return cache.eval(script, keys, args);
