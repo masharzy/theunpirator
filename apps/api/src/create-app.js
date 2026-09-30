@@ -46,6 +46,7 @@ import { publicRouter } from "./routes/public.js";
 import { integrationHealthRouter } from "./routes/integration-health.js";
 import { operationsLogsRouter } from "./routes/operations-logs.js";
 import { auditRouter } from "./routes/audit.js";
+import { piracyRouter } from "./routes/piracy.js";
 
 function invalidateAfterSuccess(res, callback) {
   res.once("finish", () => {
@@ -235,6 +236,18 @@ export function createApp(overrides = {}) {
   );
 
   app.use("/v1/audit", auth, csrfGuard, auditRouter({ db, requireTenantAdmin: tenantAdmin }));
+
+  app.use(
+    "/v1/piracy",
+    auth,
+    csrfGuard,
+    piracyRouter({
+      db,
+      cache,
+      requireTenantViewer: tenantViewer,
+      requireTenantAdmin: tenantAdmin,
+    }),
+  );
 
   app.use(
     "/v1/webhooks",
