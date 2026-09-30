@@ -118,9 +118,9 @@ export function PublicPlans({ compact = false }) {
                 </span>
               )}
             </div>
-            {plan.trialDays > 0 && (
+            {plan.trialAvailable && (
               <p className="mt-2 text-xs font-semibold text-[#78944f]">
-                {plan.trialDays}-day trial
+                Free trial available — claim after signup
               </p>
             )}
             <ul className={`mt-7 space-y-2.5 text-sm ${compact ? "min-h-40" : "min-h-56"}`}>

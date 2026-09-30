@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { accounts, subscriptions, tenants } from "@unpirator/db/schema";
 import {
@@ -7,6 +7,7 @@ import {
   notifications,
   paymentMethods,
   paymentRequests,
+  trialOffers,
 } from "@unpirator/db/commerce-schema";
 import { AppError, notFound } from "../errors.js";
 import { writeAudit } from "../services/audit.js";
@@ -98,6 +99,117 @@ export function adminCommerceRouter({
       next(error);
     }
   });
+
+  // ---- Admin-granted free trials -------------------------------------------
+  const trialSchema = z
+    .object({
+      planId: z.string().min(1).max(80),
+      durationDays: z.number().int().min(1).max(90),
+      audience: z.enum(["everyone", "new_users", "user"]),
+      email: z.string().trim().toLowerCase().email().optional().nullable(),
+      maxClaims: z.number().int().min(1).max(10000).optional().nullable(),
+    })
+    .strict()
+    .refine((value) => value.audience !== "user" || Boolean(value.email), {
+      message: "Targeted trials need the user's email",
+      path: ["email"],
+    });
+
+  router.get(
+    "/trials",
+    requirePlatformPermission("subscriptions.read"),
+    async (_req, res, next) => {
+      try {
+        const items = await db
+          .select({
+            id: trialOffers.id,
+            planId: trialOffers.planId,
+            planName: billingPlans.name,
+            durationDays: trialOffers.durationDays,
+            audience: trialOffers.audience,
+            email: trialOffers.email,
+            status: trialOffers.status,
+            maxClaims: trialOffers.maxClaims,
+            claimCount: trialOffers.claimCount,
+            createdAt: trialOffers.createdAt,
+          })
+          .from(trialOffers)
+          .innerJoin(billingPlans, eq(trialOffers.planId, billingPlans.id))
+          .orderBy(desc(trialOffers.createdAt));
+        res.json({ items });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post("/trials", requirePlatformPermission("plans.manage"), async (req, res, next) => {
+    try {
+      const input = trialSchema.parse(req.body);
+      const [plan] = await db
+        .select({ id: billingPlans.id })
+        .from(billingPlans)
+        .where(and(eq(billingPlans.id, input.planId), isNull(billingPlans.archivedAt)))
+        .limit(1);
+      if (!plan) throw notFound("Plan not found");
+      const [offer] = await db
+        .insert(trialOffers)
+        .values({
+          planId: input.planId,
+          durationDays: input.durationDays,
+          audience: input.audience,
+          email: input.audience === "user" ? input.email : null,
+          maxClaims: input.maxClaims ?? null,
+          createdBy: req.auth.accountId,
+        })
+        .returning();
+      await writeAudit(db, {
+        actorAccountId: req.auth.accountId,
+        action: "TRIAL_OFFER_CREATED",
+        targetType: "trial_offer",
+        targetId: offer.id,
+        metadata: {
+          planId: input.planId,
+          audience: input.audience,
+          durationDays: input.durationDays,
+        },
+        ip: req.ip,
+      });
+      res.status(201).json({ offer });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch(
+    "/trials/:offerId",
+    requirePlatformPermission("plans.manage"),
+    async (req, res, next) => {
+      try {
+        const input = z
+          .object({ status: z.enum(["active", "disabled"]) })
+          .strict()
+          .parse(req.body);
+        const [offer] = await db
+          .update(trialOffers)
+          .set({ status: input.status, updatedAt: new Date() })
+          .where(eq(trialOffers.id, req.params.offerId))
+          .returning();
+        if (!offer) throw notFound();
+        await writeAudit(db, {
+          actorAccountId: req.auth.accountId,
+          action: "TRIAL_OFFER_UPDATED",
+          targetType: "trial_offer",
+          targetId: offer.id,
+          metadata: { status: input.status },
+          ip: req.ip,
+        });
+        res.json({ offer });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.patch(
     "/plans/:planId",

@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { PageHeader, Surface } from "@/components/console-kit";
 
 export default function OnboardingPage() {
@@ -60,7 +61,26 @@ export default function OnboardingPage() {
       ? subscription
       : null;
   const pendingPayment = billing?.pendingPayment || null;
+  const trialOffer = billing?.trialOffer || null;
   const planDone = Boolean(activeSubscription || pendingPayment);
+
+  const [claiming, setClaiming] = useState(false);
+  async function claimTrial() {
+    if (!trialOffer) return;
+    setClaiming(true);
+    try {
+      await api("/v1/billing/trials/claim", {
+        method: "POST",
+        body: JSON.stringify({ offerId: trialOffer.id }),
+      });
+      setBilling(await api("/v1/billing").catch(() => null));
+      setMessage("");
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   const counts = summary?.counts || {};
   const steps = [
@@ -173,6 +193,25 @@ export default function OnboardingPage() {
             </div>
             <ArrowRight size={17} className="text-[#536b31] transition group-hover:translate-x-1" />
           </Link>
+        ) : null}
+
+        {trialOffer && !planDone ? (
+          <div className="flex flex-col gap-4 border-b border-[#edf0e9] bg-[#eef5df] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Sparkles size={18} className="mt-0.5 shrink-0 text-[#5a7433]" />
+              <div>
+                <p className="font-semibold text-[#263120]">
+                  Free trial: {trialOffer.planName} — {trialOffer.durationDays} days
+                </p>
+                <p className="mt-1 text-sm text-[#596551]">
+                  Full protection, no payment now. Claim it and start protecting your videos today.
+                </p>
+              </div>
+            </div>
+            <Button className="shrink-0" onClick={claimTrial} disabled={claiming}>
+              {claiming ? "Claiming…" : "Claim free trial"}
+            </Button>
+          </div>
         ) : null}
 
         {!planDone ? (

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { PageHeader, StatusPill, Surface, money } from "@/components/console-kit";
 
 const protectionFeatures = [
@@ -73,6 +74,7 @@ export default function PlansPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
 
   async function load() {
     const [planData, billingData] = await Promise.all([
@@ -88,6 +90,24 @@ export default function PlansPage() {
       .catch((failure) => setError(failure.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function claimTrial() {
+    const offer = billing?.trialOffer;
+    if (!offer) return;
+    setClaiming(true);
+    setError("");
+    try {
+      await api("/v1/billing/trials/claim", {
+        method: "POST",
+        body: JSON.stringify({ offerId: offer.id }),
+      });
+      await load();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   const subscription = billing?.subscription || null;
   const activeSubscription =
@@ -209,6 +229,25 @@ export default function PlansPage() {
           </div>
         </Surface>
       )}
+
+      {billing?.trialOffer && !billing?.pendingPayment ? (
+        <div className="flex flex-col gap-4 rounded-2xl border border-[#d6e2ba] bg-[#eef5df] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles size={18} className="mt-0.5 shrink-0 text-[#5a7433]" />
+            <div>
+              <p className="font-semibold text-[#263120]">
+                Free trial: {billing.trialOffer.planName} — {billing.trialOffer.durationDays} days
+              </p>
+              <p className="mt-1 text-sm text-[#596551]">
+                Full protection, no payment now. Claim it and your plan activates instantly.
+              </p>
+            </div>
+          </div>
+          <Button className="shrink-0" onClick={claimTrial} disabled={claiming}>
+            {claiming ? "Claiming…" : "Claim free trial"}
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {plans.map((plan) => {

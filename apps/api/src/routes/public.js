@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { and, eq, isNull } from "drizzle-orm";
-import { billingPlans } from "@unpirator/db/commerce-schema";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { billingPlans, trialOffers } from "@unpirator/db/commerce-schema";
 
 export function publicRouter({ db }) {
   const router = Router();
@@ -16,7 +16,6 @@ export function publicRouter({ db }) {
           currency: billingPlans.currency,
           billingInterval: billingPlans.billingInterval,
           durationDays: billingPlans.durationDays,
-          trialDays: billingPlans.trialDays,
           badge: billingPlans.badge,
           entitlements: billingPlans.entitlements,
         })
@@ -29,8 +28,22 @@ export function publicRouter({ db }) {
           ),
         )
         .orderBy(billingPlans.sortOrder);
-      res.set("cache-control", "public, max-age=60, stale-while-revalidate=300");
-      res.json({ items });
+
+      // Admin-granted trials surface as badges; claiming happens in-dashboard.
+      const trialRows = await db
+        .select({ planId: trialOffers.planId })
+        .from(trialOffers)
+        .where(
+          and(
+            eq(trialOffers.status, "active"),
+            inArray(trialOffers.audience, ["everyone", "new_users"]),
+            sql`(${trialOffers.maxClaims} IS NULL OR ${trialOffers.claimCount} < ${trialOffers.maxClaims})`,
+          ),
+        );
+      const trialPlanIds = new Set(trialRows.map((row) => row.planId));
+      res.set("cache-control", "public, max-age=60, stale-while-revalidate=300").json({
+        items: items.map((item) => ({ ...item, trialAvailable: trialPlanIds.has(item.id) })),
+      });
     } catch (error) {
       next(error);
     }

@@ -144,7 +144,6 @@ function CheckoutInner() {
     () => compatibleMethods.find((method) => method.id === methodId) || null,
     [compatibleMethods, methodId],
   );
-  const trialDays = Number(plan?.trialDays) || 0;
 
   const entitlements = plan?.entitlements || {};
   const summaryLimits = [
@@ -316,11 +315,6 @@ function CheckoutInner() {
                     {money(plan.priceMinor, plan.currency)}
                   </p>
                   <p className="text-xs text-[#87917f]">per month</p>
-                  {trialDays > 0 ? (
-                    <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#eef5df] px-2.5 py-1 text-[11px] font-semibold text-[#5a7433]">
-                      <BadgeCheck size={13} /> {trialDays}-day trial
-                    </p>
-                  ) : null}
                 </div>
               </div>
 
@@ -569,14 +563,6 @@ function CheckoutInner() {
                       {selectedMethod?.accountNumber}
                     </span>
                   </div>
-                  {trialDays > 0 ? (
-                    <div className="flex items-start justify-between gap-3 border-t border-[#e8ebe3] pt-3">
-                      <span className="text-[#75806e]">Trial</span>
-                      <span className="text-right font-semibold text-[#4c632d]">
-                        {trialDays} days included
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
                 <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-[#75806e]">
                   <FileClock size={14} className="mt-0.5 shrink-0" />
