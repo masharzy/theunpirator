@@ -17,6 +17,7 @@ import {
   viewerIdentityKeyCandidates,
 } from "./viewer-identity.js";
 import { riskFor } from "@unpirator/security";
+import { tenantSettings } from "@unpirator/db/commerce-schema";
 import { queueWebhook } from "./webhooks.js";
 import { notifyTenant } from "./tenant-notifications.js";
 import { AppError, notFound } from "../errors.js";
@@ -45,6 +46,17 @@ export async function syncSessionCacheBestEffort(cache, sessionId, status) {
     );
     return false;
   }
+}
+
+/**
+ * Resolves a per-viewer limit: the tenant's own setting wins, clamped to the
+ * plan ceiling; without an override the plan value applies as before.
+ */
+export function applyViewerLimitOverride(planLimit, override) {
+  if (override == null) return planLimit;
+  const requested = Math.max(1, Math.floor(override));
+  if (planLimit == null) return requested;
+  return Math.min(planLimit, requested);
 }
 
 export function createPlaybackService({ db, cache, config, signingRing, gatewayControl }) {
@@ -314,6 +326,14 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
     }
     if (user.status !== "active") throw new AppError("USER_BLOCKED", "User is blocked", 403);
     recordTiming("user");
+    const [viewerPolicy] = await db
+      .select({
+        deviceLimitOverride: tenantSettings.deviceLimitOverride,
+        streamLimitOverride: tenantSettings.streamLimitOverride,
+      })
+      .from(tenantSettings)
+      .where(eq(tenantSettings.tenantId, tenantId))
+      .limit(1);
     const externalDeviceId = input.deviceId;
     let [device] = await db
       .select()
@@ -337,7 +357,10 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
             eq(devices.status, "active"),
           ),
         );
-      const deviceLimit = normalizeQuotaLimit(entitlements.max_devices_per_user);
+      const deviceLimit = applyViewerLimitOverride(
+        normalizeQuotaLimit(entitlements.max_devices_per_user),
+        viewerPolicy?.deviceLimitOverride ?? null,
+      );
       if (policy.deviceControl && deviceLimit !== null && existing.length >= deviceLimit) {
         await db.insert(securityEvents).values({
           tenantId,
@@ -393,7 +416,10 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
           gte(playbackSessions.lastHeartbeatAt, heartbeatCutoff),
         ),
       );
-    const maxStreams = normalizeQuotaLimit(entitlements.max_concurrent_streams);
+    const maxStreams = applyViewerLimitOverride(
+      normalizeQuotaLimit(entitlements.max_concurrent_streams),
+      viewerPolicy?.streamLimitOverride ?? null,
+    );
     recordTiming("active_sessions");
     if (
       policy.concurrentStreamControl &&

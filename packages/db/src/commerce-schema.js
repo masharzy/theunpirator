@@ -147,6 +147,9 @@ export const tenantSettings = pgTable("tenant_settings", {
     .primaryKey(),
   timezone: text("timezone").default("Asia/Dhaka").notNull(),
   notificationPreferences: jsonb("notification_preferences").default({}).notNull(),
+  // Per-viewer policy overrides; null = follow the plan's ceiling values.
+  deviceLimitOverride: integer("device_limit_override"),
+  streamLimitOverride: integer("stream_limit_override"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
