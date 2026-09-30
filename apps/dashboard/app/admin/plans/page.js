@@ -26,16 +26,6 @@ const numericEntitlements = [
   ["max_webhooks", "Webhook endpoints", "Destinations for security events"],
   ["max_team_members", "Team members", "People who can join the workspace"],
   [
-    "max_devices_per_user",
-    "Devices per viewer (max)",
-    "Ceiling — customers pick their own exact number in workspace settings",
-  ],
-  [
-    "max_concurrent_streams",
-    "Streams per viewer (max)",
-    "Ceiling — customers pick their own exact number in workspace settings",
-  ],
-  [
     "monthly_gateway_requests",
     "Monthly gateway requests",
     "Video requests served per billing month",
@@ -80,12 +70,12 @@ const booleanEntitlements = [
   [
     "device_control",
     "Device control",
-    "Register, limit, block and revoke the devices each viewer uses.",
+    "Let the customer limit, block and revoke the devices each viewer uses — they set the exact device count in their settings.",
   ],
   [
     "concurrent_stream_control",
     "Concurrent stream control",
-    "Cap how many videos one viewer can watch at the same time.",
+    "Let the customer cap how many videos one viewer watches at once — they set the exact number in their settings.",
   ],
   ["webhooks", "Security webhooks", "Push security events to the customer's own endpoints."],
   [

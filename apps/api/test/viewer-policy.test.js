@@ -7,13 +7,11 @@ describe("applyViewerLimitOverride", () => {
     expect(applyViewerLimitOverride(2, undefined)).toBe(2);
   });
 
-  it("lets the tenant pick a number below the plan ceiling", () => {
-    // Pro features with a Starter-style single device
+  it("lets the tenant pick any positive number regardless of the plan value", () => {
+    // Pro features with a Starter-style single device…
     expect(applyViewerLimitOverride(5, 1)).toBe(1);
-  });
-
-  it("clamps tenant values above the plan ceiling", () => {
-    expect(applyViewerLimitOverride(2, 10)).toBe(2);
+    // …or a looser policy than the plan default
+    expect(applyViewerLimitOverride(2, 10)).toBe(10);
   });
 
   it("allows any positive override when the plan is unlimited", () => {
