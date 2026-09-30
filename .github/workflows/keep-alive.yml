@@ -1,11 +1,17 @@
-# Keeps the free-tier Render API from sleeping and alerts when it is unhealthy.
+# Keeps the free-tier API from sleeping and alerts when it is truly down.
 #
-# Render free web services sleep after 15 minutes without inbound traffic.
-# This workflow pings the readiness endpoint every 10 minutes. GitHub emails
-# the repo admins when the workflow fails, so it doubles as uptime monitoring.
+# Free platforms sleep services without inbound traffic; this workflow pings
+# the liveness endpoint every 10 minutes.
+#
+# Alerting policy (Redis is treated as best-effort by design):
+#   - /health/live  must return 200. If not, the workflow FAILS and GitHub
+#     emails you — the API process itself is unreachable.
+#   - /health/ready is checked but a degraded result (e.g. Redis quota
+#     exhausted for the month) only prints a warning; it does not fail.
+#     The ResilientCache falls back to in-memory, so the API keeps working.
 #
 # Required repo secret:
-#   API_PUBLIC_URL  e.g. https://unpirator-api.onrender.com
+#   API_PUBLIC_URL  e.g. https://theunpirator-api.vercel.app
 #
 # On a VPS this workflow is simply deleted — a VPS does not sleep.
 
@@ -20,13 +26,33 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping readiness endpoint
+      - name: Ping liveness endpoint
         run: |
           if [ -z "${{ secrets.API_PUBLIC_URL }}" ]; then
-            echo "::error::Set the API_PUBLIC_URL repository secret (e.g. https://unpirator-api.onrender.com)"
+            echo "::error::Set the API_PUBLIC_URL repository secret (e.g. https://theunpirator-api.vercel.app)"
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 120 \
-            --retry 5 --retry-delay 15 --retry-all-errors \
-            "${{ secrets.API_PUBLIC_URL }}/health/ready"
-          echo "API is awake and ready"
+          BASE="${{ secrets.API_PUBLIC_URL }}"
+          LIVE_STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 120 \
+            --retry 5 --retry-delay 15 --retry-all-errors "$BASE/health/live") || LIVE_STATUS=000
+          if [ "$LIVE_STATUS" != "200" ]; then
+            echo "::error::API liveness check failed (HTTP $LIVE_STATUS) — the API is down"
+            exit 1
+          fi
+          echo "API is awake (liveness 200)"
+
+      - name: Report readiness (degraded is a warning, not a failure)
+        run: |
+          READY_STATUS=$(curl --silent --output /tmp/ready.json --write-out '%{http_code}' \
+            --max-time 120 "${{ secrets.API_PUBLIC_URL }}/health/ready") || READY_STATUS=000
+          echo "readiness: HTTP $READY_STATUS $(cat /tmp/ready.json 2>/dev/null || true)"
+          if [ "$READY_STATUS" = "200" ]; then
+            echo "All checks pass: database and cache healthy"
+          elif [ "$READY_STATUS" = "503" ]; then
+            echo "::warning::API is up but degraded (database or cache check failed)."
+            echo "::warning::If cache=false only: Redis/Upstash quota is likely exhausted."
+            echo "::warning::The API keeps working from memory fallback — no action needed"
+            echo "::warning::until quota resets. Investigate only if database=false."
+          else
+            echo "::warning::Readiness endpoint unreachable (HTTP $READY_STATUS) while liveness passed."
+          fi
