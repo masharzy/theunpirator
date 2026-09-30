@@ -1,0 +1,32 @@
+# Keeps the free-tier Render API from sleeping and alerts when it is unhealthy.
+#
+# Render free web services sleep after 15 minutes without inbound traffic.
+# This workflow pings the readiness endpoint every 10 minutes. GitHub emails
+# the repo admins when the workflow fails, so it doubles as uptime monitoring.
+#
+# Required repo secret:
+#   API_PUBLIC_URL  e.g. https://unpirator-api.onrender.com
+#
+# On a VPS this workflow is simply deleted — a VPS does not sleep.
+
+name: Keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping readiness endpoint
+        run: |
+          if [ -z "${{ secrets.API_PUBLIC_URL }}" ]; then
+            echo "::error::Set the API_PUBLIC_URL repository secret (e.g. https://unpirator-api.onrender.com)"
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 120 \
+            --retry 5 --retry-delay 15 --retry-all-errors \
+            "${{ secrets.API_PUBLIC_URL }}/health/ready"
+          echo "API is awake and ready"
