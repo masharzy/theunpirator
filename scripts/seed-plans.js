@@ -94,7 +94,7 @@ try {
       INSERT INTO plans (id, name, description, price_minor, currency, billing_interval,
                          duration_days, trial_days, status, is_public, sort_order, badge, entitlements)
       VALUES (${plan.id}, ${plan.name}, ${plan.description}, ${plan.priceMinor}, 'BDT', 'month',
-              30, 14, 'active', true, ${plan.sortOrder}, ${plan.badge}, ${JSON.stringify(plan.entitlements)})
+              30, 0, 'active', true, ${plan.sortOrder}, ${plan.badge}, ${JSON.stringify(plan.entitlements)})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         description = EXCLUDED.description,

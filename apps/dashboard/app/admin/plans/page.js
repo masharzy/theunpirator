@@ -143,7 +143,6 @@ const empty = {
   description: "",
   priceMajor: "",
   durationDays: 30,
-  trialDays: 14,
   currency: "BDT",
   billingInterval: "month",
   isPublic: true,
@@ -172,12 +171,74 @@ export default function AdminPlansPage() {
   const [editing, setEditing] = useState(null);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [trials, setTrials] = useState([]);
+  const [trialForm, setTrialForm] = useState({
+    planId: "",
+    durationDays: 14,
+    audience: "new_users",
+    email: "",
+    maxClaims: "",
+  });
 
-  const load = () => api("/v1/admin/commerce/plans").then((data) => setItems(data.items || []));
+  const load = () =>
+    Promise.all([
+      api("/v1/admin/commerce/plans").then((data) => setItems(data.items || [])),
+      api("/v1/admin/commerce/trials")
+        .then((data) => setTrials(data.items || []))
+        .catch(() => setTrials([])),
+    ]);
 
   useEffect(() => {
     load().catch((error) => setMessage({ kind: "error", text: error.message }));
   }, []);
+
+  async function createTrial(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api("/v1/admin/commerce/trials", {
+        method: "POST",
+        body: JSON.stringify({
+          planId: trialForm.planId,
+          durationDays: Number(trialForm.durationDays),
+          audience: trialForm.audience,
+          email: trialForm.audience === "user" ? trialForm.email : null,
+          maxClaims: trialForm.maxClaims === "" ? null : Number(trialForm.maxClaims),
+        }),
+      });
+      setTrialForm({
+        planId: "",
+        durationDays: 14,
+        audience: "new_users",
+        email: "",
+        maxClaims: "",
+      });
+      setMessage({
+        kind: "ok",
+        text: "Trial offer created — eligible workspaces can claim it now.",
+      });
+      await load();
+    } catch (error) {
+      setMessage({ kind: "error", text: error.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleTrial(offer) {
+    setBusy(true);
+    try {
+      await api(`/v1/admin/commerce/trials/${offer.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: offer.status === "active" ? "disabled" : "active" }),
+      });
+      await load();
+    } catch (error) {
+      setMessage({ kind: "error", text: error.message });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function reset() {
     setEditing(null);
@@ -193,7 +254,6 @@ export default function AdminPlansPage() {
       // stored as minor units (paisa); the form works in taka
       priceMajor: plan.priceMinor == null ? "" : Number(plan.priceMinor) / 100,
       durationDays: plan.durationDays,
-      trialDays: plan.trialDays,
       currency: plan.currency,
       billingInterval: plan.billingInterval,
       isPublic: plan.isPublic,
@@ -240,7 +300,8 @@ export default function AdminPlansPage() {
         description: form.description || null,
         priceMinor: form.priceMajor === "" ? null : Math.round(Number(form.priceMajor) * 100),
         durationDays: Number(form.durationDays),
-        trialDays: Number(form.trialDays),
+        // trials are granted via trial offers, never baked into plans
+        trialDays: 0,
         currency: form.currency,
         billingInterval: form.billingInterval,
         isPublic: form.isPublic,
@@ -419,15 +480,6 @@ export default function AdminPlansPage() {
                     max="3660"
                     value={form.durationDays}
                     onChange={(event) => setForm({ ...form, durationDays: event.target.value })}
-                  />
-                </Field>
-                <Field label="Trial days" hint="Free trial before charging starts (0 = none)">
-                  <Input
-                    type="number"
-                    min="0"
-                    max="365"
-                    value={form.trialDays}
-                    onChange={(event) => setForm({ ...form, trialDays: event.target.value })}
                   />
                 </Field>
                 <Field label="Display order" hint="Lower numbers appear first on the pricing page">
@@ -666,6 +718,129 @@ export default function AdminPlansPage() {
           )}
         </div>
       </div>
+
+      <Surface className="p-6">
+        <h2 className="font-semibold text-[#263120]">Free trial offers</h2>
+        <p className="mt-1 text-xs text-[#87917f]">
+          Grant free trials independently of plans — for everyone, new signups only, or one specific
+          user. Eligible workspaces see a claim button on their dashboard and the pricing page.
+        </p>
+
+        <form
+          className="mt-4 grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
+          onSubmit={createTrial}
+        >
+          <label className="block text-xs font-semibold text-[#3d4736]">
+            Plan
+            <select
+              required
+              className="mt-1.5 w-full rounded-xl border border-[#e1e6da] bg-white px-3 py-2.5 text-sm font-normal text-[#263120]"
+              value={trialForm.planId}
+              onChange={(event) => setTrialForm({ ...trialForm, planId: event.target.value })}
+            >
+              <option value="">Select plan</option>
+              {(items || []).map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-[#3d4736]">
+            Trial length (days)
+            <Input
+              className="mt-1.5"
+              type="number"
+              min="1"
+              max="90"
+              value={trialForm.durationDays}
+              onChange={(event) => setTrialForm({ ...trialForm, durationDays: event.target.value })}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-[#3d4736]">
+            Who can claim
+            <select
+              className="mt-1.5 w-full rounded-xl border border-[#e1e6da] bg-white px-3 py-2.5 text-sm font-normal text-[#263120]"
+              value={trialForm.audience}
+              onChange={(event) => setTrialForm({ ...trialForm, audience: event.target.value })}
+            >
+              <option value="everyone">Anyone</option>
+              <option value="new_users">New signups only</option>
+              <option value="user">One specific user</option>
+            </select>
+          </label>
+          {trialForm.audience === "user" ? (
+            <label className="block text-xs font-semibold text-[#3d4736]">
+              User email
+              <Input
+                className="mt-1.5"
+                required
+                type="email"
+                placeholder="owner@academy.com"
+                value={trialForm.email}
+                onChange={(event) => setTrialForm({ ...trialForm, email: event.target.value })}
+              />
+            </label>
+          ) : (
+            <label className="block text-xs font-semibold text-[#3d4736]">
+              Claim limit
+              <Input
+                className="mt-1.5"
+                type="number"
+                min="1"
+                placeholder="Unlimited"
+                value={trialForm.maxClaims}
+                onChange={(event) => setTrialForm({ ...trialForm, maxClaims: event.target.value })}
+              />
+            </label>
+          )}
+          <Button type="submit" disabled={busy || !trialForm.planId}>
+            <Sparkles size={15} /> Create offer
+          </Button>
+        </form>
+
+        <div className="mt-5 space-y-2">
+          {trials.length === 0 ? (
+            <p className="text-xs text-[#7b8574]">No trial offers yet.</p>
+          ) : (
+            trials.map((offer) => (
+              <div
+                key={offer.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e4e9db] bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#263120]">
+                    {offer.planName} — {offer.durationDays} days free
+                  </p>
+                  <p className="mt-0.5 text-xs text-[#75806e]">
+                    {offer.audience === "everyone"
+                      ? "Anyone can claim"
+                      : offer.audience === "new_users"
+                        ? "New signups only"
+                        : `Only ${offer.email}`}
+                    {offer.maxClaims != null
+                      ? ` · ${offer.claimCount}/${offer.maxClaims} claimed`
+                      : offer.claimCount > 0
+                        ? ` · ${offer.claimCount} claimed`
+                        : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusPill status={offer.status === "active" ? "active" : "disabled"} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => toggleTrial(offer)}
+                  >
+                    {offer.status === "active" ? "Pause" : "Resume"}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Surface>
     </div>
   );
 }

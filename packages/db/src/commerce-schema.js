@@ -58,6 +58,27 @@ export const paymentMethods = pgTable(
   ],
 );
 
+// Admin-granted free trials. Trials never come from plans: an admin creates
+// an offer (plan + duration + audience) and eligible tenants claim it.
+export const trialOffers = pgTable(
+  "trial_offers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    planId: text("plan_id")
+      .references(() => plans.id)
+      .notNull(),
+    durationDays: integer("duration_days").notNull(),
+    audience: text("audience").notNull(), // everyone | new_users | user
+    email: text("email"), // required when audience = 'user'
+    status: text("status").default("active").notNull(), // active | disabled
+    maxClaims: integer("max_claims"),
+    claimCount: integer("claim_count").default(0).notNull(),
+    createdBy: uuid("created_by").references(() => accounts.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [index("trial_offers_status_idx").on(t.status, t.audience)],
+);
+
 export const paymentRequests = pgTable(
   "payment_requests",
   {
