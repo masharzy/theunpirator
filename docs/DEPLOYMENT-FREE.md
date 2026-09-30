@@ -16,13 +16,13 @@ GitHub Actions (free)      -> cron jobs + keep-alive pings
 
 ## Free-tier limits to know
 
-| Service | Free allowance | What happens when exceeded |
-| --- | --- | --- |
-| Render | 750 hrs/month for one web service; sleeps after 15 min idle | Cold start (~30–60 s) if it sleeps; keep-alive workflow prevents this |
-| Neon | 0.5 GB storage, autosuspend | Compute auto-resumes on first query (small latency blip) |
-| Upstash | 10k Redis commands/day | Commands rejected until reset — cache falls back to memory (`ResilientCache`) |
-| Cloudflare Workers | 100k requests/day, free KV/DO tiers | Gateway requests fail — monitor usage in the dashboard |
-| GitHub Actions | 2,000 min/month for private repos | Scheduled jobs stop running; public repos are unlimited |
+| Service            | Free allowance                                              | What happens when exceeded                                                    |
+| ------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Render             | 750 hrs/month for one web service; sleeps after 15 min idle | Cold start (~30–60 s) if it sleeps; keep-alive workflow prevents this         |
+| Neon               | 0.5 GB storage, autosuspend                                 | Compute auto-resumes on first query (small latency blip)                      |
+| Upstash            | 10k Redis commands/day                                      | Commands rejected until reset — cache falls back to memory (`ResilientCache`) |
+| Cloudflare Workers | 100k requests/day, free KV/DO tiers                         | Gateway requests fail — monitor usage in the dashboard                        |
+| GitHub Actions     | 2,000 min/month for private repos                           | Scheduled jobs stop running; public repos are unlimited                       |
 
 ## 0. Prerequisites
 

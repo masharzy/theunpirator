@@ -3,7 +3,15 @@ import { createCache } from "../src/index.js";
 
 function unavailablePrimary() {
   const error = () => Promise.reject(new Error("max requests limit exceeded"));
-  return { get: error, set: error, del: error, incr: error, expire: error, eval: error, ping: error };
+  return {
+    get: error,
+    set: error,
+    del: error,
+    incr: error,
+    expire: error,
+    eval: error,
+    ping: error,
+  };
 }
 
 describe("cache resilience", () => {

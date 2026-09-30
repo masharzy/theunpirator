@@ -4,14 +4,14 @@ The free-tier topology ([DEPLOYMENT-FREE.md](DEPLOYMENT-FREE.md)) makes no code-
 Every service below is swapped by changing environment variables and repointing DNS — the
 application code, migrations, and job scripts are identical on both topologies.
 
-| Free-tier piece | VPS replacement | Code change |
-| --- | --- | --- |
-| Render web service | `node apps/api/src/server.js` under systemd/PM2/Docker (configs in `infra/`) | none |
-| Neon PostgreSQL | self-hosted PostgreSQL, `DATABASE_URL` repointed | none |
-| Upstash Redis | self-hosted Redis, `REDIS_URL` repointed | none |
-| GitHub Actions cron | crontab running the same job scripts | none |
-| Cloudflare Worker gateway | keep it, **or** run `workers/media-gateway/node-server.js` on the VPS | none |
-| Vercel dashboard | keep it, **or** serve `apps/dashboard` from the VPS | none |
+| Free-tier piece           | VPS replacement                                                              | Code change |
+| ------------------------- | ---------------------------------------------------------------------------- | ----------- |
+| Render web service        | `node apps/api/src/server.js` under systemd/PM2/Docker (configs in `infra/`) | none        |
+| Neon PostgreSQL           | self-hosted PostgreSQL, `DATABASE_URL` repointed                             | none        |
+| Upstash Redis             | self-hosted Redis, `REDIS_URL` repointed                                     | none        |
+| GitHub Actions cron       | crontab running the same job scripts                                         | none        |
+| Cloudflare Worker gateway | keep it, **or** run `workers/media-gateway/node-server.js` on the VPS        | none        |
+| Vercel dashboard          | keep it, **or** serve `apps/dashboard` from the VPS                          | none        |
 
 ## Switch-over checklist (~30 minutes, near-zero downtime)
 
@@ -27,6 +27,7 @@ application code, migrations, and job scripts are identical on both topologies.
    ```
 
    Keep Neon untouched until cutover is verified — it is the rollback.
+
 3. **Redis**: `apt install redis-server` (binds localhost). Set `REDIS_URL=redis://localhost:6379`
    and drop the Upstash REST vars.
 4. **API**: copy `infra/systemd/the-unpirator-api.service` (or use PM2/Docker from `infra/`), set
@@ -52,6 +53,7 @@ application code, migrations, and job scripts are identical on both topologies.
    `systemctl enable --now` them instead of writing crontab lines.) Then disable the GitHub
    workflows: Actions → Scheduled jobs → ⋮ → Disable workflow, and delete `keep-alive.yml`'s
    schedule (a VPS does not sleep).
+
 8. **DNS**: repoint `api.yourdomain` (and any gateway/dashboard hostnames) to the VPS.
 9. **Verify**: playback smoke test, dashboard login, one manual cron job run, 24 h of logs.
 10. **Decommission**: delete the Render service; keep Neon for a week as backup, then delete.
