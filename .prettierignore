@@ -11,3 +11,7 @@ artifacts
 .dev.vars
 playwright-report
 test-results
+
+# local AI tool worktrees
+.kilo
+.codex-output

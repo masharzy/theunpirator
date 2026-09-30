@@ -165,11 +165,9 @@ export function piracyRouter({ db, cache, requireTenantViewer, requireTenantAdmi
         if (!casesByFinding.has(caseRow.findingId)) casesByFinding.set(caseRow.findingId, []);
         casesByFinding.get(caseRow.findingId).push(caseRow);
       }
-      res
-        .set("cache-control", "private, no-cache")
-        .json({
-          items: items.map((item) => ({ ...item, cases: casesByFinding.get(item.id) || [] })),
-        });
+      res.set("cache-control", "private, no-cache").json({
+        items: items.map((item) => ({ ...item, cases: casesByFinding.get(item.id) || [] })),
+      });
     } catch (e) {
       next(e);
     }
