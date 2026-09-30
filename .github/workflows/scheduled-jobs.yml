@@ -1,0 +1,105 @@
+# Runs the API's standalone job scripts on a schedule, replacing VPS crontab.
+#
+# The scripts under apps/api/src/jobs/ are plain Node programs that talk to
+# Postgres and exit — they do not need the API server. On a VPS these exact
+# same commands move into crontab (see docs/VPS-MIGRATION.md).
+#
+# Required repo secrets (same values as the Render service):
+#   DATABASE_URL, APP_ENCRYPTION_KEY_BASE64, SIGNING_KEYS_B64,
+#   ACTIVE_SIGNING_KID, GATEWAY_INTERNAL_SECRET, GATEWAY_CONTROL_SECRET,
+#   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+#
+# Optional repo secret for the piracy scanner (added by the piracy module):
+#   YOUTUBE_API_KEY  (Google Cloud, YouTube Data API v3)
+
+name: Scheduled jobs
+
+on:
+  schedule:
+    # Times are UTC. Bangladesh is UTC+6.
+    - cron: "17 1 * * *" # daily ~07:17 BST — usage rollup + quota alerts
+    - cron: "23 */6 * * *" # every 6 hours — webhook retries
+    - cron: "41 2 * * *" # daily ~08:41 BST — subscription expiry
+    - cron: "53 */4 * * *" # every 4 hours — piracy scan
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-jobs
+  cancel-in-progress: false
+
+env:
+  NODE_ENV: production
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  APP_ENCRYPTION_KEY_BASE64: ${{ secrets.APP_ENCRYPTION_KEY_BASE64 }}
+  SIGNING_KEYS_B64: ${{ secrets.SIGNING_KEYS_B64 }}
+  ACTIVE_SIGNING_KID: ${{ secrets.ACTIVE_SIGNING_KID }}
+  GATEWAY_INTERNAL_SECRET: ${{ secrets.GATEWAY_INTERNAL_SECRET }}
+  GATEWAY_CONTROL_SECRET: ${{ secrets.GATEWAY_CONTROL_SECRET }}
+  UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+  UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+  YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+
+jobs:
+  usage-rollup:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 1 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node apps/api/src/jobs/usage-rollup.js
+
+  webhook-retry:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 */6 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node apps/api/src/jobs/webhook-retry.js
+
+  subscription-expiry:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 2 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node apps/api/src/jobs/subscription-expiry.js
+
+  piracy-scan:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '53 */4 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node apps/api/src/jobs/piracy-scan.js
