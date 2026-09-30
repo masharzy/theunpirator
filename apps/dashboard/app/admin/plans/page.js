@@ -19,26 +19,17 @@ import { PageHeader, StatusPill, Surface, money } from "@/components/console-kit
 // ---- Entitlement metadata -------------------------------------------------
 // Single source of truth for the form and the plan cards.
 
+function formatTransfer(bytes) {
+  if (bytes == null) return null;
+  const gb = Number(bytes) / 1024 ** 3;
+  if (gb >= 1024) return `${Number((gb / 1024).toFixed(1))} TB`;
+  return `${Number(gb.toFixed(1))} GB`;
+}
+
 const numericEntitlements = [
   ["max_sites", "Websites", "How many websites this plan can protect"],
   ["max_assets", "Videos / assets", "Protected videos this plan can register"],
-  ["max_api_keys", "API keys", "Server keys for playback integrations"],
-  ["max_webhooks", "Webhook endpoints", "Destinations for security events"],
-  ["max_team_members", "Team members", "People who can join the workspace"],
-  [
-    "monthly_gateway_requests",
-    "Monthly gateway requests",
-    "Video requests served per billing month",
-  ],
   ["monthly_egress_bytes", "Monthly transfer (GB)", "Video data delivered per month, in gigabytes"],
-  ["monthly_playback_minutes", "Monthly playback minutes", "Total watch time per month"],
-  ["monthly_playback_sessions", "Monthly playback sessions", "Play sessions started per month"],
-  [
-    "security_event_retention_days",
-    "Security events kept (days)",
-    "How long security incidents are stored",
-  ],
-  ["audit_log_retention_days", "Audit log kept (days)", "How long the audit trail is stored"],
 ];
 
 const booleanEntitlements = [
@@ -58,11 +49,6 @@ const booleanEntitlements = [
     "Playback is denied if the embedded player is tampered with.",
   ],
   [
-    "secure_browser_restriction",
-    "Secure browser restriction",
-    "Only allow playback inside hardened browser contexts.",
-  ],
-  [
     "dynamic_watermark",
     "Dynamic watermark",
     "Stamp the viewer's identity on the video so leaks are traceable.",
@@ -78,11 +64,6 @@ const booleanEntitlements = [
     "Let the customer cap how many videos one viewer watches at once — they set the exact number in their settings.",
   ],
   ["webhooks", "Security webhooks", "Push security events to the customer's own endpoints."],
-  [
-    "youtube_custom",
-    "Restricted YouTube provider",
-    "Serve approved YouTube content through the protected gateway.",
-  ],
   [
     "piracy_scan",
     "Piracy detection & takedowns",
@@ -182,8 +163,6 @@ const empty = {
     youtube_custom: false,
     piracy_scan: false,
     max_sites: 1,
-    max_devices_per_user: 2,
-    max_concurrent_streams: 1,
     session_policy: "block_new",
   },
 };
@@ -654,8 +633,8 @@ export default function AdminPlansPage() {
                   <div className="mt-4 grid gap-2 sm:grid-cols-3">
                     {[
                       ["Websites", plan.entitlements?.max_sites],
-                      ["Devices / viewer", plan.entitlements?.max_devices_per_user],
-                      ["Streams / viewer", plan.entitlements?.max_concurrent_streams],
+                      ["Videos", plan.entitlements?.max_assets],
+                      ["Transfer", formatTransfer(plan.entitlements?.monthly_egress_bytes)],
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-xl bg-[#f7f9f2] p-3 text-xs">
                         <span className="text-[#87917f]">{label}</span>
