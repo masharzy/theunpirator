@@ -442,7 +442,34 @@ describe.skipIf(!url)("PostgreSQL API integration", () => {
     expect(managed).toHaveLength(1);
   });
   it("enforces concurrency for new requests", async () => {
+    // Concurrency limits are scoped per viewer (a87e80a): drop the plan limit
+    // to 1 so the viewer's existing active session (from the idempotency test
+    // above) already fills it, then a second stream for the same viewer is
+    // blocked while a different viewer is unaffected.
+    const [subscription] = await database.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.tenantId, tenant))
+      .limit(1);
+    const [plan] = await database.db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, subscription.planId))
+      .limit(1);
+    await database.db
+      .update(plans)
+      .set({ entitlements: { ...plan.entitlements, max_concurrent_streams: 1 } })
+      .where(eq(plans.id, plan.id));
     expect((await play("new-request")).status).toBe(409);
+    expect(
+      (
+        await request(app)
+          .post("/v1/playback/sessions")
+          .set("authorization", `Bearer ${apiKey.secret}`)
+          .set("idempotency-key", "other-viewer-request")
+          .send({ ...input(), email: `viewer-2-${run}@integration.example` })
+      ).status,
+    ).toBe(201);
   });
   it("refuses playback when subscription is canceled", async () => {
     await database.db
