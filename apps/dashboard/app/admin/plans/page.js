@@ -63,7 +63,6 @@ const booleanEntitlements = [
     "Concurrent stream control",
     "Let the customer cap how many videos one viewer watches at once — they set the exact number in their settings.",
   ],
-  ["webhooks", "Security webhooks", "Push security events to the customer's own endpoints."],
   [
     "piracy_scan",
     "Piracy detection & takedowns",

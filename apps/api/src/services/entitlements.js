@@ -9,7 +9,9 @@ const DEFAULTS = {
   dynamic_watermark: false,
   device_control: false,
   concurrent_stream_control: false,
-  webhooks: false,
+  // Webhooks are a standard feature for every tenant (they deliver to the
+  // tenant's own endpoints — no platform cost), not a plan gate.
+  webhooks: true,
   max_sites: 1,
   max_devices_per_user: 2,
   max_concurrent_streams: 1,
@@ -58,7 +60,6 @@ export async function getEntitlements(db, tenantId) {
       dynamic_watermark: false,
       device_control: false,
       concurrent_stream_control: false,
-      webhooks: false,
       max_sites: 0,
     };
   return { ...DEFAULTS, ...subscription.entitlements };
@@ -121,7 +122,7 @@ export async function getPlaybackPolicy(db, tenantId) {
     watermark: evaluateFeature(flags, entitlements, "dynamic_watermark", tenantId, true),
     deviceControl: entitlements.device_control === true,
     concurrentStreamControl: entitlements.concurrent_stream_control === true,
-    webhooks: entitlements.webhooks === true,
+    webhooks: true,
     youtube: evaluateRestricted(flags, entitlements, "youtube_custom", tenantId),
   };
 }
