@@ -18,6 +18,7 @@ const protectionFeatures = [
   ["device_control", "Device controls"],
   ["concurrent_stream_control", "Concurrent stream protection"],
   ["webhooks", "Security webhooks"],
+  ["piracy_scan", "Piracy detection & takedowns"],
 ];
 
 const planLimits = [
