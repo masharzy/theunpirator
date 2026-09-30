@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clapperboard,
   KeyRound,
+  LockKeyhole,
   MonitorSmartphone,
   ShieldAlert,
   Waypoints,
@@ -91,6 +92,29 @@ export default function Dashboard() {
           {error}
         </div>
       )}
+
+      {billing &&
+      !["active", "trialing"].includes(String(billing?.subscription?.status || "").toLowerCase()) &&
+      !billing?.pendingPayment ? (
+        <div className="flex flex-col gap-4 rounded-2xl border border-[#f0e0bd] bg-[#fff9ea] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <LockKeyhole size={18} className="mt-0.5 shrink-0 text-[#9a6b1f]" />
+            <div>
+              <p className="font-semibold text-[#3d432f]">Protected playback is locked</p>
+              <p className="mt-1 text-sm text-[#6f745f]">
+                Choose a plan to unlock protected streaming, watermarking and piracy monitoring —
+                setup takes minutes.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/dashboard/checkout"
+            className="inline-flex shrink-0 justify-center rounded-xl bg-[#172014] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#263120]"
+          >
+            Choose a plan
+          </Link>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Protected assets" value={counts.assets ?? "—"} icon={Clapperboard} />

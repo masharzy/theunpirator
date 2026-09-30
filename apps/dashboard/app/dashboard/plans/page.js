@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Copy, LockKeyhole, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { EmptyState, PageHeader, StatusPill, Surface, money } from "@/components/console-kit";
+import { PageHeader, StatusPill, Surface, money } from "@/components/console-kit";
 
 const protectionFeatures = [
   ["secure_gateway", "Secure playback gateway"],
@@ -63,41 +62,25 @@ function readableFeatures(entitlements = {}) {
     .map(([key, label]) => ({ key, label }));
 }
 
-function supportsAmount(method, plan) {
-  const amount = Number(plan?.priceMinor);
-  if (!Number.isFinite(amount) || amount <= 0) return false;
-  if (method.minAmountMinor != null && amount < Number(method.minAmountMinor)) return false;
-  if (method.maxAmountMinor != null && amount > Number(method.maxAmountMinor)) return false;
-  return true;
-}
-
 function dateTime(value) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
 export default function PlansPage() {
+  const router = useRouter();
   const [plans, setPlans] = useState([]);
-  const [methods, setMethods] = useState([]);
   const [billing, setBilling] = useState(null);
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [selectedMethodId, setSelectedMethodId] = useState("");
-  const [senderNumber, setSenderNumber] = useState("");
-  const [transactionId, setTransactionId] = useState("");
-  const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
 
   async function load() {
-    const [planData, billingData, methodData] = await Promise.all([
+    const [planData, billingData] = await Promise.all([
       api("/v1/billing/plans"),
       api("/v1/billing"),
-      api("/v1/billing/payment-methods"),
     ]);
     setPlans(planData.items || []);
     setBilling(billingData);
-    setMethods(methodData.items || []);
   }
 
   useEffect(() => {
@@ -116,18 +99,6 @@ export default function PlansPage() {
     () => plans.find((plan) => plan.id === currentPlanId) || null,
     [plans, currentPlanId],
   );
-  const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.id === selectedPlanId) || null,
-    [plans, selectedPlanId],
-  );
-  const compatibleMethods = useMemo(
-    () => methods.filter((method) => supportsAmount(method, selectedPlan)),
-    [methods, selectedPlan],
-  );
-  const selectedMethod = useMemo(
-    () => compatibleMethods.find((method) => method.id === selectedMethodId) || null,
-    [compatibleMethods, selectedMethodId],
-  );
   const currentFeatures = readableFeatures(billing?.entitlements || {});
 
   function choosePlan(plan) {
@@ -135,49 +106,7 @@ export default function PlansPage() {
       setMessage("A payment is already under review. Open Billing to track its status.");
       return;
     }
-    setSelectedPlanId(plan.id);
-    const firstMethod = methods.find((method) => supportsAmount(method, plan));
-    setSelectedMethodId(firstMethod?.id || "");
-    setMessage("");
-    setError("");
-    requestAnimationFrame(() => {
-      document.getElementById("plan-checkout")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }
-
-  async function submitPayment(event) {
-    event.preventDefault();
-    if (!selectedPlan || !selectedMethod) return;
-
-    setSubmitting(true);
-    setError("");
-    setMessage("");
-    try {
-      await api("/v1/billing/payments", {
-        method: "POST",
-        body: JSON.stringify({
-          planId: selectedPlan.id,
-          paymentMethodId: selectedMethod.id,
-          senderNumber,
-          transactionId,
-          customerNote: note || null,
-        }),
-      });
-      setSenderNumber("");
-      setTransactionId("");
-      setNote("");
-      setSelectedPlanId("");
-      setSelectedMethodId("");
-      await load();
-      setMessage("Payment submitted for review. You can track it from Billing.");
-    } catch (failure) {
-      setError(failure.message);
-    } finally {
-      setSubmitting(false);
-    }
+    router.push(`/dashboard/checkout?plan=${plan.id}`);
   }
 
   return (
@@ -284,7 +213,6 @@ export default function PlansPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         {plans.map((plan) => {
           const active = currentPlanId === plan.id;
-          const selected = selectedPlanId === plan.id;
           const configured = Number(plan.priceMinor) > 0;
           const features = readableFeatures(plan.entitlements || {});
           const limits = readableLimits(plan.entitlements || {});
@@ -293,7 +221,7 @@ export default function PlansPage() {
             <Surface
               key={plan.id}
               className={`relative flex h-full flex-col p-6 ${
-                active ? "ring-2 ring-[#91a96b]" : selected ? "ring-2 ring-[#bdc9ae]" : ""
+                active ? "ring-2 ring-[#91a96b]" : ""
               }`}
             >
               <div className="flex items-start justify-between gap-4">
@@ -376,140 +304,6 @@ export default function PlansPage() {
           );
         })}
       </div>
-
-      {selectedPlan && !billing?.pendingPayment && (
-        <div id="plan-checkout" className="scroll-mt-24">
-          <Surface className="overflow-hidden">
-            <div className="border-b border-[#e6eadf] px-6 py-5">
-              <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#7b8574]">
-                Checkout
-              </p>
-              <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold text-[#263120]">{selectedPlan.name}</h2>
-                  <p className="mt-1 text-sm text-[#74806d]">
-                    Complete the payment below. Your plan activates after verification.
-                  </p>
-                </div>
-                <p className="text-2xl font-semibold text-[#263120]">
-                  {money(selectedPlan.priceMinor, selectedPlan.currency)}
-                </p>
-              </div>
-            </div>
-
-            {compatibleMethods.length === 0 ? (
-              <div className="p-6">
-                <EmptyState
-                  title="No payment method supports this plan"
-                  description="An administrator must enable a compatible payment method before this plan can be purchased."
-                />
-              </div>
-            ) : (
-              <div className="grid gap-0 xl:grid-cols-[.9fr_1.1fr]">
-                <div className="border-b border-[#e6eadf] p-6 xl:border-b-0 xl:border-r">
-                  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#71805b]">
-                    Payment method
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    {compatibleMethods.map((method) => (
-                      <button
-                        type="button"
-                        key={method.id}
-                        onClick={() => setSelectedMethodId(method.id)}
-                        className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition hover:bg-[#f8faf4] ${
-                          selectedMethodId === method.id
-                            ? "border-[#829b57] bg-[#f3f8e7]"
-                            : "border-[#e0e5d9]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-3">
-                          <WalletCards size={17} />
-                          <span>
-                            <b className="block">{method.displayName}</b>
-                            <small className="text-[#7b8574]">
-                              {method.accountType || method.type}
-                            </small>
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-6">
-                  {selectedMethod && (
-                    <>
-                      <div className="rounded-2xl bg-[#172014] p-5 text-white">
-                        <p className="text-xs text-white/55">Send exactly</p>
-                        <p className="mt-1 text-3xl font-semibold">
-                          {money(selectedPlan.priceMinor, selectedPlan.currency)}
-                        </p>
-                        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-white/10 p-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-mono">{selectedMethod.accountNumber}</p>
-                            {selectedMethod.accountName && (
-                              <p className="mt-1 truncate text-xs text-white/55">
-                                {selectedMethod.accountName}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              navigator.clipboard?.writeText(selectedMethod.accountNumber)
-                            }
-                            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl bg-white/10 transition hover:bg-white/15"
-                            aria-label="Copy payment account number"
-                          >
-                            <Copy size={16} />
-                          </button>
-                        </div>
-                        {selectedMethod.instructions && (
-                          <p className="mt-3 text-xs leading-5 text-white/60">
-                            {selectedMethod.instructions}
-                          </p>
-                        )}
-                      </div>
-
-                      <form className="mt-6 space-y-4" onSubmit={submitPayment}>
-                        <label className="block text-sm font-medium text-[#34402e]">
-                          Sender number
-                          <Input
-                            className="mt-2"
-                            required
-                            value={senderNumber}
-                            onChange={(event) => setSenderNumber(event.target.value)}
-                          />
-                        </label>
-                        <label className="block text-sm font-medium text-[#34402e]">
-                          Transaction ID
-                          <Input
-                            className="mt-2"
-                            required
-                            value={transactionId}
-                            onChange={(event) => setTransactionId(event.target.value)}
-                          />
-                        </label>
-                        <label className="block text-sm font-medium text-[#34402e]">
-                          Note <span className="font-normal text-[#899283]">(optional)</span>
-                          <textarea
-                            className="mt-2 min-h-24 w-full rounded-xl border border-[#dfe4d8] bg-white p-3 text-sm outline-none transition focus:border-[#9aaa84] focus:ring-2 focus:ring-[#dfe8cf]"
-                            value={note}
-                            onChange={(event) => setNote(event.target.value)}
-                          />
-                        </label>
-                        <Button className="w-full" disabled={submitting}>
-                          {submitting ? "Submitting…" : "Submit payment for review"}
-                        </Button>
-                      </form>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </Surface>
-        </div>
-      )}
     </div>
   );
 }

@@ -132,7 +132,7 @@ export function PublicPlans({ compact = false }) {
               ))}
             </ul>
             <Link
-              href="/register"
+              href={`/register?plan=${plan.id}`}
               className={`mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${index === 1 && plans.length > 2 ? "bg-[#dcebbd] text-[#1e2919]" : "bg-[#172014] text-white"}`}
             >
               Get started <ArrowUpRight size={16} />
