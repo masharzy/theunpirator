@@ -42,7 +42,9 @@ export default function RegisterPage() {
         body: JSON.stringify({ tenantName: tenantName.trim(), email: email.trim(), password }),
       });
       localStorage.setItem("unpirator_tenant_id", data.tenant.id);
-      window.location.assign("/dashboard/onboarding");
+      // carry a pricing-page plan selection through onboarding to checkout
+      const plan = new URLSearchParams(window.location.search).get("plan");
+      window.location.assign(plan ? `/dashboard/onboarding?plan=${plan}` : "/dashboard/onboarding");
     } catch (e) {
       setError(e.message || "We could not create your workspace. Please try again.");
     } finally {
