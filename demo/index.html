@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Unpirator — Protected Playback Demo</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#07110b;color:#e8f0e8;font:15px/1.55 system-ui,sans-serif}
+    .wrap{max-width:900px;margin:0 auto;padding:20px 14px 70px}
+    header{margin-bottom:6px}
+    .toprow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .logo{width:40px;height:40px;border-radius:11px;background:#78944f;display:grid;place-items:center;font-weight:800;flex-shrink:0}
+    h1{font-size:19px;margin:0;line-height:1.3}
+    .sub{color:#9db3a0;font-size:13.5px;margin:10px 0 0}
+    .badge{display:inline-block;border:1px solid #37503a;border-radius:999px;padding:4px 12px;font-size:11px;color:#a8c9a8;margin-top:10px}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#8fae90;margin:36px 0 8px}
+    p.desc{color:#a9bcae;font-size:13.5px;margin:0 0 12px}
+    unpirator-player{display:block;border-radius:14px;overflow:hidden;border:1px solid #1d2e22;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+    .err{margin-top:8px;background:#1a0f0f;border:1px solid #4a2020;color:#ff9c9c;font:12px/1.5 ui-monospace,monospace;border-radius:10px;padding:10px 12px;word-break:break-word;display:none}
+    .ok{margin-top:8px;background:#0f1a10;border:1px solid #26402c;color:#9fd3a4;font-size:12px;border-radius:10px;padding:8px 12px;display:none}
+    .sec{margin-bottom:34px}
+    @media(min-width:720px){ .wrap{padding:44px 24px 80px} h1{font-size:24px} .sec{margin-bottom:48px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="toprow">
+        <div class="logo">U</div>
+        <h1>The Unpirator — Protected Playback Demo</h1>
+      </div>
+      <p class="sub">Every stream is served through the Unpirator gateway: signed sessions, per-viewer encryption, watermarking and piracy monitoring. The original file URL never reaches this browser.</p>
+      <span class="badge">LIVE DEMO · protected delivery</span>
+    </header>
+
+    <div class="sec">
+      <h2>1 · YouTube source — protected proxy</h2>
+      <p class="desc">A regular YouTube URL, resolved and re-served by the gateway. The viewer never touches a YouTube link. Session is device-bound and watermarked.</p>
+      <unpirator-player id="p1" asset-id="2243c5c7-dff7-4444-a60b-7f64c05daa1f" endpoint="/api/unpirator/playback"></unpirator-player>
+      <div class="err" id="e1"></div>
+    </div>
+
+    <div class="sec">
+      <h2>2 · Direct MP4 — protected delivery</h2>
+      <p class="desc">Any hosted MP4, streamed as encrypted per-viewer segments. The original file URL is never exposed.</p>
+      <unpirator-player id="p2" asset-id="2b915578-9540-4729-88e4-c8744f5e058b" endpoint="/api/unpirator/playback"></unpirator-player>
+      <div class="err" id="e2"></div>
+    </div>
+
+    <div class="sec">
+      <h2>3 · Bunny Stream — protected delivery</h2>
+      <p class="desc">A Bunny Stream embed, resolved to its HLS playlist and re-served through the gateway with signed paths.</p>
+      <unpirator-player id="p3" asset-id="b366a6fb-3e27-478b-8bd2-281388b079d3" endpoint="/api/unpirator/playback"></unpirator-player>
+      <div class="err" id="e3"></div>
+    </div>
+
+    <div class="sec">
+      <h2>4 · HLS stream — protected delivery</h2>
+      <p class="desc">An existing HLS playlist, rewritten live through the gateway with signed per-session paths.</p>
+      <unpirator-player id="p4" asset-id="170381e5-ea91-4714-900f-ee1c4ffafc8f" endpoint="/api/unpirator/playback"></unpirator-player>
+      <div class="err" id="e4"></div>
+    </div>
+
+    <p style="color:#5f7a64;font-size:12px;border-top:1px solid #14251a;padding-top:16px;margin-top:44px">
+      © The Unpirator — content protection for Bangladeshi edtech. Playback sessions are logged, device-bound and watermarked.
+    </p>
+  </div>
+
+  <script>
+    // surface real errors per player (debug visibility)
+    window.addEventListener('unpirator-error', (e) => {
+      const el = e.target;
+      const idx = Array.from(document.querySelectorAll('unpirator-player')).indexOf(el);
+      const box = document.getElementById('e' + (idx + 1));
+      if (!box) return;
+      const err = e.detail?.error || e.detail || {};
+      box.style.display = 'block';
+      box.textContent = '[' + (err.code || 'ERROR') + '] ' + (err.message || String(err));
+    });
+    window.addEventListener('unpirator-ready', (e) => {
+      const idx = Array.from(document.querySelectorAll('unpirator-player')).indexOf(e.target);
+      const box = document.getElementById('e' + (idx + 1));
+      if (box) { box.style.display = 'block'; box.className = 'ok'; box.id = 'e' + (idx + 1); box.textContent = '✓ Protected playback active'; setTimeout(() => { box.style.display = 'none'; box.className = 'err'; }, 4000); }
+    });
+    // ngrok free compatibility: skip the browser-warning interstitial on gateway requests
+    if (window.fetch) {
+      const _fetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        try {
+          const url = typeof input === 'string' ? input : (input && input.url) || '';
+          if (url.includes('ngrok')) {
+            init = init ? { ...init } : {};
+            const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+            headers.set('ngrok-skip-browser-warning', '1');
+            init.headers = headers;
+          }
+        } catch (_) {}
+        return _fetch(input, init);
+      };
+    }
+  </script>
+  <script type="module" src="https://esm.sh/@unpirator/web-component@0.2.0"></script>
+</body>
+</html>
