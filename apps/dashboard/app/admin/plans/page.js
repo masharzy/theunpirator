@@ -9,6 +9,7 @@ import {
   ScrollText,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
