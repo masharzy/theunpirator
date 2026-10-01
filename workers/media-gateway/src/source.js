@@ -8,6 +8,13 @@ function sourceKey(claims, assetId) {
   return `source:${SOURCE_CACHE_VERSION}:${claims.tid}:${assetId}:${claims.psid}`;
 }
 
+// Resolved youtube sources are shared across viewers of one workspace: the
+// gateway fetches googlevideo bytes itself, so the resolved URLs never cross
+// runtimes or depend on the viewer. One resolve serves every student.
+function sharedSourceKey(claims, assetId) {
+  return `source:yt:${SOURCE_CACHE_VERSION}:${claims.tid}:${assetId}`;
+}
+
 function proofKey(claims, assetId) {
   return `provider-proof:${SOURCE_CACHE_VERSION}:${claims.psid}:${assetId}`;
 }
@@ -62,6 +69,14 @@ async function resolveSource(env, claims, assetId, forceRefresh, providerProof) 
   const data = await fetchSourceDescriptor(env, claims, assetId);
   let source = data.source;
   if (source?.resolver === "youtube_custom") {
+    // Shared resolution: one resolve per workspace+asset serves every viewer.
+    const sharedKey = sharedSourceKey(claims, assetId);
+    if (!forceRefresh) {
+      const shared = await env.SOURCE_CACHE.get(sharedKey, "json");
+      if (shared && (!shared.expiresAt || Date.parse(shared.expiresAt) > Date.now() + 5000)) {
+        return { ...shared, allowedOrigins: data.allowedOrigins || [] };
+      }
+    }
     try {
       const proof =
         providerProof || (await env.SOURCE_CACHE.get(proofKey(claims, assetId), "json"));
@@ -92,6 +107,22 @@ async function resolveSource(env, claims, assetId, forceRefresh, providerProof) 
       );
       throw securityError("SOURCE_RESOLUTION_FAILED", 502, "Media source unavailable");
     }
+    const sharedTtl = Math.max(10, Math.min(Number(source?.cacheTtlSeconds || 60), 6 * 3600));
+    const sharedUrlTtl = source?.expiresAt
+      ? Math.floor((Date.parse(source.expiresAt) - Date.now()) / 1000) - 30
+      : 0;
+    const sharedExpires = Math.max(
+      60,
+      Math.min(sharedUrlTtl > 0 ? sharedUrlTtl : sharedTtl, 6 * 3600),
+    );
+    await env.SOURCE_CACHE.put(
+      sharedKey,
+      JSON.stringify({ ...source, allowedOrigins: data.allowedOrigins || [] }),
+      { expirationTtl: sharedExpires },
+    );
+    // Other sessions' cached manifests still reference the old URLs; their
+    // next failed chunk triggers their own re-resolve (self-healing), so no
+    // cross-session manifest cleanup is needed here.
   }
   const configuredTtl = Math.max(10, Math.min(Number(source?.cacheTtlSeconds || 60), 6 * 3600));
   const signedUrlTtl = source?.expiresAt
@@ -110,6 +141,7 @@ export async function invalidateSource(env, claims, assetId) {
   await Promise.all([
     env.SOURCE_CACHE.delete(sourceKey(claims, assetId)),
     env.SOURCE_CACHE.delete(`source:${claims.tid}:${assetId}`),
+    env.SOURCE_CACHE.delete(sharedSourceKey(claims, assetId)),
   ]);
 }
 

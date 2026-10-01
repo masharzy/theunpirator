@@ -166,6 +166,10 @@ async function fetchTrackRange(track, variant, range, source) {
       return { response: await fetchRange(stream, source, range, signal), stream, source };
     } catch (error) {
       lastError = error;
+      // A 403/410 from googlevideo means the resolved URLs are dead (expired,
+      // IP changed). Retrying the same URLs cannot succeed — fail fast so the
+      // caller can re-resolve instead.
+      if (error?.upstreamStatus === 403 || error?.upstreamStatus === 410) break;
       if (attempt === 2) break;
       await new Promise((resolve) => setTimeout(resolve, 150 * 2 ** attempt));
     }
@@ -248,15 +252,15 @@ async function buildManifest(env, claims, assetId, forceRefresh, providerProof) 
 }
 
 export async function protectedPlainChunk(env, claims, assetId, track, variant, sequence) {
-  const source = await getSource(env, claims, assetId);
+  let source = await getSource(env, claims, assetId);
   if (source.delivery?.mode !== "protected_segments")
     throw securityError("PROTECTED_DELIVERY_UNAVAILABLE", 409);
-  const list = track === "video" ? source.delivery.streams.video : source.delivery.streams.audio;
-  const stream = list?.[variant];
+  let list = track === "video" ? source.delivery.streams.video : source.delivery.streams.audio;
+  let stream = list?.[variant];
   if (!stream) throw securityError("MEDIA_SEGMENT_INVALID", 404);
-  const manifest = await protectedManifest(env, claims, assetId);
-  const descriptor = manifest[track]?.[variant];
-  const range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
+  let manifest = await protectedManifest(env, claims, assetId);
+  let descriptor = manifest[track]?.[variant];
+  let range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
   if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
   const stub = env.SESSION_STATE.get(env.SESSION_STATE.idFromName(claims.psid));
   const reserved = await stub.fetch("https://session/lease", {
@@ -266,7 +270,37 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
   if (!reserved.ok) throw securityError("DELIVERY_LIMIT", reserved.status);
   const { lease } = await reserved.json();
   try {
-    const { response } = await fetchTrackRange(track, variant, range, source);
+    let result;
+    try {
+      result = await fetchTrackRange(track, variant, range, source);
+    } catch (error) {
+      // Resolved URLs died mid-session (expired early, egress IP changed).
+      // Re-resolve once from fresh URLs and retry this chunk before giving up.
+      const dead =
+        error?.upstreamStatus === 403 ||
+        error?.upstreamStatus === 410 ||
+        error?.code === "ORIGIN_FAILURE";
+      if (!dead) throw error;
+      console.info(
+        JSON.stringify({
+          component: "protected-media",
+          code: "SOURCE_RE.RESOLVE",
+          assetId,
+          sessionId: claims.psid,
+          upstreamStatus: error.upstreamStatus || null,
+        }),
+      );
+      source = await getSource(env, claims, assetId, true);
+      list = track === "video" ? source.delivery.streams.video : source.delivery.streams.audio;
+      stream = list?.[variant];
+      if (!stream) throw securityError("MEDIA_SEGMENT_INVALID", 404);
+      manifest = await protectedManifest(env, claims, assetId, true);
+      descriptor = manifest[track]?.[variant];
+      range = sequence === 0 ? descriptor?.init : descriptor?.segments?.[sequence - 1];
+      if (!range || range.sequence !== sequence) throw securityError("MEDIA_SEGMENT_INVALID", 404);
+      result = await fetchTrackRange(track, variant, range, source);
+    }
+    const { response } = result;
     const body = await readRange(response, range, 16 * 1024 * 1024, "MEDIA_SEGMENT_INVALID");
     await reserveDeliveryQuota(env, claims, body.byteLength);
     return { body, contentType: stream.mimeType || "application/octet-stream" };
