@@ -1,3 +1,5 @@
+// Control API entry point. Deploy note: Vercel only rebuilds this project when
+// files under apps/api/ change — trivial-only commits elsewhere are skipped.
 import { createApp } from "./create-app.js";
 import "./startup/providers.js";
 import { loadEnvFile } from "node:process";
