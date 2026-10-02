@@ -34,7 +34,11 @@ function context() {
 
 async function toWebRequest(req) {
   const host = req.headers.host || `127.0.0.1:${port}`;
-  const protocol = req.headers["x-forwarded-proto"] || "http";
+  // Proxies chain this header ("https, https") — only the first hop is usable.
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const protocol = forwardedProto || "http";
   const init = { method: req.method, headers: req.headers };
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = Readable.toWeb(req);

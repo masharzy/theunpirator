@@ -1,11 +1,26 @@
 // The Unpirator demo — advanced-mode Pages Worker.
 // POST /api/unpirator/playback proxies to the control API with the demo API
-// key (server-side only); everything else serves the static demo assets.
+// key (server-side only). The media gateway is exposed to the player only
+// through /gw/* (same-origin proxy over the permanent ngrok tunnel): browser
+// fetches never hit ngrok directly, so no interstitial and no cross-origin
+// failures. Everything else serves the static demo assets.
 const JSON_HEADERS = { "content-type": "application/json" };
+const PASSTHROUGH_REQUEST_HEADERS = ["authorization", "content-type", "range", "origin"];
+const PASSTHROUGH_RESPONSE_HEADERS = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "cache-control",
+  "x-unpirator-iv",
+  "x-unpirator-context",
+];
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const gatewayBase = env.UNPIRATOR_GATEWAY_BASE;
+
     if (url.pathname === "/api/unpirator/playback" && request.method === "POST") {
       let body;
       try {
@@ -35,8 +50,41 @@ export default {
         body: JSON.stringify(payload),
       });
       const data = await upstream.json().catch(() => ({}));
-      return new Response(JSON.stringify(data), { status: upstream.status, headers: JSON_HEADERS });
+      // Point the player at the same-origin gateway proxy instead of the tunnel host.
+      const serialized = gatewayBase
+        ? JSON.stringify(data).split(gatewayBase).join(`${url.origin}/gw`)
+        : JSON.stringify(data);
+      return new Response(serialized, { status: upstream.status, headers: JSON_HEADERS });
     }
+
+    if (gatewayBase && url.pathname.startsWith("/gw/") && request.method !== "OPTIONS") {
+      const target = `${gatewayBase}${url.pathname.slice(3)}${url.search}`;
+      const headers = new Headers();
+      for (const name of PASSTHROUGH_REQUEST_HEADERS) {
+        const value = request.headers.get(name);
+        if (value) headers.set(name, value);
+      }
+      headers.set("ngrok-skip-browser-warning", "1");
+      const upstream = await fetch(target, {
+        method: request.method,
+        headers,
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
+      });
+      if ((upstream.headers.get("content-type") || "").includes("json")) {
+        const text = await upstream.text();
+        return new Response(text.split(gatewayBase).join(`${url.origin}/gw`), {
+          status: upstream.status,
+          headers: JSON_HEADERS,
+        });
+      }
+      const responseHeaders = new Headers();
+      for (const name of PASSTHROUGH_RESPONSE_HEADERS) {
+        const value = upstream.headers.get(name);
+        if (value) responseHeaders.set(name, value);
+      }
+      return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+    }
+
     return env.ASSETS.fetch(request);
   },
 };
