@@ -5,7 +5,7 @@
 // fetches never hit ngrok directly, so no interstitial and no cross-origin
 // failures. Everything else serves the static demo assets.
 const JSON_HEADERS = { "content-type": "application/json" };
-const PASSTHROUGH_REQUEST_HEADERS = ["authorization", "content-type", "range", "origin"];
+const PASSTHROUGH_REQUEST_HEADERS = ["authorization", "content-type", "range", "origin", "user-agent"];
 const PASSTHROUGH_RESPONSE_HEADERS = [
   "content-type",
   "content-length",
