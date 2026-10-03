@@ -12,6 +12,7 @@ const PASSTHROUGH_RESPONSE_HEADERS = [
   "content-range",
   "accept-ranges",
   "cache-control",
+  "server-timing",
   "x-unpirator-iv",
   "x-unpirator-context",
 ];
