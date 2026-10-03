@@ -175,7 +175,7 @@ const gateway = {
         assertAllowedProtectedBrowser(request);
         await assertProtectedOrigin(request, env, claims, assetId);
         return Response.json(
-          { challenge: await createYoutubeAttestation(request.headers.get("user-agent") || "") },
+          { challenge: await createYoutubeAttestation() },
           {
             headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
           },
@@ -186,10 +186,7 @@ const gateway = {
         await assertProtectedOrigin(request, env, claims, assetId);
         const body = await request.json();
         return Response.json(
-          await createYoutubeIntegrityToken(
-            request.headers.get("user-agent") || "",
-            body?.botguardResponse,
-          ),
+          await createYoutubeIntegrityToken(body?.botguardResponse),
           {
             headers: { "cache-control": "no-store", "x-request-id": rid, ...corsHeaders(request) },
           },
