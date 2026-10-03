@@ -104,7 +104,9 @@ export class SessionState {
       const bucket = Math.floor(Date.now() / 60_000);
       const rateKey = `ticket-rate:${bucket}`;
       const count = Number((await this.state.storage.get(rateKey)) || 0);
-      if (count >= 180) return deny("rate_limited", 429);
+      // Initial buffer fill for high-segment sources can burst well past 100
+      // mints; keep headroom so playback never stalls on the limiter itself.
+      if (count >= 600) return deny("rate_limited", 429);
 
       const usageKey = `usage:${bucket}:${body.track}:${body.variant}:${sequence}`;
       const attempts = Number((await this.state.storage.get(usageKey)) || 0);
@@ -173,7 +175,7 @@ export class SessionState {
       const bucket = Math.floor(Date.now() / 60_000);
       const rateKey = `resource-rate:${bucket}`;
       const count = Number((await this.state.storage.get(rateKey)) || 0);
-      if (count >= 240) return deny("rate_limited", 429);
+      if (count >= 600) return deny("rate_limited", 429);
 
       const ticket = crypto.randomUUID() + crypto.randomUUID();
       await Promise.all([

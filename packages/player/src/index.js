@@ -906,16 +906,24 @@ class ProtectedHlsRuntime {
     const verify = () => {
       if (this.integrityTampered || this.destroyed) return;
       const watermarkStyle = this.watermark ? getComputedStyle(this.watermark) : null;
-      if (
-        !this.video.isConnected ||
-        this.video.parentNode !== this.originalParent ||
-        !this.host?.isConnected ||
-        (this.watermark &&
-          (!this.watermark.isConnected ||
-            watermarkStyle.display === "none" ||
-            watermarkStyle.visibility === "hidden" ||
-            Number(watermarkStyle.opacity) < 0.08))
-      ) {
+      const reason =
+        !this.video.isConnected
+          ? "video disconnected"
+          : this.video.parentNode !== this.originalParent
+            ? "video reparented"
+            : !this.host?.isConnected
+              ? "host disconnected"
+              : this.watermark && !this.watermark.isConnected
+                ? "watermark removed"
+                : this.watermark && watermarkStyle.display === "none"
+                  ? "watermark hidden"
+                  : this.watermark && watermarkStyle.visibility === "hidden"
+                    ? "watermark invisible"
+                    : this.watermark && Number(watermarkStyle.opacity) < 0.08
+                      ? "watermark faded"
+                      : null;
+      if (reason) {
+        console.warn("[unpirator] integrity guard:", reason);
         this.integrityTampered = true;
         this.integrity(true).catch(() => {});
         this.onError(Object.assign(new Error("Player integrity lost"), { status: 403 }));
@@ -1110,7 +1118,12 @@ export class ProtectedSegmentRuntime {
   async append(track, variant, sequence, sourceBuffer, generation = this.generation) {
     const buffer = await this.request(track, variant, sequence);
     if (this.destroyed || (sequence !== 0 && generation !== this.generation)) return;
-    await appendBuffer(sourceBuffer, buffer);
+    try {
+      await appendBuffer(sourceBuffer, buffer);
+    } catch (error) {
+      console.error(`[unpirator] appendBuffer ${track}#${sequence} failed: ${error?.message}`);
+      throw error;
+    }
   }
   onSeeking = () => {
     if (this.destroyed) return;
@@ -1224,18 +1237,28 @@ export class ProtectedSegmentRuntime {
   installIntegrityGuard() {
     this.originalParent = this.video.parentNode;
     const verify = () => {
+      if (this.destroyed) return;
       const watermarkStyle = this.watermark ? getComputedStyle(this.watermark) : null;
-      if (
-        !this.video.isConnected ||
-        this.video.parentNode !== this.originalParent ||
-        !this.host?.isConnected ||
-        (this.watermark &&
-          (!this.watermark.isConnected ||
-            watermarkStyle.display === "none" ||
-            watermarkStyle.visibility === "hidden" ||
-            Number(watermarkStyle.opacity) < 0.08))
-      )
+      const reason =
+        !this.video.isConnected
+          ? "video disconnected"
+          : this.video.parentNode !== this.originalParent
+            ? "video reparented"
+            : !this.host?.isConnected
+              ? "host disconnected"
+              : this.watermark && !this.watermark.isConnected
+                ? "watermark removed"
+                : this.watermark && watermarkStyle.display === "none"
+                  ? "watermark hidden"
+                  : this.watermark && watermarkStyle.visibility === "hidden"
+                    ? "watermark invisible"
+                    : this.watermark && Number(watermarkStyle.opacity) < 0.08
+                      ? "watermark faded"
+                      : null;
+      if (reason) {
+        console.warn(`[unpirator] integrity guard: ${reason}`);
         this.tamper();
+      }
     };
     this.observers = [this.root, this.surface].filter(Boolean).map((target) => {
       const observer = new MutationObserver(verify);
