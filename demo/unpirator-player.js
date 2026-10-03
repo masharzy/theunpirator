@@ -38668,7 +38668,9 @@ var ProtectedPlayer = class {
     this.scheduleHeartbeat();
     this.onVisible = () => {
       if (!document.hidden)
-        this.ensureFreshToken().catch((error) => this.handlePlaybackError(error));
+        this.ensureFreshToken().catch((error) => {
+          console.warn(`[unpirator] token refresh deferred: ${error?.code || error?.message}`);
+        });
     };
     document.addEventListener("visibilitychange", this.onVisible);
     this.video.addEventListener("play", this.onVisible);
@@ -38908,14 +38910,21 @@ var ProtectedPlayer = class {
     if (this.destroyed || this.terminalFailure) return;
     this.recovering = this.performRecovery(manual).finally(() => {
       this.recovering = null;
-      if (this.retryButton) this.retryButton.disabled = this.terminalFailure === true;
+      if (this.retryButton) {
+        this.retryButton.disabled = this.terminalFailure === true;
+        this.retryButton.hidden = this.terminalFailure === true;
+        this.retryButton.textContent = "Reload video";
+      }
     });
     return this.recovering;
   }
-  async performRecovery(manual) {
+  async performRecovery(manual = false) {
     const position = this.video.currentTime;
     const play = manual || !this.video.paused;
-    if (this.retryButton) this.retryButton.disabled = true;
+    if (this.retryButton) {
+      this.retryButton.textContent = "Refreshing\u2026";
+      this.retryButton.disabled = true;
+    }
     this.protected?.destroy();
     this.video.pause();
     try {
@@ -38958,7 +38967,7 @@ var ProtectedPlayer = class {
             );
           }
         } catch (error) {
-          this.handlePlaybackError(error);
+          console.warn(`[unpirator] keep-alive ping failed: ${error?.code || error?.message}`);
         }
       }, 3e4)
     );
@@ -39042,7 +39051,18 @@ function segmentWorkerRuntime() {
       );
     return data;
   }
-  self.onmessage = async ({ data }) => {
+  self.onmessage = ({ data }) => {
+    handleWorkerMessage(data).catch(
+      (error) => self.postMessage({
+        type: "error",
+        id: data.id,
+        message: error.message || "Protected playback failed",
+        code: error.code,
+        status: error.status
+      })
+    );
+  };
+  async function handleWorkerMessage(data) {
     try {
       if (data.type === "prepare") {
         await prepareKey();
@@ -39103,22 +39123,23 @@ function segmentWorkerRuntime() {
         if (!key) throw new Error("Protected player key unavailable");
         let response;
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const ticket = await json(
-            await fetch(`${baseUrl}/ticket`, {
-              method: "POST",
-              credentials: "include",
-              headers: auth(),
-              body: JSON.stringify({
-                track: data.track,
-                variant: data.variant,
-                sequence: data.sequence
-              })
+          const ticketRes = await fetch(`${baseUrl}/ticket`, {
+            method: "POST",
+            credentials: "include",
+            headers: auth(),
+            body: JSON.stringify({
+              track: data.track,
+              variant: data.variant,
+              sequence: data.sequence
             })
-          );
+          });
+          console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
+          const ticket = await json(ticketRes);
           response = await fetch(
             `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
             { credentials: "include", headers: { Authorization: `Bearer ${token}` } }
           );
+          console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
           if (response.ok) break;
           if (response.status === 401 || response.status === 403 || attempt === 2) break;
           await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
@@ -39154,7 +39175,8 @@ function segmentWorkerRuntime() {
         status: error.status
       });
     }
-  };
+  }
+  ;
 }
 var ProtectedHlsRuntime = class {
   constructor({ video, root, surface, host, watermark, state, ensureToken, onError }) {
@@ -39487,11 +39509,24 @@ var ProtectedSegmentRuntime = class {
     this.authorizationPosition = void 0;
     this.video.addEventListener("seeking", this.onSeeking);
     await this.fillBuffer();
+    this.segmentFailures = 0;
     this.heartbeat = setInterval(() => {
       if (!this.destroyed && !(document.hidden && this.video.paused))
-        this.sendIntegrity(false).catch(this.fail);
+        this.sendIntegrity(false).catch((error) => {
+          console.warn(`[unpirator] integrity heartbeat skipped: ${error?.code || error?.message}`);
+        });
     }, 5e3);
-    this.pump = setInterval(() => this.fillBuffer().catch(this.fail), 1e3);
+    this.pump = setInterval(() => {
+      this.fillBuffer().catch((error) => {
+        if (this.destroyed) return;
+        this.segmentFailures = (this.segmentFailures || 0) + 1;
+        console.warn(`[unpirator] segment fetch failed (${this.segmentFailures}x): ${error?.code || error?.message}`);
+        if (this.segmentFailures >= 8) {
+          this.segmentFailures = 0;
+          this.handlePlaybackError(error);
+        }
+      });
+    }, 1e3);
     this.installIntegrityGuard();
   }
   onWorkerMessage(data) {
@@ -39571,7 +39606,12 @@ var ProtectedSegmentRuntime = class {
       const descriptor = this.manifest[track][this[`${track}Variant`]];
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
     }
-    this.fillBuffer().catch(this.fail);
+    this.sendIntegrity(false).catch(() => {
+    }).then(() => {
+      this.fillBuffer().catch((error) => {
+        console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
+      });
+    });
   };
   async fillBuffer() {
     if (this.destroyed || this.loading || this.switching || typeof document !== "undefined" && document.hidden && this.video.paused)
@@ -39579,7 +39619,8 @@ var ProtectedSegmentRuntime = class {
     this.loading = true;
     const generation = this.generation;
     try {
-      await this.sendIntegrity(false);
+      this.sendIntegrity(false).catch(() => {
+      });
       if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
         ["video", "audio"].map(async (track) => {
@@ -39600,12 +39641,29 @@ var ProtectedSegmentRuntime = class {
             );
           const sequence = this.cursors[track];
           if (sequence > descriptor.segments.length) return;
-          await this.append(track, variant, sequence, sourceBuffer, generation);
-          if (generation === this.generation) this.cursors[track] = sequence + 1;
+          const batch = [];
+          for (let next = sequence; batch.length < 3 && next <= descriptor.segments.length; next += 1)
+            batch.push(next);
+          const fetched = await Promise.allSettled(
+            batch.map((seq) => this.request(track, variant, seq))
+          );
+          if (generation !== this.generation || this.destroyed) return;
+          let appended = 0;
+          for (let index = 0; index < fetched.length; index += 1) {
+            const result = fetched[index];
+            if (result.status !== "fulfilled") break;
+            await appendBuffer(sourceBuffer, result.value);
+            appended = index + 1;
+          }
+          if (appended && generation === this.generation)
+            this.cursors[track] = sequence + appended;
+          const failure2 = fetched.find((item) => item.status === "rejected");
+          if (failure2) throw failure2.reason;
         })
       );
       const failure = results.find((result) => result.status === "rejected");
       if (failure) throw failure.reason;
+      this.segmentFailures = 0;
       this.nextSequence = Math.max(this.cursors.video, this.cursors.audio);
       if (generation === this.generation && ["video", "audio"].every(
         (track) => this.cursors[track] > this.manifest[track][this[`${track}Variant`]].segments.length
@@ -39615,7 +39673,10 @@ var ProtectedSegmentRuntime = class {
       if (!this.destroyed && generation === this.generation) throw error;
     } finally {
       this.loading = false;
-      if (!this.destroyed && generation !== this.generation) this.fillBuffer().catch(this.fail);
+      if (!this.destroyed && generation !== this.generation)
+        this.fillBuffer().catch((error) => {
+          console.warn(`[unpirator] refill after switch deferred: ${error?.code || error?.message}`);
+        });
     }
   }
   sendIntegrity(tampered) {
@@ -39725,7 +39786,8 @@ var ProtectedSegmentRuntime = class {
 };
 function chooseVideoVariant(variants) {
   const connection = navigator.connection;
-  const target = connection?.saveData || Number(connection?.downlink || 10) < 2 ? 480 : 720;
+  const downlink = Number(connection?.downlink || 0);
+  const target = connection?.saveData || downlink < 2 ? 360 : downlink < 10 ? 480 : 720;
   const candidates = variants.map((item, index) => ({ item, index })).sort((a, b) => Number(a.item.height) - Number(b.item.height));
   return (candidates.filter(({ item }) => Number(item.height) <= target).pop() || candidates[0]).index;
 }
@@ -40002,6 +40064,7 @@ var UnpiratorPlayerElement = class extends ElementBase {
       });
       if (this.generation !== generation) return player.destroy();
       this.player = player;
+      (globalThis.__unpiratorPlayers ||= []).push(this.player);
       if (this.hasAttribute("poster")) player.video.poster = this.getAttribute("poster");
       if (this.hasAttribute("autoplay")) player.video.play().catch(() => {
       });

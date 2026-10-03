@@ -484,7 +484,9 @@ export function createPlaybackService({ db, cache, config, signingRing, gatewayC
         expiresAt,
       })
       .returning();
-    const tokenTtl = 90;
+    // Short-lived, but long enough that viewer-side refresh (which crosses the
+    // media gateway chain) never races the expiry during normal playback.
+    const tokenTtl = 600;
     recordTiming("session_insert");
     const now = Math.floor(Date.now() / 1000);
     const payload = {
