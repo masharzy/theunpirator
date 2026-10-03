@@ -35,6 +35,7 @@ const MOUNT_WAIT_MS = Number(opt("mount-wait", "90")) * 1000;
 const ONLY = csv(opt("only", ""));
 const EXCLUDE = csv(opt("exclude", ""));
 const HEADED = args.includes("--headed");
+const SOLO = args.includes("--solo"); // destroy sibling players (stops their pump/heartbeat); needs --only=<one section>
 
 const LIMITS = { ttfMs: 6000, seekMs: 5000, stallMs: 2000, maxStalls: 3, gateMinutes: 10 };
 const EXPECTED_MODES = ["native", "protected_hls", "protected_segments"];
@@ -51,10 +52,10 @@ const inflight = new Map();
 const stripQuery = (url) => url.split("?")[0]; // never record ticket/token query strings
 const classify = (url) => {
   const m =
-    /\/v\/[0-9a-f-]{36}\/(integrity|ticket|bootstrap|chunk\/(?:video|audio)\/\d+\/\d+)(?:\?|$)/i.exec(
+    /\/v\/([0-9a-f-]{36})\/(integrity|ticket|bootstrap|chunk\/(?:video|audio)\/\d+\/\d+)(?:\?|$)/i.exec(
       url,
     );
-  return m ? { kind: m[1].split("/")[0], detail: m[1] } : null;
+  return m ? { kind: m[2].split("/")[0], detail: m[2], asset: m[1].slice(0, 8) } : null;
 };
 
 const browser = await chromium.launch({
@@ -83,7 +84,13 @@ page.on("requestfinished", async (req) => {
   if (!info) return;
   inflight.delete(req);
   const res = await req.response().catch(() => null);
-  requests.push({ ...info, end: Date.now(), status: res ? res.status() : 0 });
+  const serverMs = Number((/gateway;dur=(\d+)/.exec(res?.headers()["server-timing"] || "") || [])[1]);
+  requests.push({
+    ...info,
+    end: Date.now(),
+    status: res ? res.status() : 0,
+    serverMs: Number.isFinite(serverMs) ? serverMs : null,
+  });
 });
 page.on("requestfailed", (req) => {
   const failure = req.failure()?.errorText || "";
@@ -231,12 +238,16 @@ await page.evaluate(() => {
         };
       });
     },
-    select(index) {
+    select(index, solo) {
       stopMonitor();
       const players = list();
       players.forEach((p, i) => {
+        if (i === index) return;
         const v = videoOf(p);
-        if (v && i !== index) {
+        if (solo) {
+          // pause alone does not stop a sibling's pump/heartbeat/integrity traffic
+          try { p.destroy(); } catch {}
+        } else if (v) {
           v.muted = true;
           v.pause();
         }
@@ -345,6 +356,12 @@ const haystack = (t) => `${t.label} ${t.heading}`.toLowerCase();
 if (ONLY.length) targets = targets.filter((t) => ONLY.some((o) => haystack(t).includes(o)));
 if (EXCLUDE.length) targets = targets.filter((t) => !EXCLUDE.some((o) => haystack(t).includes(o)));
 
+if (SOLO && targets.length !== 1) {
+  console.log(`--solo needs exactly one section (use --only=...); matched: ${targets.map((t) => t.label).join(" | ") || "none"}`);
+  await browser.close();
+  process.exit(3);
+}
+
 if (!targets.length) {
   console.log("HARNESS: no testable players found. Hook info + described players:");
   console.log(JSON.stringify({ hook: await call("hookInfo"), described, cards: await call("pageCards") }, null, 1));
@@ -357,20 +374,29 @@ console.log(`Testing: ${targets.map((t) => t.label).join(" | ")}  (soak ${SOAK_M
 // ---------- per-seek request breakdown: where did the resume time go? ----------
 function summarizeSeek(label, seek) {
   if (!seek?.epoch) return null;
+  const asset = label.split(" ").pop(); // label ends with the 8-char asset id
   const from = seek.epoch - 100;
   const to = seek.epoch + (seek.resumeMs ?? 60_000) + 500;
   const inWindow = requests.filter((r) => r.section === label && r.start >= from && r.start <= to);
-  const out = {};
+  const own = inWindow.filter((r) => r.asset === asset);
+  const out = {
+    own: {},
+    denied: own
+      .filter((r) => r.status >= 400 || r.failed)
+      .map((r) => `${r.detail} ${r.status || r.failed}@${r.start - seek.epoch}ms`),
+    othersIntegrity: inWindow.filter((r) => r.asset !== asset && r.kind === "integrity").length,
+  };
   for (const kind of ["integrity", "ticket", "chunk"]) {
-    const rows = inWindow.filter((r) => r.kind === kind).sort((a, b) => a.start - b.start);
+    const rows = own.filter((r) => r.kind === kind).sort((a, b) => a.start - b.start);
     if (!rows.length) continue;
-    out[kind] = {
+    out.own[kind] = {
       n: rows.length,
       firstAtMs: rows[0].start - seek.epoch,
       firstDurMs: rows[0].end - rows[0].start,
+      firstServerMs: rows[0].serverMs,
       firstStatus: rows[0].status,
+      maxDurMs: Math.max(...rows.map((r) => r.end - r.start)),
       lastEndAtMs: Math.max(...rows.map((r) => r.end)) - seek.epoch,
-      nonOk: rows.filter((r) => r.status >= 400 || r.failed).length,
     };
   }
   return out;
@@ -392,7 +418,7 @@ async function runSection(target) {
     soakAborted: false,
   };
   try {
-    await call("select", target.index);
+    await call("select", target.index, SOLO);
     const ttf = await call("play", 30_000);
     sec.ttfMs = ttf.ms;
     sec.playError = ttf.playError;
@@ -508,12 +534,17 @@ for (const sec of sections) {
   }
 }
 const verdict = anyFail ? "FAIL" : anyIncomplete ? "INCOMPLETE" : "PASS";
-const fmtPath = (p) =>
-  p && Object.keys(p).length
-    ? Object.entries(p)
-        .map(([k, v]) => `${k}x${v.n} first@${v.firstAtMs}ms dur ${v.firstDurMs}ms [${v.firstStatus}] done@${v.lastEndAtMs}ms${v.nonOk ? ` (${v.nonOk} non-OK)` : ""}`)
-        .join(" | ")
-    : "no /gw requests observed (worker traffic may not be visible to the harness — don't read anything into this)";
+const fmtPath = (p) => {
+  if (!p || !Object.keys(p.own).length)
+    return "no /gw requests observed for this asset (worker traffic may not be visible to the harness — don't read anything into this)";
+  const parts = Object.entries(p.own).map(
+    ([k, v]) =>
+      `${k}x${v.n} first@${v.firstAtMs}ms dur ${v.firstDurMs}ms${v.firstServerMs != null ? ` (server ${v.firstServerMs}ms)` : ""} [${v.firstStatus}] max ${v.maxDurMs}ms done@${v.lastEndAtMs}ms`,
+  );
+  if (p.denied.length) parts.push(`DENIED: ${p.denied.join(", ")}`);
+  parts.push(`other players' integrity in window: ${p.othersIntegrity}`);
+  return parts.join(" | ");
+};
 
 console.log(`\n==================== GATE: ${verdict} ====================`);
 console.log(`demo ${DEMO_URL} | soak ${SOAK_MINUTES} min/section | ${new Date().toISOString()}`);
@@ -534,6 +565,14 @@ const pe = pageErrors.slice(0, 5);
 if (pe.length) console.log(`\npage errors (${pageErrors.length}):\n${pe.map((e) => `  [${e.section}] ${e.text.split("\n")[0]}`).join("\n")}`);
 const badGw = requests.filter((r) => r.status >= 400);
 console.log(`\n/gw requests observed: ${requests.length} (integrity ${requests.filter((r) => r.kind === "integrity").length}, ticket ${requests.filter((r) => r.kind === "ticket").length}, chunk ${requests.filter((r) => r.kind === "chunk").length}); >=400: ${badGw.length}`);
+const integrityByAsset = {};
+for (const r of requests) if (r.kind === "integrity") integrityByAsset[r.asset] = (integrityByAsset[r.asset] || 0) + 1;
+console.log(`integrity requests by asset: ${JSON.stringify(integrityByAsset)}`);
+const median = (xs) => (xs.length ? xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)] : null);
+for (const kind of ["integrity", "ticket", "chunk"]) {
+  const rows = requests.filter((r) => r.kind === kind && r.status === 200);
+  console.log(`  ${kind}: median wall ${median(rows.map((r) => r.end - r.start))}ms, median server ${median(rows.filter((r) => r.serverMs != null).map((r) => r.serverMs))}ms (n=${rows.length})`);
+}
 for (const r of badGw.slice(0, 8)) console.log(`  [${r.section}] ${r.status} ${r.detail} at ${iso(r.start)}`);
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
