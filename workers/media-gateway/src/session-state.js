@@ -75,7 +75,7 @@ export class SessionState {
         Math.min(sequence + 8, Math.floor(elapsedSeconds / 2) + 16),
       );
       await this.state.storage.put("session", session);
-      return Response.json({ ok: true, allowedSequence: session.allowedSequence });
+      return Response.json({ ok: true, allowedSequence: session.allowedSequence, windowsSet: !!session.windows, windowsIn: !!body.windows });
     }
     if (request.method === "POST" && url.pathname === "/ticket") {
       const body = await request.json();

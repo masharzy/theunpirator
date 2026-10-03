@@ -117,6 +117,7 @@ export class UnpiratorPlayerElement extends ElementBase {
       });
       if (this.generation !== generation) return player.destroy();
       this.player = player;
+      (globalThis.__unpiratorPlayers ||= []).push(this.player);
       if (this.hasAttribute("poster")) player.video.poster = this.getAttribute("poster");
       if (this.hasAttribute("autoplay")) player.video.play().catch(() => {});
       this.dispatchEvent(new CustomEvent("unpirator-ready", { bubbles: true }));

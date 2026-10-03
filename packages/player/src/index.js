@@ -159,7 +159,11 @@ export class ProtectedPlayer {
     this.scheduleHeartbeat();
     this.onVisible = () => {
       if (!document.hidden)
-        this.ensureFreshToken().catch((error) => this.handlePlaybackError(error));
+        // A failed opportunistic refresh must not interrupt playback; the next
+        // worker call re-checks freshness itself.
+        this.ensureFreshToken().catch((error) => {
+          console.warn(`[unpirator] token refresh deferred: ${error?.code || error?.message}`);
+        });
     };
     document.addEventListener("visibilitychange", this.onVisible);
     this.video.addEventListener("play", this.onVisible);
@@ -429,14 +433,21 @@ export class ProtectedPlayer {
     if (this.destroyed || this.terminalFailure) return;
     this.recovering = this.performRecovery(manual).finally(() => {
       this.recovering = null;
-      if (this.retryButton) this.retryButton.disabled = this.terminalFailure === true;
+      if (this.retryButton) {
+        this.retryButton.disabled = this.terminalFailure === true;
+        this.retryButton.hidden = this.terminalFailure === true;
+        this.retryButton.textContent = "Reload video";
+      }
     });
     return this.recovering;
   }
-  async performRecovery(manual) {
+  async performRecovery(manual = false) {
     const position = this.video.currentTime;
     const play = manual || !this.video.paused;
-    if (this.retryButton) this.retryButton.disabled = true;
+    if (this.retryButton) {
+      this.retryButton.textContent = "Refreshing…";
+      this.retryButton.disabled = true;
+    }
     this.protected?.destroy();
     this.video.pause();
     try {
@@ -487,7 +498,9 @@ export class ProtectedPlayer {
             );
           }
         } catch (error) {
-          this.handlePlaybackError(error);
+          // Network blips on this keep-alive ping must not end playback; the
+          // segment pump surfaces sustained failures on its own.
+          console.warn(`[unpirator] keep-alive ping failed: ${error?.code || error?.message}`);
         }
       }, 30_000),
     );
@@ -575,7 +588,20 @@ function segmentWorkerRuntime() {
       );
     return data;
   }
-  self.onmessage = async ({ data }) => {
+  self.onmessage = ({ data }) => {
+    // Handle messages concurrently: awaiting inside onmessage would queue every
+    // segment request behind the previous one, which stalls seeks badly.
+    handleWorkerMessage(data).catch((error) =>
+      self.postMessage({
+        type: "error",
+        id: data.id,
+        message: error.message || "Protected playback failed",
+        code: error.code,
+        status: error.status,
+      }),
+    );
+  };
+  async function handleWorkerMessage(data) {
     try {
       if (data.type === "prepare") {
         await prepareKey();
@@ -636,22 +662,23 @@ function segmentWorkerRuntime() {
         if (!key) throw new Error("Protected player key unavailable");
         let response;
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const ticket = await json(
-            await fetch(`${baseUrl}/ticket`, {
-              method: "POST",
-              credentials: "include",
-              headers: auth(),
-              body: JSON.stringify({
-                track: data.track,
-                variant: data.variant,
-                sequence: data.sequence,
-              }),
+          const ticketRes = await fetch(`${baseUrl}/ticket`, {
+            method: "POST",
+            credentials: "include",
+            headers: auth(),
+            body: JSON.stringify({
+              track: data.track,
+              variant: data.variant,
+              sequence: data.sequence,
             }),
-          );
+          });
+          console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
+          const ticket = await json(ticketRes);
           response = await fetch(
             `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
             { credentials: "include", headers: { Authorization: `Bearer ${token}` } },
           );
+          console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
           if (response.ok) break;
           if (response.status === 401 || response.status === 403 || attempt === 2) break;
           await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
@@ -1048,11 +1075,27 @@ export class ProtectedSegmentRuntime {
     this.authorizationPosition = undefined;
     this.video.addEventListener("seeking", this.onSeeking);
     await this.fillBuffer();
+    this.segmentFailures = 0;
     this.heartbeat = setInterval(() => {
       if (!this.destroyed && !(document.hidden && this.video.paused))
-        this.sendIntegrity(false).catch(this.fail);
+        // A missed heartbeat (mobile network blip) must never end playback;
+        // the next tick retries and the gateway tolerates short gaps.
+        this.sendIntegrity(false).catch((error) => {
+          console.warn(`[unpirator] integrity heartbeat skipped: ${error?.code || error?.message}`);
+        });
     }, 5_000);
-    this.pump = setInterval(() => this.fillBuffer().catch(this.fail), 1_000);
+    this.pump = setInterval(() => {
+      this.fillBuffer().catch((error) => {
+        if (this.destroyed) return;
+        this.segmentFailures = (this.segmentFailures || 0) + 1;
+        console.warn(`[unpirator] segment fetch failed (${this.segmentFailures}x): ${error?.code || error?.message}`);
+        // Sustained failure (not a blip) is the only case worth interrupting.
+        if (this.segmentFailures >= 8) {
+          this.segmentFailures = 0;
+          this.handlePlaybackError(error);
+        }
+      });
+    }, 1_000);
     this.installIntegrityGuard();
   }
   onWorkerMessage(data) {
@@ -1132,7 +1175,15 @@ export class ProtectedSegmentRuntime {
       const descriptor = this.manifest[track][this[`${track}Variant`]];
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
     }
-    this.fillBuffer().catch(this.fail);
+    // Move the session's playback window BEFORE fetching; otherwise the first
+    // ticket batch races the window update and fails wholesale.
+    this.sendIntegrity(false)
+      .catch(() => {})
+      .then(() => {
+        this.fillBuffer().catch((error) => {
+          console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
+        });
+      });
   };
   async fillBuffer() {
     if (
@@ -1145,7 +1196,9 @@ export class ProtectedSegmentRuntime {
     this.loading = true;
     const generation = this.generation;
     try {
-      await this.sendIntegrity(false);
+      // Integrity is reported without blocking the fetch pipeline; the 5s
+      // heartbeat keeps it fresh and the initial fill sends it awaited.
+      this.sendIntegrity(false).catch(() => {});
       if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
         ["video", "audio"].map(async (track) => {
@@ -1168,12 +1221,36 @@ export class ProtectedSegmentRuntime {
             );
           const sequence = this.cursors[track];
           if (sequence > descriptor.segments.length) return;
-          await this.append(track, variant, sequence, sourceBuffer, generation);
-          if (generation === this.generation) this.cursors[track] = sequence + 1;
+          // Network fetches run in parallel to hide the gateway chain's
+          // per-request latency; buffer appends stay serial (one SourceBuffer
+          // cannot run two appendBuffer calls at once).
+          const batch = [];
+          for (
+            let next = sequence;
+            batch.length < 3 && next <= descriptor.segments.length;
+            next += 1
+          )
+            batch.push(next);
+          const fetched = await Promise.allSettled(
+            batch.map((seq) => this.request(track, variant, seq)),
+          );
+          if (generation !== this.generation || this.destroyed) return;
+          let appended = 0;
+          for (let index = 0; index < fetched.length; index += 1) {
+            const result = fetched[index];
+            if (result.status !== "fulfilled") break;
+            await appendBuffer(sourceBuffer, result.value);
+            appended = index + 1;
+          }
+          if (appended && generation === this.generation)
+            this.cursors[track] = sequence + appended;
+          const failure = fetched.find((item) => item.status === "rejected");
+          if (failure) throw failure.reason;
         }),
       );
       const failure = results.find((result) => result.status === "rejected");
       if (failure) throw failure.reason;
+      this.segmentFailures = 0;
       this.nextSequence = Math.max(this.cursors.video, this.cursors.audio);
       if (
         generation === this.generation &&
@@ -1188,7 +1265,10 @@ export class ProtectedSegmentRuntime {
       if (!this.destroyed && generation === this.generation) throw error;
     } finally {
       this.loading = false;
-      if (!this.destroyed && generation !== this.generation) this.fillBuffer().catch(this.fail);
+      if (!this.destroyed && generation !== this.generation)
+        this.fillBuffer().catch((error) => {
+          console.warn(`[unpirator] refill after switch deferred: ${error?.code || error?.message}`);
+        });
     }
   }
   sendIntegrity(tampered) {
@@ -1315,8 +1395,11 @@ export class ProtectedSegmentRuntime {
 }
 
 function chooseVideoVariant(variants) {
+  // Stream quality through the media gateway chain is latency-dominated; start
+  // low and let the viewer raise it in settings rather than stall on HD.
   const connection = navigator.connection;
-  const target = connection?.saveData || Number(connection?.downlink || 10) < 2 ? 480 : 720;
+  const downlink = Number(connection?.downlink || 0);
+  const target = connection?.saveData || downlink < 2 ? 360 : downlink < 10 ? 480 : 720;
   const candidates = variants
     .map((item, index) => ({ item, index }))
     .sort((a, b) => Number(a.item.height) - Number(b.item.height));
