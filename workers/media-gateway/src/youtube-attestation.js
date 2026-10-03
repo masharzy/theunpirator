@@ -7,13 +7,20 @@ const BOTGUARD_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_BOTGUARD_RESPONSE_LENGTH = 256 * 1024;
 
+// YouTube's jnn attestation API expects a consistent desktop-browser
+// fingerprint; forwarding the viewer's UA (mobile Android, WebView, etc.)
+// makes GenerateIT return responses without a usable integrity token. The
+// viewer's own UA is still used for the gateway's secure-browser check.
+const BOTGUARD_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
 function youtubeHeaders(userAgent) {
   return {
     accept: "application/json",
     "content-type": "application/json+protobuf",
     "x-goog-api-key": BOTGUARD_API_KEY,
     "x-user-agent": "grpc-web-javascript/0.1",
-    "user-agent": userAgent,
+    "user-agent": userAgent || BOTGUARD_USER_AGENT,
   };
 }
 
@@ -112,27 +119,49 @@ async function callBotGuard(url, data, userAgent) {
   }
 }
 
-export async function createYoutubeAttestation(userAgent) {
-  return parseChallenge(await callBotGuard(CREATE_URL, [REQUEST_KEY], userAgent));
+export async function createYoutubeAttestation() {
+  return parseChallenge(await callBotGuard(CREATE_URL, [REQUEST_KEY], BOTGUARD_USER_AGENT));
 }
 
-export async function createYoutubeIntegrityToken(userAgent, botguardResponse) {
+export async function createYoutubeIntegrityToken(botguardResponse) {
   if (
     typeof botguardResponse !== "string" ||
     !botguardResponse ||
     botguardResponse.length > MAX_BOTGUARD_RESPONSE_LENGTH
   )
     throw securityError("INVALID_REQUEST", 400, "Invalid browser attestation response");
-  const raw = await callBotGuard(GENERATE_IT_URL, [REQUEST_KEY, botguardResponse], userAgent);
+  const raw = await callBotGuard(GENERATE_IT_URL, [REQUEST_KEY, botguardResponse], BOTGUARD_USER_AGENT);
   let result;
   try {
     result = JSON.parse(raw);
   } catch {
+    // Log what YouTube actually returned so rejection causes are diagnosable.
+    console.error(
+      JSON.stringify({
+        level: "error",
+        component: "youtube-attestation",
+        code: "GENERATE_IT_UNPARSEABLE",
+        preview: String(raw).slice(0, 300),
+      }),
+    );
     throw securityError("ATTESTATION_RESPONSE_INVALID", 502, "Browser attestation unavailable");
   }
   const [integrityToken, estimatedTtlSeconds, mintRefreshThreshold] = result;
-  if (typeof integrityToken !== "string" || !integrityToken || integrityToken.length > 16 * 1024)
+  if (typeof integrityToken !== "string" || !integrityToken || integrityToken.length > 16 * 1024) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        component: "youtube-attestation",
+        code: "GENERATE_IT_NO_TOKEN",
+        tokenType: typeof integrityToken,
+        tokenLength: typeof integrityToken === "string" ? integrityToken.length : 0,
+        preview: JSON.stringify(result).slice(0, 300),
+        responseLength: raw.length,
+        botguardResponseLength: botguardResponse.length,
+      }),
+    );
     throw securityError("ATTESTATION_RESPONSE_INVALID", 502, "Browser attestation unavailable");
+  }
   return {
     integrityToken,
     estimatedTtlSeconds: Math.max(60, Math.min(Number(estimatedTtlSeconds || 3600), 86400)),
