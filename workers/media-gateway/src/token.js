@@ -38,7 +38,9 @@ export async function verifyPlaybackToken(
     !Number.isFinite(payload.exp) ||
     !Number.isFinite(payload.iat) ||
     payload.iat > nowSeconds + 5 ||
-    payload.exp - payload.iat > 180
+    // Ceiling must stay in sync with the control API's tokenTtl (currently
+    // 600s) plus headroom, or every freshly minted token fails validation.
+    payload.exp - payload.iat > 900
   )
     throw securityError("INVALID_TOKEN", 401);
   if (!payload.tid || !payload.sid || !payload.aid || !payload.psid)
