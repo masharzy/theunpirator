@@ -20,6 +20,70 @@ paste the STATE DIGEST (section 4) → paste the files for that task (section 5)
 
 Never paste all files "up front" — paste only what the task needs.
 
+## 0. Folder map (paste this to Opus whenever it asks "where is X")
+
+```
+the-unpirator/
+├── apps/
+│   ├── api/                          ← control API (Express, deployed on Vercel)
+│   │   ├── .env.gateway-local        ← gateway env for the PC (SECRET — never paste to anyone)
+│   │   └── src/services/playback.js  ← session create, device limits, tokenTtl=600 [632]
+├── packages/
+│   ├── player/src/
+│   │   ├── index.js                  ← PLAYER CORE: MSE, worker, tickets, integrity guard [1632]
+│   │   ├── player-experience.js      ← custom controls UI, gestures [1444]
+│   │   └── segment-timeline.js       ← segment time math [8]
+│   └── web-component/src/index.js    ← <unpirator-player> element, mount-once logic [146]
+├── workers/media-gateway/src/        ← THE GATEWAY (runs on the PC, port 8787)
+│   ├── index.js                      ← all routes: bootstrap/ticket/chunk/attestation [534]
+│   ├── session-state.js              ← session DO: playback windows, single-use tickets, limits [284]
+│   ├── protected-media.js            ← playback windows math, chunk encryption, sidx [330]
+│   ├── youtube-attestation.js        ← BotGuard jnn calls, pinned desktop UA, diagnostics [183]
+│   ├── source.js                     ← source resolution + shared YouTube cache [156]
+│   ├── node-bindings.js              ← Redis-backed DO/KV shims for node [151]
+│   ├── node-server.js                ← PC server entry (http server) [79]
+│   └── token.js                      ← JWT verify — TTL ceiling 900 MUST >= API 600 [63]
+├── demo/                             ← Cloudflare Pages (theunpirator-demo.pages.dev)
+│   ├── _worker.js                    ← /api proxy + /gw same-origin gateway proxy [90]
+│   ├── index.html                    ← demo page [105]
+│   └── unpirator-player.js           ← BUILT player bundle (esbuild output, committed)
+├── docs/
+│   ├── PLAYER-FIX-PLAN.md            ← master plan (constraints, phases, acceptance)
+│   ├── OPUS-HANDOFF.md               ← handoff: files, tasks, limitations
+│   └── WEB-CHAT-HANDOFF.md           ← this workflow
+└── scripts/
+    ├── browser-demo-test.mjs         ← Playwright browser gate (the acceptance test)
+    ├── make-paste.mjs                ← builds paste-ready file blocks for this chat
+    ├── window-probe.mjs              ← session window behavior probe
+    ├── manifest-check.mjs            ← gateway manifest inspector
+    └── e2e-gateway-proxy-test.mjs    ← /gw proxy end-to-end replay
+```
+
+### Paste convention (use for every file)
+
+Run on the PC (git-bash, repo root) — this copies a ready-made block to the
+clipboard, you just paste it into the chat:
+
+```
+node scripts/make-paste.mjs packages/player/src/index.js | clip
+```
+
+Multiple files at once:
+
+```
+node scripts/make-paste.mjs workers/media-gateway/src/session-state.js workers/media-gateway/src/protected-media.js | clip
+```
+
+Each block is self-describing (`=== FILE: <repo-path> (N lines) ===`), so
+Opus always knows where the code lives.
+
+### Upload order for the CURRENT task (seek latency, P2)
+
+1. Starter prompt (section 1) + PLAYER-FIX-PLAN.md + OPUS-HANDOFF.md
+2. This folder map (section 0)
+3. `node scripts/make-paste.mjs packages/player/src/index.js | clip`
+4. `node scripts/make-paste.mjs workers/media-gateway/src/session-state.js workers/media-gateway/src/protected-media.js | clip`
+
 ## 1. SESSION 1 starter prompt (copy-paste this whole block)
 
 ```
