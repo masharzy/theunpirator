@@ -1,0 +1,28 @@
+Players mounted: native 2b915578 | protected_hls 170381e5 ERR:Playback interrupted. Use Reload video to continue.
+Testing: protected_hls 170381e5  (soak 1 min each)
+
+
+==================== GATE: FAIL ====================
+demo https://theunpirator-demo.pages.dev | soak 1 min/section | 2026-10-03T16:27:30.296Z
+
+[protected_hls 170381e5] mount 7.9s | 2026-10-03T16:27:00.255Z -> 2026-10-03T16:27:30.294Z
+  FAIL  time-to-first-frame: n/a (limit 6s)
+  SKIP  seek-resume +60s: not run
+  SKIP  seek-resume +300s: not run
+  FAIL  no interruptions: errors: Playback interrupted. Use Reload video to continue.; unexpected pauses: 0
+  PASS  stalls >2s: 1 (max 3); all stalls >0.5s: 1
+  FAIL  10-min soak: 0s of 600s (partial run, not the gate)
+  note: never reached first frame in 30s (readyState 0, t=0)
+  worst stalls: 30.0s@t=?
+
+/gw requests observed: 26 (integrity 8, ticket 8, chunk 7); >=400: 3
+integrity requests by asset: {"170381e5":6,"2243c5c7":2}
+  integrity: median wall 902ms, median server nullms (n=7)
+  ticket: median wall 2155ms, median server nullms (n=7)
+  chunk: median wall 2732ms, median server 2370ms (n=7)
+  [(mount)] 502 bootstrap at 2026-10-03T16:25:31.455Z
+  [(mount)] 429 ticket at 2026-10-03T16:25:43.059Z
+  [(mount)] 503 integrity at 2026-10-03T16:25:59.122Z
+
+report: scripts/gate-report-2026-10-03T16-27-30-299Z.json
+HLS-RUN2-EXIT=1

@@ -1,0 +1,35 @@
+Players mounted: native 2b915578 | protected_hls 170381e5 | protected_segments/youtube 2243c5c7
+Testing: protected_hls 170381e5  (soak 1 min each)
+
+[protected_hls 170381e5] first frame 11.9s
+[protected_hls 170381e5] seek +60s -> resume 13.1s
+[protected_hls 170381e5] seek +300s -> resume 14.4s
+[protected_hls 170381e5] +10s t=394.8/635 ahead=15.2s stalls=2
+[protected_hls 170381e5] +40s t=424.8/635 ahead=25.2s stalls=2
+
+==================== GATE: FAIL ====================
+demo https://theunpirator-demo.pages.dev | soak 1 min/section | 2026-10-03T16:25:01.706Z
+
+[protected_hls 170381e5] mount 10.9s | 2026-10-03T16:22:56.260Z -> 2026-10-03T16:25:01.705Z
+  FAIL  time-to-first-frame: 11.9s (limit 6s)
+  FAIL  seek-resume +60s: 13.1s (limit 5s)
+  FAIL  seek-resume +300s: 14.4s (limit 5s)
+  PASS  no interruptions: none
+  PASS  stalls >2s: 1 (max 3); all stalls >0.5s: 2
+  SKIP  10-min soak: 60s of 600s (partial run, not the gate)
+  seek +60s path: integrityx3 first@630ms dur 708ms [200] max 881ms done@11269ms | other players' integrity in window: 0
+  seek +300s path: integrityx3 first@4555ms dur 690ms [200] max 897ms done@15281ms | other players' integrity in window: 0
+  worst stalls: 11.8s@t=0, 1.4s@t=380
+  warnings/errors (2), last 5:
+    2026-10-03T16:22:56.277Z [unpirator] integrity heartbeat skipped: Player stopped
+    2026-10-03T16:23:26.225Z Failed to load resource: the server responded with a status of 503 ()
+
+/gw requests observed: 61 (integrity 36, ticket 11, chunk 11); >=400: 1
+integrity requests by asset: {"170381e5":30,"2243c5c7":6}
+  integrity: median wall 755ms, median server nullms (n=36)
+  ticket: median wall 2185ms, median server nullms (n=11)
+  chunk: median wall 2924ms, median server 2688ms (n=11)
+  [(mount)] 502 bootstrap at 2026-10-03T16:22:27.516Z
+
+report: scripts/gate-report-2026-10-03T16-25-01-708Z.json
+HLS-RUN1-EXIT=1

@@ -1,0 +1,64 @@
+Players mounted: native 2b915578 | protected_hls 170381e5 | protected_segments/youtube 2243c5c7
+Testing: protected_segments/youtube 2243c5c7  (soak 10 min each)
+
+[protected_segments/youtube 2243c5c7] first frame 0.2s
+[protected_segments/youtube 2243c5c7] seek +60s -> resume 13.7s
+[protected_segments/youtube 2243c5c7] seek +300s -> resume 12.3s
+[protected_segments/youtube 2243c5c7] +10s t=389.3/635 ahead=0.1s stalls=0 STALLED
+[protected_segments/youtube 2243c5c7] +40s t=404.1/635 ahead=16.4s stalls=1
+[protected_segments/youtube 2243c5c7] +70s t=434.2/635 ahead=15.1s stalls=1
+[protected_segments/youtube 2243c5c7] +100s t=464.2/635 ahead=15.1s stalls=1
+[protected_segments/youtube 2243c5c7] +130s t=494/635 ahead=17.5s stalls=1
+[protected_segments/youtube 2243c5c7] +160s t=524/635 ahead=23.6s stalls=1
+[protected_segments/youtube 2243c5c7] +190s t=554.1/635 ahead=0.6s stalls=1
+[protected_segments/youtube 2243c5c7] +220s t=579.8/635 ahead=19.2s stalls=2
+[protected_segments/youtube 2243c5c7] +250s t=609.8/635 ahead=8.9s stalls=2
+[protected_segments/youtube 2243c5c7] +280s t=634.6/635 ahead=0s stalls=2 PAUSED
+[protected_segments/youtube 2243c5c7] +320s t=31.2/635 ahead=18.8s stalls=2
+[protected_segments/youtube 2243c5c7] +350s t=61.2/635 ahead=18.2s stalls=2
+[protected_segments/youtube 2243c5c7] +380s t=91.3/635 ahead=12.8s stalls=2
+[protected_segments/youtube 2243c5c7] +410s t=121.3/635 ahead=17s stalls=2
+[protected_segments/youtube 2243c5c7] +440s t=151.3/635 ahead=15.4s stalls=2
+[protected_segments/youtube 2243c5c7] +470s t=181.3/635 ahead=18.4s stalls=2
+[protected_segments/youtube 2243c5c7] +500s t=210.4/635 ahead=19.2s stalls=2
+[protected_segments/youtube 2243c5c7] +530s t=240.4/635 ahead=16s stalls=2
+[protected_segments/youtube 2243c5c7] +560s t=270.5/635 ahead=19.1s stalls=2
+[protected_segments/youtube 2243c5c7] +590s t=300.5/635 ahead=18.3s stalls=2
+
+==================== GATE: FAIL ====================
+demo https://theunpirator-demo.pages.dev | soak 10 min/section | 2026-10-03T16:20:46.025Z
+
+[protected_segments/youtube 2243c5c7] mount 19.7s | 2026-10-03T16:09:53.801Z -> 2026-10-03T16:20:46.025Z
+  PASS  time-to-first-frame: 0.2s (limit 6s)
+  FAIL  seek-resume +60s: 13.7s (limit 5s)
+  FAIL  seek-resume +300s: 12.3s (limit 5s)
+  PASS  no interruptions: none
+  PASS  stalls >2s: 2 (max 3); all stalls >0.5s: 2
+  PASS  10-min soak: 600s of 600s
+  seek +60s path: integrityx10 first@570ms dur 837ms [200] max 1365ms done@12708ms | ticketx6 first@2885ms dur 2105ms [200] max 10618ms done@13506ms | chunkx6 first@103ms dur 2466ms (server 1987ms) [200] max 3511ms done@10136ms | DENIED: ticket 429@2888ms | other players' integrity in window: 0
+  seek +300s path: integrityx5 first@5ms dur 1266ms [200] max 1312ms done@13889ms | ticketx11 first@1323ms dur 988ms [200] max 10742ms done@15790ms | chunkx5 first@2311ms dur 2844ms (server 2531ms) [200] max 2844ms done@8229ms | DENIED: ticket 429@1329ms, ticket 403@12612ms | other players' integrity in window: 0
+  note: source ended during soak; rewound to start
+  worst stalls: 22.3s@t=389.4, 4.3s@t=557.7
+  warnings/errors (68), last 5:
+    2026-10-03T16:20:14.534Z [unpirator] segment fetch failed (2x): SEGMENT_TICKET_DENIED
+    2026-10-03T16:20:18.783Z [unpirator] segment fetch failed (3x): SEGMENT_TICKET_DENIED
+    2026-10-03T16:20:29.380Z [unpirator] segment fetch failed (1x): SEGMENT_TICKET_DENIED
+    2026-10-03T16:20:39.055Z [unpirator] segment fetch failed (1x): SEGMENT_TICKET_DENIED
+    2026-10-03T16:20:43.347Z [unpirator] segment fetch failed (2x): SEGMENT_TICKET_DENIED
+
+/gw requests observed: 857 (integrity 343, ticket 308, chunk 203); >=400: 110
+integrity requests by asset: {"170381e5":6,"2243c5c7":337}
+  integrity: median wall 1206ms, median server nullms (n=338)
+  ticket: median wall 1672ms, median server nullms (n=204)
+  chunk: median wall 2739ms, median server 2350ms (n=203)
+  [(mount)] 502 bootstrap at 2026-10-03T16:09:25.148Z
+  [protected_segments/youtube 2243c5c7] 403 ticket at 2026-10-03T16:10:02.341Z
+  [protected_segments/youtube 2243c5c7] 429 ticket at 2026-10-03T16:10:06.875Z
+  [protected_segments/youtube 2243c5c7] 403 ticket at 2026-10-03T16:10:18.349Z
+  [protected_segments/youtube 2243c5c7] 403 ticket at 2026-10-03T16:10:18.349Z
+  [protected_segments/youtube 2243c5c7] 429 ticket at 2026-10-03T16:10:27.059Z
+  [protected_segments/youtube 2243c5c7] 403 ticket at 2026-10-03T16:10:38.342Z
+  [protected_segments/youtube 2243c5c7] 429 ticket at 2026-10-03T16:10:38.342Z
+
+report: scripts/gate-report-2026-10-03T16-20-46-029Z.json
+GATE-EXIT=1
