@@ -30,16 +30,22 @@ export class UnpiratorPlayerElement extends ElementBase {
   }
 
   connectedCallback() {
+    this.connected = true;
     this.mount();
   }
 
   disconnectedCallback() {
+    this.connected = false;
     this.player?.destroy();
     this.player = null;
   }
 
-  attributeChangedCallback() {
-    if (this.isConnected) this.mount();
+  attributeChangedCallback(name, oldValue, newValue) {
+    // Upgrade fires attributeChangedCallback for every pre-set attribute
+    // before connectedCallback; only re-mount for real changes afterwards so
+    // one element mounts exactly once (one session, one device registration).
+    if (oldValue === newValue || !this.connected) return;
+    this.mount();
   }
 
   set headers(value) {
