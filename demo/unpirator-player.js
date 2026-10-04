@@ -38538,6 +38538,9 @@ var positions = [
 var youtubeMinterCache = /* @__PURE__ */ new Map();
 var BOTGUARD_TIMEOUT_MS = 12e3;
 var INTEGRITY_TIMEOUT_MS = 1e4;
+var MAX_INFLIGHT_SEGMENTS = 4;
+var LOOKAHEAD_SEGMENTS = 3;
+var SEGMENT_TIMEOUT_MS = 25e3;
 function decodeBase64Url(value) {
   const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/").replace(/\./g, "=");
   const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
@@ -39052,7 +39055,12 @@ function segmentWorkerRuntime() {
       );
     return data;
   }
+  const controllers = /* @__PURE__ */ new Map();
   self.onmessage = ({ data }) => {
+    if (data.type === "abort") {
+      controllers.get(data.id)?.abort();
+      return;
+    }
     handleWorkerMessage(data).catch(
       (error) => self.postMessage({
         type: "error",
@@ -39122,50 +39130,63 @@ function segmentWorkerRuntime() {
       }
       if (data.type === "segment") {
         if (!key) throw new Error("Protected player key unavailable");
-        let response;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const ticketRes = await fetch(`${baseUrl}/ticket`, {
-            method: "POST",
-            credentials: "include",
-            headers: auth(),
-            body: JSON.stringify({
-              track: data.track,
-              variant: data.variant,
-              sequence: data.sequence
-            })
-          });
-          console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
-          const ticket = await json(ticketRes);
-          response = await fetch(
-            `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
-            { credentials: "include", headers: { Authorization: `Bearer ${token}` } }
+        const controller = new AbortController();
+        controllers.set(data.id, controller);
+        const { signal } = controller;
+        try {
+          let response;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const ticketRes = await fetch(`${baseUrl}/ticket`, {
+              method: "POST",
+              credentials: "include",
+              headers: auth(),
+              body: JSON.stringify({
+                track: data.track,
+                variant: data.variant,
+                sequence: data.sequence
+              }),
+              signal
+            });
+            console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
+            const ticket = await json(ticketRes);
+            response = await fetch(
+              `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
+              { credentials: "include", headers: { Authorization: `Bearer ${token}` }, signal }
+            );
+            console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
+            if (response.ok) break;
+            if (response.status === 401 || response.status === 403 || attempt === 2) break;
+            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+            if (signal.aborted) return;
+          }
+          if (!response?.ok) await json(response);
+          const context = response.headers.get("x-unpirator-context") || "";
+          const decrypted = await crypto.subtle.decrypt(
+            {
+              name: "AES-GCM",
+              iv: fromBase64(response.headers.get("x-unpirator-iv") || ""),
+              additionalData: new TextEncoder().encode(context)
+            },
+            key,
+            await response.arrayBuffer()
           );
-          console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
-          if (response.ok) break;
-          if (response.status === 401 || response.status === 403 || attempt === 2) break;
-          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+          self.postMessage(
+            {
+              type: "segment",
+              id: data.id,
+              track: data.track,
+              sequence: data.sequence,
+              buffer: decrypted
+            },
+            [decrypted]
+          );
+        } catch (error) {
+          if (signal.aborted) return;
+          throw error;
+        } finally {
+          controllers.delete(data.id);
         }
-        if (!response?.ok) await json(response);
-        const context = response.headers.get("x-unpirator-context") || "";
-        const decrypted = await crypto.subtle.decrypt(
-          {
-            name: "AES-GCM",
-            iv: fromBase64(response.headers.get("x-unpirator-iv") || ""),
-            additionalData: new TextEncoder().encode(context)
-          },
-          key,
-          await response.arrayBuffer()
-        );
-        self.postMessage(
-          {
-            type: "segment",
-            id: data.id,
-            track: data.track,
-            sequence: data.sequence,
-            buffer: decrypted
-          },
-          [decrypted]
-        );
+        return;
       }
     } catch (error) {
       self.postMessage({
@@ -39451,6 +39472,11 @@ var ProtectedSegmentRuntime = class {
     this.cursors = { video: 1, audio: 1 };
     this.generation = 0;
     this.destroyed = false;
+    this.fillingGeneration = -1;
+    this.appendChains = { video: Promise.resolve(), audio: Promise.resolve() };
+    this.slotsInUse = 0;
+    this.slotWaiters = [];
+    this.slotOrder = 0;
   }
   async mount() {
     const mediaUrl = new URL(this.state.playbackUrl);
@@ -39555,10 +39581,38 @@ var ProtectedSegmentRuntime = class {
       this.pending.delete(data.id);
     }
   }
-  request(track, variant, sequence) {
-    return this.callWorker({ type: "segment", track, variant, sequence });
+  acquireSlot(priority) {
+    if (this.slotsInUse < MAX_INFLIGHT_SEGMENTS && !this.slotWaiters.length) {
+      this.slotsInUse += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.slotWaiters.push({ priority, order: this.slotOrder++, resolve });
+      this.slotWaiters.sort((a, b) => a.priority - b.priority || a.order - b.order);
+    });
   }
-  async callWorker(data, retry = true, timeoutMs = 6e4) {
+  releaseSlot() {
+    const next = this.slotWaiters.shift();
+    if (next) next.resolve();
+    else this.slotsInUse -= 1;
+  }
+  async request(track, variant, sequence, { generation = this.generation, priority = 0 } = {}) {
+    await this.acquireSlot(priority);
+    try {
+      if (this.destroyed) throw new Error("Player stopped");
+      if (sequence !== 0 && generation !== this.generation)
+        throw Object.assign(new Error("Segment request superseded"), { code: "SUPERSEDED" });
+      return await this.callWorker(
+        { type: "segment", track, variant, sequence },
+        true,
+        SEGMENT_TIMEOUT_MS,
+        { segment: sequence !== 0, generation }
+      );
+    } finally {
+      this.releaseSlot();
+    }
+  }
+  async callWorker(data, retry = true, timeoutMs = 6e4, meta = {}) {
     if (this.destroyed) throw new Error("Player stopped");
     await this.ensureToken?.();
     if (this.destroyed) throw new Error("Player stopped");
@@ -39566,9 +39620,11 @@ var ProtectedSegmentRuntime = class {
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        if (meta.segment) this.worker?.postMessage({ type: "abort", id });
         reject(Object.assign(new Error("Playback request timed out"), { code: "REQUEST_TIMEOUT" }));
       }, timeoutMs);
       this.pending.set(id, {
+        ...meta,
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -39585,16 +39641,44 @@ var ProtectedSegmentRuntime = class {
     } catch (error) {
       if (retry && error.code === "TOKEN_EXPIRED" && this.refreshToken && !this.destroyed) {
         await this.refreshToken();
-        return this.callWorker(data, false, timeoutMs);
+        return this.callWorker(data, false, timeoutMs, meta);
       }
       throw error;
     }
+  }
+  // Superseded segment fetches stop competing for the tunnel and free their slots at once.
+  abortSuperseded() {
+    for (const [id, entry] of this.pending) {
+      if (entry.segment && entry.generation !== this.generation) {
+        this.pending.delete(id);
+        this.worker?.postMessage({ type: "abort", id });
+        entry.reject(Object.assign(new Error("Segment request superseded"), { code: "SUPERSEDED" }));
+      }
+    }
+  }
+  // Every SourceBuffer mutation (append, remove, changeType) goes through one chain per track.
+  appendSerial(track, task) {
+    const run = this.appendChains[track].then(task);
+    this.appendChains[track] = run.then(
+      () => {
+      },
+      () => {
+      }
+    );
+    return run;
+  }
+  appendSegment(track, sourceBuffer, buffer, generation) {
+    return this.appendSerial(track, async () => {
+      if (this.destroyed || generation !== this.generation) return false;
+      await appendBuffer(sourceBuffer, buffer);
+      return true;
+    });
   }
   async append(track, variant, sequence, sourceBuffer, generation = this.generation) {
     const buffer = await this.request(track, variant, sequence);
     if (this.destroyed || sequence !== 0 && generation !== this.generation) return;
     try {
-      await appendBuffer(sourceBuffer, buffer);
+      await this.appendSerial(track, () => appendBuffer(sourceBuffer, buffer));
     } catch (error) {
       console.error(`[unpirator] appendBuffer ${track}#${sequence} failed: ${error?.message}`);
       throw error;
@@ -39603,6 +39687,7 @@ var ProtectedSegmentRuntime = class {
   onSeeking = () => {
     if (this.destroyed) return;
     this.generation += 1;
+    this.abortSuperseded();
     for (const track of ["video", "audio"]) {
       const descriptor = this.manifest[track][this[`${track}Variant`]];
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
@@ -39614,73 +39699,70 @@ var ProtectedSegmentRuntime = class {
     });
   };
   async fillBuffer() {
-    if (this.destroyed || this.loading || this.switching || typeof document !== "undefined" && document.hidden && this.video.paused)
+    if (this.destroyed || this.switching || this.fillingGeneration === this.generation || typeof document !== "undefined" && document.hidden && this.video.paused)
       return;
-    this.loading = true;
     const generation = this.generation;
+    this.fillingGeneration = generation;
     try {
-      if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
-        ["video", "audio"].map(async (track) => {
-          const variant = this[`${track}Variant`];
-          const sourceBuffer = this[`${track}Buffer`];
-          const descriptor = this.manifest[track][variant];
-          await cleanBuffer(sourceBuffer, this.video.currentTime, this.mediaSource.duration);
-          if (generation !== this.generation || this.destroyed) return;
-          const ahead = bufferedAhead({
-            buffered: sourceBuffer.buffered,
-            currentTime: this.video.currentTime
-          });
-          if (ahead >= 20) return;
-          if (ahead > 0)
-            this.cursors[track] = Math.max(
-              this.cursors[track],
-              sequenceAtTime(descriptor.segments, this.video.currentTime + ahead + 1e-3)
-            );
-          const sequence = this.cursors[track];
-          if (sequence > descriptor.segments.length) return;
-          const batch = [];
-          for (let next = sequence; batch.length < 3 && next <= descriptor.segments.length; next += 1)
-            batch.push(next);
-          const allowed = await this.windowedBatch(track, variant, batch);
-          if (generation !== this.generation || this.destroyed) return;
-          if (!allowed.length)
-            throw Object.assign(new Error("Playback window not confirmed"), {
-              code: "WINDOW_UNCONFIRMED"
-            });
-          const fetched = await Promise.allSettled(
-            allowed.map((seq) => this.request(track, variant, seq))
-          );
-          if (generation !== this.generation || this.destroyed) return;
-          let appended = 0;
-          for (let index = 0; index < fetched.length; index += 1) {
-            const result = fetched[index];
-            if (result.status !== "fulfilled") break;
-            await appendBuffer(sourceBuffer, result.value);
-            appended = index + 1;
-          }
-          if (appended && generation === this.generation)
-            this.cursors[track] = sequence + appended;
-          const failure2 = fetched.find((item) => item.status === "rejected");
-          if (failure2) throw failure2.reason;
-        })
+        ["video", "audio"].map((track) => this.fillTrack(track, generation))
       );
+      if (generation !== this.generation || this.destroyed) return;
       const failure = results.find((result) => result.status === "rejected");
       if (failure) throw failure.reason;
       this.segmentFailures = 0;
       this.nextSequence = Math.max(this.cursors.video, this.cursors.audio);
-      if (generation === this.generation && ["video", "audio"].every(
+      if (["video", "audio"].every(
         (track) => this.cursors[track] > this.manifest[track][this[`${track}Variant`]].segments.length
-      ) && this.mediaSource.readyState === "open")
-        this.mediaSource.endOfStream();
-    } catch (error) {
-      if (!this.destroyed && generation === this.generation) throw error;
+      )) {
+        await Promise.all([this.appendChains.video, this.appendChains.audio]);
+        if (generation === this.generation && !this.destroyed && this.mediaSource.readyState === "open")
+          this.mediaSource.endOfStream();
+      }
     } finally {
-      this.loading = false;
-      if (!this.destroyed && generation !== this.generation)
-        this.fillBuffer().catch((error) => {
-          console.warn(`[unpirator] refill after switch deferred: ${error?.code || error?.message}`);
-        });
+      if (this.fillingGeneration === generation) this.fillingGeneration = -1;
+    }
+  }
+  async fillTrack(track, generation) {
+    const current = () => generation === this.generation && !this.destroyed;
+    const variant = this[`${track}Variant`];
+    const sourceBuffer = this[`${track}Buffer`];
+    const descriptor = this.manifest[track][variant];
+    await this.appendSerial(
+      track,
+      () => cleanBuffer(sourceBuffer, this.video.currentTime, this.mediaSource.duration)
+    );
+    if (!current()) return;
+    const ahead = bufferedAhead({
+      buffered: sourceBuffer.buffered,
+      currentTime: this.video.currentTime
+    });
+    if (ahead >= 20) return;
+    if (ahead > 0)
+      this.cursors[track] = Math.max(
+        this.cursors[track],
+        sequenceAtTime(descriptor.segments, this.video.currentTime + ahead + 1e-3)
+      );
+    const sequence = this.cursors[track];
+    if (sequence > descriptor.segments.length) return;
+    const batch = [];
+    for (let next = sequence; batch.length < LOOKAHEAD_SEGMENTS && next <= descriptor.segments.length; next += 1)
+      batch.push(next);
+    const allowed = await this.windowedBatch(track, variant, batch);
+    if (!current()) return;
+    if (!allowed.length)
+      throw Object.assign(new Error("Playback window not confirmed"), { code: "WINDOW_UNCONFIRMED" });
+    const fetches = allowed.map((seq, index) => {
+      const promise = this.request(track, variant, seq, { generation, priority: index });
+      promise.catch(() => {
+      });
+      return promise;
+    });
+    for (let index = 0; index < fetches.length; index += 1) {
+      const bytes = await fetches[index];
+      if (!current()) return;
+      if (!await this.appendSegment(track, sourceBuffer, bytes, generation)) return;
+      if (current()) this.cursors[track] = allowed[index] + 1;
     }
   }
   sendIntegrity(tampered = false) {
@@ -39705,22 +39787,26 @@ var ProtectedSegmentRuntime = class {
       video: this.videoVariant,
       audio: this.audioVariant
     };
-    await this.callWorker(
-      {
-        type: "integrity",
-        sequence: this.nextSequence,
-        tampered,
-        positionSeconds: sent.pos,
-        videoVariant: sent.video,
-        audioVariant: sent.audio
-      },
-      true,
-      INTEGRITY_TIMEOUT_MS
-    );
-    if (!tampered) this.windowAck = sent;
+    this.integrityBusy = sent;
+    try {
+      await this.callWorker(
+        {
+          type: "integrity",
+          sequence: this.nextSequence,
+          tampered,
+          positionSeconds: sent.pos,
+          videoVariant: sent.video,
+          audioVariant: sent.audio
+        },
+        true,
+        INTEGRITY_TIMEOUT_MS
+      );
+      if (!tampered) this.windowAck = sent;
+    } finally {
+      if (this.integrityBusy === sent) this.integrityBusy = null;
+    }
   }
-  windowPrefix(track, variant, sequences) {
-    const ack = this.windowAck;
+  windowPrefix(track, variant, sequences, ack = this.windowAck) {
     if (!ack || ack[track] !== variant) return [];
     const { segments } = this.manifest[track][variant];
     const min = Math.max(1, sequenceAtTime(segments, ack.pos) - 2);
@@ -39733,10 +39819,16 @@ var ProtectedSegmentRuntime = class {
     return covered;
   }
   async windowedBatch(track, variant, batch) {
-    if (this.windowPrefix(track, variant, batch).length < batch.length)
-      await this.sendIntegrity(false).catch((error) => {
-        console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
-      });
+    const warn = (error) => console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
+    let covered = this.windowPrefix(track, variant, batch);
+    if (covered.length === batch.length) return covered;
+    const busy = this.integrityBusy;
+    if (busy && this.windowPrefix(track, variant, batch, busy).length > covered.length) {
+      await this.integrityRunning.catch(warn);
+      covered = this.windowPrefix(track, variant, batch);
+      if (covered.length) return covered;
+    }
+    await this.sendIntegrity(false).catch(warn);
     return this.windowPrefix(track, variant, batch);
   }
   async setQuality(variant) {
@@ -39746,16 +39838,18 @@ var ProtectedSegmentRuntime = class {
     this.switching = true;
     this.generation++;
     try {
-      while (this.loading && !this.destroyed)
-        await new Promise((resolve) => setTimeout(resolve, 25));
+      this.abortSuperseded();
+      await Promise.all([this.appendChains.video, this.appendChains.audio]);
       if (this.destroyed) return;
       const descriptor = this.manifest.video[variant];
       const previous = this.manifest.video[this.videoVariant];
       if (previous.codec !== descriptor.codec && !this.videoBuffer.changeType)
         throw new Error("This browser cannot switch this quality");
-      await removeBuffer(this.videoBuffer, 0, this.mediaSource.duration);
-      if (this.videoBuffer.changeType)
-        this.videoBuffer.changeType(`${descriptor.mimeType}; codecs="${descriptor.codec}"`);
+      await this.appendSerial("video", async () => {
+        await removeBuffer(this.videoBuffer, 0, this.mediaSource.duration);
+        if (this.videoBuffer.changeType)
+          this.videoBuffer.changeType(`${descriptor.mimeType}; codecs="${descriptor.codec}"`);
+      });
       this.videoVariant = variant;
       await this.sendIntegrity(false);
       await this.append("video", variant, 0, this.videoBuffer);
@@ -39826,6 +39920,8 @@ var ProtectedSegmentRuntime = class {
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     for (const pending of this.pending.values()) pending.reject(new Error("Player stopped"));
     this.pending.clear();
+    for (const waiter of this.slotWaiters) waiter.resolve();
+    this.slotWaiters = [];
   }
 };
 function chooseVideoVariant(variants) {

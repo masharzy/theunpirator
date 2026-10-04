@@ -13,6 +13,9 @@ const positions = [
 const youtubeMinterCache = new Map();
 const BOTGUARD_TIMEOUT_MS = 12_000;
 const INTEGRITY_TIMEOUT_MS = 10_000;
+const MAX_INFLIGHT_SEGMENTS = 4; // gateway lease cap: 4 concurrent deliveries per session
+const LOOKAHEAD_SEGMENTS = 3;
+const SEGMENT_TIMEOUT_MS = 25_000;
 
 function decodeBase64Url(value) {
   const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/").replace(/\./g, "=");
@@ -589,7 +592,12 @@ function segmentWorkerRuntime() {
       );
     return data;
   }
+  const controllers = new Map(); // request id -> AbortController for segment fetches
   self.onmessage = ({ data }) => {
+    if (data.type === "abort") {
+      controllers.get(data.id)?.abort();
+      return;
+    }
     // Handle messages concurrently: awaiting inside onmessage would queue every
     // segment request behind the previous one, which stalls seeks badly.
     handleWorkerMessage(data).catch((error) =>
@@ -661,39 +669,45 @@ function segmentWorkerRuntime() {
       }
       if (data.type === "segment") {
         if (!key) throw new Error("Protected player key unavailable");
-        let response;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const ticketRes = await fetch(`${baseUrl}/ticket`, {
-            method: "POST",
-            credentials: "include",
-            headers: auth(),
-            body: JSON.stringify({
-              track: data.track,
-              variant: data.variant,
-              sequence: data.sequence,
-            }),
-          });
-          console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
-          const ticket = await json(ticketRes);
-          response = await fetch(
-            `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
-            { credentials: "include", headers: { Authorization: `Bearer ${token}` } },
-          );
-          console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
-          if (response.ok) break;
-          if (response.status === 401 || response.status === 403 || attempt === 2) break;
-          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
-        }
-        if (!response?.ok) await json(response);
-        const context = response.headers.get("x-unpirator-context") || "";
-        const decrypted = await crypto.subtle.decrypt(
-          {
-            name: "AES-GCM",
-            iv: fromBase64(response.headers.get("x-unpirator-iv") || ""),
-            additionalData: new TextEncoder().encode(context),
-          },
-          key,
-          await response.arrayBuffer(),
+        const controller = new AbortController();
+        controllers.set(data.id, controller);
+        const { signal } = controller;
+        try {
+          let response;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const ticketRes = await fetch(`${baseUrl}/ticket`, {
+              method: "POST",
+              credentials: "include",
+              headers: auth(),
+              body: JSON.stringify({
+                track: data.track,
+                variant: data.variant,
+                sequence: data.sequence,
+              }),
+              signal,
+            });
+            console.info(`[unpirator-w] ticket ${data.track}#${data.sequence} -> ${ticketRes.status}`);
+            const ticket = await json(ticketRes);
+            response = await fetch(
+              `${baseUrl}/chunk/${data.track}/${data.variant}/${data.sequence}?ticket=${encodeURIComponent(ticket.ticket)}`,
+              { credentials: "include", headers: { Authorization: `Bearer ${token}` }, signal },
+            );
+            console.info(`[unpirator-w] chunk ${data.track}#${data.sequence} -> ${response.status}`);
+            if (response.ok) break;
+            if (response.status === 401 || response.status === 403 || attempt === 2) break;
+            await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+            if (signal.aborted) return;
+          }
+          if (!response?.ok) await json(response);
+          const context = response.headers.get("x-unpirator-context") || "";
+          const decrypted = await crypto.subtle.decrypt(
+            {
+              name: "AES-GCM",
+              iv: fromBase64(response.headers.get("x-unpirator-iv") || ""),
+              additionalData: new TextEncoder().encode(context),
+            },
+            key,
+            await response.arrayBuffer(),
         );
         self.postMessage(
           {
@@ -705,6 +719,13 @@ function segmentWorkerRuntime() {
           },
           [decrypted],
         );
+        } catch (error) {
+          if (signal.aborted) return; // superseded: the main thread already dropped this id
+          throw error;
+        } finally {
+          controllers.delete(data.id);
+        }
+        return;
       }
     } catch (error) {
       self.postMessage({
@@ -1018,6 +1039,11 @@ export class ProtectedSegmentRuntime {
     this.cursors = { video: 1, audio: 1 };
     this.generation = 0;
     this.destroyed = false;
+    this.fillingGeneration = -1;
+    this.appendChains = { video: Promise.resolve(), audio: Promise.resolve() };
+    this.slotsInUse = 0;
+    this.slotWaiters = [];
+    this.slotOrder = 0;
   }
   async mount() {
     const mediaUrl = new URL(this.state.playbackUrl);
@@ -1124,10 +1150,38 @@ export class ProtectedSegmentRuntime {
       this.pending.delete(data.id);
     }
   }
-  request(track, variant, sequence) {
-    return this.callWorker({ type: "segment", track, variant, sequence });
+  acquireSlot(priority) {
+    if (this.slotsInUse < MAX_INFLIGHT_SEGMENTS && !this.slotWaiters.length) {
+      this.slotsInUse += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.slotWaiters.push({ priority, order: this.slotOrder++, resolve });
+      this.slotWaiters.sort((a, b) => a.priority - b.priority || a.order - b.order);
+    });
   }
-  async callWorker(data, retry = true, timeoutMs = 60000) {
+  releaseSlot() {
+    const next = this.slotWaiters.shift();
+    if (next) next.resolve(); // hand the slot straight to the next waiter
+    else this.slotsInUse -= 1;
+  }
+  async request(track, variant, sequence, { generation = this.generation, priority = 0 } = {}) {
+    await this.acquireSlot(priority);
+    try {
+      if (this.destroyed) throw new Error("Player stopped");
+      if (sequence !== 0 && generation !== this.generation)
+        throw Object.assign(new Error("Segment request superseded"), { code: "SUPERSEDED" });
+      return await this.callWorker(
+        { type: "segment", track, variant, sequence },
+        true,
+        SEGMENT_TIMEOUT_MS,
+        { segment: sequence !== 0, generation },
+      );
+    } finally {
+      this.releaseSlot();
+    }
+  }
+  async callWorker(data, retry = true, timeoutMs = 60000, meta = {}) {
     if (this.destroyed) throw new Error("Player stopped");
     await this.ensureToken?.();
     if (this.destroyed) throw new Error("Player stopped");
@@ -1135,9 +1189,11 @@ export class ProtectedSegmentRuntime {
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        if (meta.segment) this.worker?.postMessage({ type: "abort", id });
         reject(Object.assign(new Error("Playback request timed out"), { code: "REQUEST_TIMEOUT" }));
       }, timeoutMs);
       this.pending.set(id, {
+        ...meta,
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -1154,16 +1210,42 @@ export class ProtectedSegmentRuntime {
     } catch (error) {
       if (retry && error.code === "TOKEN_EXPIRED" && this.refreshToken && !this.destroyed) {
         await this.refreshToken();
-        return this.callWorker(data, false, timeoutMs);
+        return this.callWorker(data, false, timeoutMs, meta);
       }
       throw error;
     }
+  }
+  // Superseded segment fetches stop competing for the tunnel and free their slots at once.
+  abortSuperseded() {
+    for (const [id, entry] of this.pending) {
+      if (entry.segment && entry.generation !== this.generation) {
+        this.pending.delete(id);
+        this.worker?.postMessage({ type: "abort", id });
+        entry.reject(Object.assign(new Error("Segment request superseded"), { code: "SUPERSEDED" }));
+      }
+    }
+  }
+  // Every SourceBuffer mutation (append, remove, changeType) goes through one chain per track.
+  appendSerial(track, task) {
+    const run = this.appendChains[track].then(task);
+    this.appendChains[track] = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+  appendSegment(track, sourceBuffer, buffer, generation) {
+    return this.appendSerial(track, async () => {
+      if (this.destroyed || generation !== this.generation) return false; // superseded while queued
+      await appendBuffer(sourceBuffer, buffer);
+      return true;
+    });
   }
   async append(track, variant, sequence, sourceBuffer, generation = this.generation) {
     const buffer = await this.request(track, variant, sequence);
     if (this.destroyed || (sequence !== 0 && generation !== this.generation)) return;
     try {
-      await appendBuffer(sourceBuffer, buffer);
+      await this.appendSerial(track, () => appendBuffer(sourceBuffer, buffer));
     } catch (error) {
       console.error(`[unpirator] appendBuffer ${track}#${sequence} failed: ${error?.message}`);
       throw error;
@@ -1172,108 +1254,102 @@ export class ProtectedSegmentRuntime {
   onSeeking = () => {
     if (this.destroyed) return;
     this.generation += 1;
+    this.abortSuperseded();
     for (const track of ["video", "audio"]) {
       const descriptor = this.manifest[track][this[`${track}Variant`]];
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
     }
-    // Start moving the session window now. Calls are coalesced, so a scrub storm
-    // shares one pending dispatch. fillBuffer also refuses to request tickets the
-    // window does not cover, so ordering holds even when the pump races this.
     this.sendIntegrity(false).catch(() => {});
     this.fillBuffer().catch((error) => {
       console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
     });
   };
   async fillBuffer() {
+    // One fill per generation: a seek starts a new fill immediately while the stale
+    // one drains harmlessly (it cannot append, and its fetches are aborted).
     if (
       this.destroyed ||
-      this.loading ||
       this.switching ||
+      this.fillingGeneration === this.generation ||
       (typeof document !== "undefined" && document.hidden && this.video.paused)
     )
       return;
-    this.loading = true;
     const generation = this.generation;
+    this.fillingGeneration = generation;
     try {
-      if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
-        ["video", "audio"].map(async (track) => {
-          const variant = this[`${track}Variant`];
-          const sourceBuffer = this[`${track}Buffer`];
-          const descriptor = this.manifest[track][variant];
-          await cleanBuffer(sourceBuffer, this.video.currentTime, this.mediaSource.duration);
-          if (generation !== this.generation || this.destroyed) return;
-          const ahead = bufferedAhead({
-            buffered: sourceBuffer.buffered,
-            currentTime: this.video.currentTime,
-          });
-          if (ahead >= 20) return;
-          // Buffered ranges survive seeks. Resume at the end of the target range,
-          // independently for audio and video (their segment durations differ).
-          if (ahead > 0)
-            this.cursors[track] = Math.max(
-              this.cursors[track],
-              sequenceAtTime(descriptor.segments, this.video.currentTime + ahead + 0.001),
-            );
-          const sequence = this.cursors[track];
-          if (sequence > descriptor.segments.length) return;
-          // Network fetches run in parallel to hide the gateway chain's
-          // per-request latency; buffer appends stay serial (one SourceBuffer
-          // cannot run two appendBuffer calls at once).
-          const batch = [];
-          for (
-            let next = sequence;
-            batch.length < 3 && next <= descriptor.segments.length;
-            next += 1
-          )
-            batch.push(next);
-          // Only request what the session window covers. If this batch is not
-          // covered (seek, or playback outran the last report) move the window
-          // first; concurrent callers share one coalesced dispatch.
-          const allowed = await this.windowedBatch(track, variant, batch);
-          if (generation !== this.generation || this.destroyed) return;
-          if (!allowed.length)
-            throw Object.assign(new Error("Playback window not confirmed"), {
-              code: "WINDOW_UNCONFIRMED",
-            });
-          const fetched = await Promise.allSettled(
-            allowed.map((seq) => this.request(track, variant, seq)),
-          );
-          if (generation !== this.generation || this.destroyed) return;
-          let appended = 0;
-          for (let index = 0; index < fetched.length; index += 1) {
-            const result = fetched[index];
-            if (result.status !== "fulfilled") break;
-            await appendBuffer(sourceBuffer, result.value);
-            appended = index + 1;
-          }
-          if (appended && generation === this.generation)
-            this.cursors[track] = sequence + appended;
-          const failure = fetched.find((item) => item.status === "rejected");
-          if (failure) throw failure.reason;
-        }),
+        ["video", "audio"].map((track) => this.fillTrack(track, generation)),
       );
+      if (generation !== this.generation || this.destroyed) return;
       const failure = results.find((result) => result.status === "rejected");
       if (failure) throw failure.reason;
       this.segmentFailures = 0;
       this.nextSequence = Math.max(this.cursors.video, this.cursors.audio);
       if (
-        generation === this.generation &&
         ["video", "audio"].every(
           (track) =>
             this.cursors[track] > this.manifest[track][this[`${track}Variant`]].segments.length,
-        ) &&
-        this.mediaSource.readyState === "open"
-      )
-        this.mediaSource.endOfStream();
-    } catch (error) {
-      if (!this.destroyed && generation === this.generation) throw error;
+        )
+      ) {
+        await Promise.all([this.appendChains.video, this.appendChains.audio]);
+        if (
+          generation === this.generation &&
+          !this.destroyed &&
+          this.mediaSource.readyState === "open"
+        )
+          this.mediaSource.endOfStream();
+      }
     } finally {
-      this.loading = false;
-      if (!this.destroyed && generation !== this.generation)
-        this.fillBuffer().catch((error) => {
-          console.warn(`[unpirator] refill after switch deferred: ${error?.code || error?.message}`);
-        });
+      if (this.fillingGeneration === generation) this.fillingGeneration = -1;
+    }
+  }
+  async fillTrack(track, generation) {
+    const current = () => generation === this.generation && !this.destroyed;
+    const variant = this[`${track}Variant`];
+    const sourceBuffer = this[`${track}Buffer`];
+    const descriptor = this.manifest[track][variant];
+    await this.appendSerial(track, () =>
+      cleanBuffer(sourceBuffer, this.video.currentTime, this.mediaSource.duration),
+    );
+    if (!current()) return;
+    const ahead = bufferedAhead({
+      buffered: sourceBuffer.buffered,
+      currentTime: this.video.currentTime,
+    });
+    if (ahead >= 20) return;
+    // Buffered ranges survive seeks. Resume at the end of the target range,
+    // independently for audio and video (their segment durations differ).
+    if (ahead > 0)
+      this.cursors[track] = Math.max(
+        this.cursors[track],
+        sequenceAtTime(descriptor.segments, this.video.currentTime + ahead + 0.001),
+      );
+    const sequence = this.cursors[track];
+    if (sequence > descriptor.segments.length) return;
+    const batch = [];
+    for (
+      let next = sequence;
+      batch.length < LOOKAHEAD_SEGMENTS && next <= descriptor.segments.length;
+      next += 1
+    )
+      batch.push(next);
+    const allowed = await this.windowedBatch(track, variant, batch);
+    if (!current()) return;
+    if (!allowed.length)
+      throw Object.assign(new Error("Playback window not confirmed"), { code: "WINDOW_UNCONFIRMED" });
+    // Start every fetch now. The slot limiter runs the first segment of each track
+    // before any second segment. Appends stay strictly in order, one at a time per
+    // SourceBuffer, as each segment lands.
+    const fetches = allowed.map((seq, index) => {
+      const promise = this.request(track, variant, seq, { generation, priority: index });
+      promise.catch(() => {}); // no unhandled rejection for results we stop waiting on
+      return promise;
+    });
+    for (let index = 0; index < fetches.length; index += 1) {
+      const bytes = await fetches[index];
+      if (!current()) return;
+      if (!(await this.appendSegment(track, sourceBuffer, bytes, generation))) return;
+      if (current()) this.cursors[track] = allowed[index] + 1;
     }
   }
   sendIntegrity(tampered = false) {
@@ -1300,25 +1376,27 @@ export class ProtectedSegmentRuntime {
       video: this.videoVariant,
       audio: this.audioVariant,
     };
-    // Raced against a timeout and DROPPED on expiry: a hung call must not jam
-    // the next ones. The late worker reply finds no pending entry and is ignored.
-    await this.callWorker(
-      {
-        type: "integrity",
-        sequence: this.nextSequence,
-        tampered,
-        positionSeconds: sent.pos,
-        videoVariant: sent.video,
-        audioVariant: sent.audio,
-      },
-      true,
-      INTEGRITY_TIMEOUT_MS,
-    );
-    if (!tampered) this.windowAck = sent; // what the server window was last built from
+    this.integrityBusy = sent; // set synchronously: lets callers see what is on the wire
+    try {
+      await this.callWorker(
+        {
+          type: "integrity",
+          sequence: this.nextSequence,
+          tampered,
+          positionSeconds: sent.pos,
+          videoVariant: sent.video,
+          audioVariant: sent.audio,
+        },
+        true,
+        INTEGRITY_TIMEOUT_MS,
+      );
+      if (!tampered) this.windowAck = sent;
+    } finally {
+      if (this.integrityBusy === sent) this.integrityBusy = null;
+    }
   }
-  windowPrefix(track, variant, sequences) {
+  windowPrefix(track, variant, sequences, ack = this.windowAck) {
     // Mirrors playbackWindows() in protected-media.js: min = seg(pos) - 2, max = seg(pos + 30).
-    const ack = this.windowAck;
     if (!ack || ack[track] !== variant) return [];
     const { segments } = this.manifest[track][variant];
     const min = Math.max(1, sequenceAtTime(segments, ack.pos) - 2);
@@ -1331,12 +1409,19 @@ export class ProtectedSegmentRuntime {
     return covered;
   }
   async windowedBatch(track, variant, batch) {
-    if (this.windowPrefix(track, variant, batch).length < batch.length)
-      await this.sendIntegrity(false).catch((error) => {
-        console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
-      });
-    // After a fresh report a long-segment batch may only partly fit: take the
-    // covered prefix and let the next pump pass fetch the rest.
+    const warn = (error) =>
+      console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
+    let covered = this.windowPrefix(track, variant, batch);
+    if (covered.length === batch.length) return covered;
+    const busy = this.integrityBusy;
+    if (busy && this.windowPrefix(track, variant, batch, busy).length > covered.length) {
+      // A dispatch already on the wire carries a position that covers this batch:
+      // wait for it instead of queueing a second round trip behind it.
+      await this.integrityRunning.catch(warn);
+      covered = this.windowPrefix(track, variant, batch);
+      if (covered.length) return covered;
+    }
+    await this.sendIntegrity(false).catch(warn);
     return this.windowPrefix(track, variant, batch);
   }
   async setQuality(variant) {
@@ -1346,16 +1431,18 @@ export class ProtectedSegmentRuntime {
     this.switching = true;
     this.generation++;
     try {
-      while (this.loading && !this.destroyed)
-        await new Promise((resolve) => setTimeout(resolve, 25));
+      this.abortSuperseded();
+      await Promise.all([this.appendChains.video, this.appendChains.audio]);
       if (this.destroyed) return;
       const descriptor = this.manifest.video[variant];
       const previous = this.manifest.video[this.videoVariant];
       if (previous.codec !== descriptor.codec && !this.videoBuffer.changeType)
         throw new Error("This browser cannot switch this quality");
-      await removeBuffer(this.videoBuffer, 0, this.mediaSource.duration);
-      if (this.videoBuffer.changeType)
-        this.videoBuffer.changeType(`${descriptor.mimeType}; codecs="${descriptor.codec}"`);
+      await this.appendSerial("video", async () => {
+        await removeBuffer(this.videoBuffer, 0, this.mediaSource.duration);
+        if (this.videoBuffer.changeType)
+          this.videoBuffer.changeType(`${descriptor.mimeType}; codecs="${descriptor.codec}"`);
+      });
       this.videoVariant = variant;
       await this.sendIntegrity(false);
       await this.append("video", variant, 0, this.videoBuffer);
@@ -1442,6 +1529,8 @@ export class ProtectedSegmentRuntime {
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     for (const pending of this.pending.values()) pending.reject(new Error("Player stopped"));
     this.pending.clear();
+    for (const waiter of this.slotWaiters) waiter.resolve();
+    this.slotWaiters = [];
   }
 }
 
