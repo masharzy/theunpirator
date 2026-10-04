@@ -73,9 +73,14 @@ export default {
       });
       if ((upstream.headers.get("content-type") || "").includes("json")) {
         const text = await upstream.text();
+        const headers = new Headers(JSON_HEADERS);
+        const timing = upstream.headers.get("server-timing");
+        if (timing) headers.set("server-timing", timing);
+        const rid = upstream.headers.get("x-request-id");
+        if (rid) headers.set("x-request-id", rid);
         return new Response(text.split(gatewayBase).join(`${url.origin}/gw`), {
           status: upstream.status,
-          headers: JSON_HEADERS,
+          headers,
         });
       }
       const responseHeaders = new Headers();

@@ -38537,6 +38537,7 @@ var positions = [
 ];
 var youtubeMinterCache = /* @__PURE__ */ new Map();
 var BOTGUARD_TIMEOUT_MS = 12e3;
+var INTEGRITY_TIMEOUT_MS = 1e4;
 function decodeBase64Url(value) {
   const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/").replace(/\./g, "=");
   const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
@@ -39557,7 +39558,7 @@ var ProtectedSegmentRuntime = class {
   request(track, variant, sequence) {
     return this.callWorker({ type: "segment", track, variant, sequence });
   }
-  async callWorker(data, retry = true) {
+  async callWorker(data, retry = true, timeoutMs = 6e4) {
     if (this.destroyed) throw new Error("Player stopped");
     await this.ensureToken?.();
     if (this.destroyed) throw new Error("Player stopped");
@@ -39565,8 +39566,8 @@ var ProtectedSegmentRuntime = class {
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("Playback request timed out"));
-      }, 6e4);
+        reject(Object.assign(new Error("Playback request timed out"), { code: "REQUEST_TIMEOUT" }));
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (value) => {
           clearTimeout(timer);
@@ -39584,7 +39585,7 @@ var ProtectedSegmentRuntime = class {
     } catch (error) {
       if (retry && error.code === "TOKEN_EXPIRED" && this.refreshToken && !this.destroyed) {
         await this.refreshToken();
-        return this.callWorker(data, false);
+        return this.callWorker(data, false, timeoutMs);
       }
       throw error;
     }
@@ -39607,10 +39608,9 @@ var ProtectedSegmentRuntime = class {
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
     }
     this.sendIntegrity(false).catch(() => {
-    }).then(() => {
-      this.fillBuffer().catch((error) => {
-        console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
-      });
+    });
+    this.fillBuffer().catch((error) => {
+      console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
     });
   };
   async fillBuffer() {
@@ -39619,8 +39619,6 @@ var ProtectedSegmentRuntime = class {
     this.loading = true;
     const generation = this.generation;
     try {
-      this.sendIntegrity(false).catch(() => {
-      });
       if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
         ["video", "audio"].map(async (track) => {
@@ -39644,8 +39642,14 @@ var ProtectedSegmentRuntime = class {
           const batch = [];
           for (let next = sequence; batch.length < 3 && next <= descriptor.segments.length; next += 1)
             batch.push(next);
+          const allowed = await this.windowedBatch(track, variant, batch);
+          if (generation !== this.generation || this.destroyed) return;
+          if (!allowed.length)
+            throw Object.assign(new Error("Playback window not confirmed"), {
+              code: "WINDOW_UNCONFIRMED"
+            });
           const fetched = await Promise.allSettled(
-            batch.map((seq) => this.request(track, variant, seq))
+            allowed.map((seq) => this.request(track, variant, seq))
           );
           if (generation !== this.generation || this.destroyed) return;
           let appended = 0;
@@ -39679,21 +39683,61 @@ var ProtectedSegmentRuntime = class {
         });
     }
   }
-  sendIntegrity(tampered) {
-    this.integrityQueue = (this.integrityQueue || Promise.resolve()).catch(() => {
-    }).then(() => this.dispatchIntegrity(tampered));
-    return this.integrityQueue;
-  }
-  dispatchIntegrity(tampered) {
-    if (!this.worker) return Promise.resolve();
-    return this.callWorker({
-      type: "integrity",
-      sequence: this.nextSequence,
-      tampered,
-      positionSeconds: this.authorizationPosition ?? this.video.currentTime,
-      videoVariant: this.videoVariant,
-      audioVariant: this.audioVariant
+  sendIntegrity(tampered = false) {
+    this.integrityTamperedFlag ||= tampered;
+    if (this.integrityNext) return this.integrityNext;
+    const previous = (this.integrityRunning || Promise.resolve()).catch(() => {
     });
+    const next = previous.then(() => {
+      this.integrityNext = null;
+      const flag = this.integrityTamperedFlag;
+      this.integrityTamperedFlag = false;
+      this.integrityRunning = this.dispatchIntegrity(flag);
+      return this.integrityRunning;
+    });
+    this.integrityNext = next;
+    return next;
+  }
+  async dispatchIntegrity(tampered) {
+    if (!this.worker) return;
+    const sent = {
+      pos: this.authorizationPosition ?? this.video.currentTime,
+      video: this.videoVariant,
+      audio: this.audioVariant
+    };
+    await this.callWorker(
+      {
+        type: "integrity",
+        sequence: this.nextSequence,
+        tampered,
+        positionSeconds: sent.pos,
+        videoVariant: sent.video,
+        audioVariant: sent.audio
+      },
+      true,
+      INTEGRITY_TIMEOUT_MS
+    );
+    if (!tampered) this.windowAck = sent;
+  }
+  windowPrefix(track, variant, sequences) {
+    const ack = this.windowAck;
+    if (!ack || ack[track] !== variant) return [];
+    const { segments } = this.manifest[track][variant];
+    const min = Math.max(1, sequenceAtTime(segments, ack.pos) - 2);
+    const max = sequenceAtTime(segments, ack.pos + 30);
+    const covered = [];
+    for (const sequence of sequences) {
+      if (sequence < min || sequence > max) break;
+      covered.push(sequence);
+    }
+    return covered;
+  }
+  async windowedBatch(track, variant, batch) {
+    if (this.windowPrefix(track, variant, batch).length < batch.length)
+      await this.sendIntegrity(false).catch((error) => {
+        console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
+      });
+    return this.windowPrefix(track, variant, batch);
   }
   async setQuality(variant) {
     if (!Number.isInteger(variant) || !this.manifest.video[variant])

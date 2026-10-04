@@ -118,9 +118,14 @@ export class RedisDurableStorage {
         keys.map((key) => this.key(key)),
         args,
       );
-      if (Number(committed) === 1) return result;
+      if (Number(committed) === 1) {
+        if (attempt > 0)
+          console.info(JSON.stringify({ component: "session-tx", event: "committed-after-retry", attempts: attempt + 1, keys: keys.length, session: this.prefix.slice(-8) }));
+        return result;
+      }
       await new Promise((resolve) => setTimeout(resolve, Math.min(50, 2 ** attempt)));
     }
+    console.warn(JSON.stringify({ component: "session-tx", event: "busy-exhausted", attempts: 16, session: this.prefix.slice(-8) }));
     return Response.json({ error: "busy" }, { status: 429 });
   }
 }

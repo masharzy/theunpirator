@@ -12,6 +12,7 @@ const positions = [
 
 const youtubeMinterCache = new Map();
 const BOTGUARD_TIMEOUT_MS = 12_000;
+const INTEGRITY_TIMEOUT_MS = 10_000;
 
 function decodeBase64Url(value) {
   const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/").replace(/\./g, "=");
@@ -1126,7 +1127,7 @@ export class ProtectedSegmentRuntime {
   request(track, variant, sequence) {
     return this.callWorker({ type: "segment", track, variant, sequence });
   }
-  async callWorker(data, retry = true) {
+  async callWorker(data, retry = true, timeoutMs = 60000) {
     if (this.destroyed) throw new Error("Player stopped");
     await this.ensureToken?.();
     if (this.destroyed) throw new Error("Player stopped");
@@ -1134,8 +1135,8 @@ export class ProtectedSegmentRuntime {
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("Playback request timed out"));
-      }, 60000);
+        reject(Object.assign(new Error("Playback request timed out"), { code: "REQUEST_TIMEOUT" }));
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (value) => {
           clearTimeout(timer);
@@ -1153,7 +1154,7 @@ export class ProtectedSegmentRuntime {
     } catch (error) {
       if (retry && error.code === "TOKEN_EXPIRED" && this.refreshToken && !this.destroyed) {
         await this.refreshToken();
-        return this.callWorker(data, false);
+        return this.callWorker(data, false, timeoutMs);
       }
       throw error;
     }
@@ -1175,15 +1176,13 @@ export class ProtectedSegmentRuntime {
       const descriptor = this.manifest[track][this[`${track}Variant`]];
       this.cursors[track] = sequenceAtTime(descriptor.segments, this.video.currentTime);
     }
-    // Move the session's playback window BEFORE fetching; otherwise the first
-    // ticket batch races the window update and fails wholesale.
-    this.sendIntegrity(false)
-      .catch(() => {})
-      .then(() => {
-        this.fillBuffer().catch((error) => {
-          console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
-        });
-      });
+    // Start moving the session window now. Calls are coalesced, so a scrub storm
+    // shares one pending dispatch. fillBuffer also refuses to request tickets the
+    // window does not cover, so ordering holds even when the pump races this.
+    this.sendIntegrity(false).catch(() => {});
+    this.fillBuffer().catch((error) => {
+      console.warn(`[unpirator] seek refill deferred: ${error?.code || error?.message}`);
+    });
   };
   async fillBuffer() {
     if (
@@ -1196,9 +1195,6 @@ export class ProtectedSegmentRuntime {
     this.loading = true;
     const generation = this.generation;
     try {
-      // Integrity is reported without blocking the fetch pipeline; the 5s
-      // heartbeat keeps it fresh and the initial fill sends it awaited.
-      this.sendIntegrity(false).catch(() => {});
       if (generation !== this.generation || this.destroyed) return;
       const results = await Promise.allSettled(
         ["video", "audio"].map(async (track) => {
@@ -1231,8 +1227,17 @@ export class ProtectedSegmentRuntime {
             next += 1
           )
             batch.push(next);
+          // Only request what the session window covers. If this batch is not
+          // covered (seek, or playback outran the last report) move the window
+          // first; concurrent callers share one coalesced dispatch.
+          const allowed = await this.windowedBatch(track, variant, batch);
+          if (generation !== this.generation || this.destroyed) return;
+          if (!allowed.length)
+            throw Object.assign(new Error("Playback window not confirmed"), {
+              code: "WINDOW_UNCONFIRMED",
+            });
           const fetched = await Promise.allSettled(
-            batch.map((seq) => this.request(track, variant, seq)),
+            allowed.map((seq) => this.request(track, variant, seq)),
           );
           if (generation !== this.generation || this.destroyed) return;
           let appended = 0;
@@ -1271,22 +1276,68 @@ export class ProtectedSegmentRuntime {
         });
     }
   }
-  sendIntegrity(tampered) {
-    this.integrityQueue = (this.integrityQueue || Promise.resolve())
-      .catch(() => {})
-      .then(() => this.dispatchIntegrity(tampered));
-    return this.integrityQueue;
-  }
-  dispatchIntegrity(tampered) {
-    if (!this.worker) return Promise.resolve();
-    return this.callWorker({
-      type: "integrity",
-      sequence: this.nextSequence,
-      tampered,
-      positionSeconds: this.authorizationPosition ?? this.video.currentTime,
-      videoVariant: this.videoVariant,
-      audioVariant: this.audioVariant,
+  sendIntegrity(tampered = false) {
+    // Coalesced: at most one dispatch running and one waiting. A caller arriving
+    // while one is waiting shares it. The waiting dispatch reads position and
+    // variants when it STARTS, so the latest state wins.
+    this.integrityTamperedFlag ||= tampered;
+    if (this.integrityNext) return this.integrityNext;
+    const previous = (this.integrityRunning || Promise.resolve()).catch(() => {});
+    const next = previous.then(() => {
+      this.integrityNext = null;
+      const flag = this.integrityTamperedFlag;
+      this.integrityTamperedFlag = false;
+      this.integrityRunning = this.dispatchIntegrity(flag);
+      return this.integrityRunning;
     });
+    this.integrityNext = next;
+    return next;
+  }
+  async dispatchIntegrity(tampered) {
+    if (!this.worker) return;
+    const sent = {
+      pos: this.authorizationPosition ?? this.video.currentTime,
+      video: this.videoVariant,
+      audio: this.audioVariant,
+    };
+    // Raced against a timeout and DROPPED on expiry: a hung call must not jam
+    // the next ones. The late worker reply finds no pending entry and is ignored.
+    await this.callWorker(
+      {
+        type: "integrity",
+        sequence: this.nextSequence,
+        tampered,
+        positionSeconds: sent.pos,
+        videoVariant: sent.video,
+        audioVariant: sent.audio,
+      },
+      true,
+      INTEGRITY_TIMEOUT_MS,
+    );
+    if (!tampered) this.windowAck = sent; // what the server window was last built from
+  }
+  windowPrefix(track, variant, sequences) {
+    // Mirrors playbackWindows() in protected-media.js: min = seg(pos) - 2, max = seg(pos + 30).
+    const ack = this.windowAck;
+    if (!ack || ack[track] !== variant) return [];
+    const { segments } = this.manifest[track][variant];
+    const min = Math.max(1, sequenceAtTime(segments, ack.pos) - 2);
+    const max = sequenceAtTime(segments, ack.pos + 30);
+    const covered = [];
+    for (const sequence of sequences) {
+      if (sequence < min || sequence > max) break;
+      covered.push(sequence);
+    }
+    return covered;
+  }
+  async windowedBatch(track, variant, batch) {
+    if (this.windowPrefix(track, variant, batch).length < batch.length)
+      await this.sendIntegrity(false).catch((error) => {
+        console.warn(`[unpirator] window move failed: ${error?.code || error?.message}`);
+      });
+    // After a fresh report a long-segment batch may only partly fit: take the
+    // covered prefix and let the next pump pass fetch the rest.
+    return this.windowPrefix(track, variant, batch);
   }
   async setQuality(variant) {
     if (!Number.isInteger(variant) || !this.manifest.video[variant])
