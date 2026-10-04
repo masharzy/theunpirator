@@ -522,6 +522,7 @@ export default {
           requestId: headers.get("x-request-id"),
           status: response.status,
           durationMs,
+          mobile: /Android|Mobile/i.test(request.headers.get("user-agent") || ""),
         }),
       );
     }
