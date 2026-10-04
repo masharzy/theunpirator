@@ -267,7 +267,16 @@ export async function protectedPlainChunk(env, claims, assetId, track, variant, 
     method: "POST",
     body: JSON.stringify({ bytes: range.end - range.start + 1 }),
   });
-  if (!reserved.ok) throw securityError("DELIVERY_LIMIT", reserved.status);
+  if (!reserved.ok) {
+    // Surface the upstream quota reason (which metric, used vs limit) — a bare
+    // DELIVERY_LIMIT label hides whether this is egress, requests or a flake.
+    const body = await reserved.json().catch(() => ({}));
+    throw securityError(
+      "DELIVERY_LIMIT",
+      reserved.status,
+      `quota reserve failed: ${body?.error?.code || "unknown"} ${body?.error?.metric || ""} used=${body?.error?.used ?? "?"} limit=${body?.error?.limit ?? "?"}`,
+    );
+  }
   const { lease } = await reserved.json();
   try {
     let result;
