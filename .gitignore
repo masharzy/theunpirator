@@ -68,3 +68,4 @@ wrangler.production.toml
 /scripts/session-store-smoke.mjs
 /scripts/verify-protected-seek.mjs
 /scripts/smoke-playback.js
+/scripts/window-probe.mjs
