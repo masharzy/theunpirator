@@ -889,11 +889,25 @@ class ProtectedHlsRuntime {
     this.hls.attachMedia(this.video);
     this.hls.loadSource(`${this.baseUrl}/sealed/root`);
     this.heartbeat = setInterval(() => {
-      if (!this.destroyed && !(document.hidden && this.video.paused))
-        this.integrity().catch(this.onError);
+      if (this.destroyed || this.heartbeatBusy || (document.hidden && this.video.paused)) return;
+      this.heartbeatBusy = true;
+      this.integrity()
+        .then(() => {
+          this.heartbeatFailures = 0;
+        })
+        .catch((error) => {
+          this.heartbeatFailures = (this.heartbeatFailures || 0) + 1;
+          console.warn(`[unpirator] hls integrity heartbeat failed (${this.heartbeatFailures}x): ${error?.code || error?.message}`);
+          // A session that really ended (403) surfaces at once; a network blip must not.
+          if (error?.status === 403 || this.heartbeatFailures >= 6) this.onError(error);
+        })
+        .finally(() => {
+          this.heartbeatBusy = false;
+        });
     }, 5_000);
     await ready;
     this.installIntegrityGuard();
+    this.installRecovery();
   }
   authHeaders() {
     return { Authorization: `Bearer ${this.state.token}`, "content-type": "application/json" };
@@ -999,8 +1013,33 @@ class ProtectedHlsRuntime {
         credentials: "include",
         headers: this.authHeaders(),
         body: JSON.stringify({ sequence: 0, tampered }),
+        signal: AbortSignal.timeout(INTEGRITY_TIMEOUT_MS),
       }),
     );
+  }
+  installRecovery() {
+    this.recoveries = { network: 0, media: 0 };
+    this.hls.on(Hls.Events.FRAG_BUFFERED, () => {
+      this.recoveries.network = 0; // recoveries count per incident, not per session
+    });
+    this.hls.on(Hls.Events.ERROR, (_event, failure) => {
+      if (!failure.fatal || this.destroyed) return;
+      console.warn(`[unpirator] hls fatal ${failure.type}/${failure.details}`);
+      const code = failure.response?.code;
+      if (failure.type === Hls.ErrorTypes.NETWORK_ERROR && code !== 401 && code !== 403 && this.recoveries.network < 3) {
+        this.recoveries.network += 1;
+        setTimeout(() => {
+          if (!this.destroyed) this.hls.startLoad(Math.max(0, Number(this.video.currentTime || 0)));
+        }, 1000 * this.recoveries.network);
+        return;
+      }
+      if (failure.type === Hls.ErrorTypes.MEDIA_ERROR && this.recoveries.media < 2) {
+        this.recoveries.media += 1;
+        this.hls.recoverMediaError();
+        return;
+      }
+      this.onError(Object.assign(new Error(failure.details || "Protected HLS playback failed"), { code: failure.details, status: code }));
+    });
   }
   destroy() {
     this.destroyed = true;

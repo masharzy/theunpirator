@@ -303,6 +303,7 @@ const gateway = {
       }
       if (request.method === "GET" && mode.startsWith("sealed/")) {
         await assertProtectedOrigin(request, env, claims, assetId);
+        const phaseStart = performance.now();
         const ticket = url.searchParams.get("ticket") || "";
         const stub = await sessionStub(env, claims.psid);
         const consumed = await stub.fetch("https://session/consume-resource", {
@@ -312,9 +313,21 @@ const gateway = {
         });
         if (!consumed.ok) throw await stateDenial("RESOURCE_TICKET_INVALID", consumed);
         const { keyBase64 } = await consumed.json();
+        const phaseResource = performance.now();
         const resource = await protectedHlsResource(request, env, claims, assetId, resourceId);
+        const phaseEncrypt = performance.now();
         const context = `${claims.psid}:${assetId}:hls:${resourceId}:${crypto.randomUUID()}`;
         const encrypted = await encryptProtectedChunk(resource.body, keyBase64, context);
+        const phaseDone = performance.now();
+        if (phaseDone - phaseStart >= 1000)
+          console.info(JSON.stringify({
+            component: "hls-timing",
+            resource: resourceId.slice(0, 8),
+            preMs: Math.round(phaseResource - phaseStart),
+            resourceMs: Math.round(phaseEncrypt - phaseResource),
+            encryptMs: Math.round(phaseDone - phaseEncrypt),
+            bytes: resource.body?.byteLength ?? null,
+          }));
         return new Response(encrypted.encrypted, {
           headers: {
             "content-type": "application/octet-stream",

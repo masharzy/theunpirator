@@ -20,6 +20,7 @@ function proofKey(claims, assetId) {
 }
 
 async function fetchSourceDescriptor(env, claims, assetId) {
+  const started = Date.now();
   const response = await fetch(
     `${env.INTERNAL_API_URL}/internal/media/resolve/${encodeURIComponent(assetId)}`,
     {
@@ -37,7 +38,9 @@ async function fetchSourceDescriptor(env, claims, assetId) {
       response.status >= 500 ? 502 : 403,
       "Media source unavailable",
     );
-  return response.json();
+  const data = await response.json();
+  console.info(JSON.stringify({ component: "source-descriptor", assetId, sessionId: claims.psid, ms: Date.now() - started }));
+  return data;
 }
 
 export async function getAllowedOrigins(env, claims, assetId) {
