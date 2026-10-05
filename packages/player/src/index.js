@@ -808,12 +808,18 @@ class ProtectedHlsRuntime {
         this.context = context;
         this.callbacks = callbacks;
         this.stats.loading.start = performance.now();
+        console.info(
+          `[unpirator] hls load ${context.frag ? `frag#${context.frag.sn}@L${context.frag.level}` : context.type || "resource"} ${String(context.url).slice(-8)}`,
+        );
         this.controller = new AbortController();
         runtime
           .load(context.url, context, this.controller.signal)
           .then(({ data, url }) => {
             this.completed = true;
-            this.stats.loading.first ||= performance.now();
+            // Store-and-forward gateway: no byte arrives before the whole fragment is ready,
+            // so report the whole request as the transfer (TTFB 0). hls.js feeds this into
+            // its bandwidth estimate.
+            this.stats.loading.first = this.stats.loading.start;
             this.stats.loading.end = performance.now();
             this.stats.loaded = data.byteLength ?? data.length;
             this.stats.total = this.stats.loaded;
